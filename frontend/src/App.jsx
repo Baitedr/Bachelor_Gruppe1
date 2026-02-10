@@ -64,7 +64,7 @@ function App() {
   return (
     <div className="App">
       <header>
-        <h1>React + Ruby on Rails</h1>
+        <h1>ProSlides</h1>
         <div className={`api-status ${apiStatus === 'ok' ? 'connected' : 'disconnected'}`}>
           API Status: {apiStatus === 'ok' ? '🟢 Connected' : '🔴 Disconnected'}
         </div>
