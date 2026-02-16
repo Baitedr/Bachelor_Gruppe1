@@ -133,6 +133,9 @@ GEM
     net-smtp (0.5.1)
       net-protocol
     nio4r (2.7.5)
+    nokogiri (1.19.0)
+      mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
     nokogiri (1.19.0-x64-mingw-ucrt)
       racc (~> 1.4)
     pp (0.6.3)
@@ -231,6 +234,7 @@ GEM
 
 PLATFORMS
   x64-mingw-ucrt
+  x86-mingw32
 
 DEPENDENCIES
   bcrypt (~> 3.1.7)
