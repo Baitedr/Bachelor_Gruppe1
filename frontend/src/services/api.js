@@ -16,32 +16,6 @@ const api = {
     const response = await apiClient.get('/health')
     return response.data
   },
-
-  // Items CRUD
-  getItems: async () => {
-    const response = await apiClient.get('/items')
-    return response.data
-  },
-
-  getItem: async (id) => {
-    const response = await apiClient.get(`/items/${id}`)
-    return response.data
-  },
-
-  createItem: async (itemData) => {
-    const response = await apiClient.post('/items', { item: itemData })
-    return response.data
-  },
-
-  updateItem: async (id, itemData) => {
-    const response = await apiClient.put(`/items/${id}`, { item: itemData })
-    return response.data
-  },
-
-  deleteItem: async (id) => {
-    const response = await apiClient.delete(`/items/${id}`)
-    return response.data
-  },
 }
 
 export default api
