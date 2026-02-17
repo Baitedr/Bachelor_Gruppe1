@@ -38,7 +38,7 @@ function App() {
 
     return (
     <div className="App">
-      {/* Navigation button in top left corner */}
+      
       <nav style={{ 
         position: 'absolute', 
         top: '1rem', 
@@ -62,25 +62,23 @@ function App() {
       </nav>
 
       {currentPage === 'home' ? (
-        // HomePage Content
+        
         <>
           <header>
             <h1>ProSlides</h1>
             <p style={{ color: 'rgba(255, 255, 255, 0.9)', marginBottom: '1rem' }}>
-              Create and manage your presentations
+              Lag eller rediger presentajonene dine
             </p>
           </header>
           <main>
             <section>
-              <h2>Welcome to ProSlides</h2>
-              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                Get started by clicking the button in the top left to go to the editor.
-              </p>
+              <h2>Hva vil du gjøre?</h2>
+            
             </section>
           </main>
         </>
       ) : (
-        // Editor Content
+        
         <>
           <header>
             <h1>ProSlides</h1>
