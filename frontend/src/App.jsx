@@ -36,7 +36,7 @@ function App() {
   }
 
   return (
-    <div className="App">
+    <div className="database-output">
       <header>
         <h1>ProSlides</h1>
         <div className={`api-status ${apiStatus === 'ok' ? 'connected' : 'disconnected'}`}>
@@ -46,13 +46,19 @@ function App() {
 
       <main>
         <section>
-          <h2>Database Test</h2>
+          <h2>Database Print connection</h2>
           {slidesError && <div className="error">{slidesError}</div>}
-          <textarea
-            className="data-textbox"
-            readOnly
-            value={JSON.stringify(slidesData, null, 2)}
-          />
+          <div className="data-textbox">
+            {Array.isArray(slidesData) && slidesData.length > 0 ? (
+              slidesData.map((slide) => (
+                <div key={slide.slideid ?? slide.id ?? slide.slide_name}>
+                  {slide.slide_name}
+                </div>
+              ))
+            ) : (
+              <div>No slides found.</div>
+            )}
+          </div>
           <button type="button" onClick={loadSlides}>Refresh</button>
         </section>
         <SlideEditor />
