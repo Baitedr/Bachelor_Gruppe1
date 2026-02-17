@@ -11,15 +11,24 @@ const apiClient = axios.create({
 })
 
 const api = {
-  // Health check
   checkHealth: async () => {
     const response = await apiClient.get('/health')
     return response.data
   },
 
-  // Slides list
   getSlides: async () => {
     const response = await apiClient.get('/slides')
+    return response.data
+  },
+
+  // Authentication
+  login: async (credentials) => {
+    const response = await apiClient.post('/auth/login', credentials)
+    return response.data
+  },
+
+  logout: async () => {
+    const response = await apiClient.post('/auth/logout')
     return response.data
   },
 }

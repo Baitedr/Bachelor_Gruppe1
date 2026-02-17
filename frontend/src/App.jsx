@@ -2,17 +2,21 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import api from './services/api'
 import SlideEditor from './components/SlideEditor'
+import Login from './components/Login'
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
   const [slidesData, setSlidesData] = useState(null)
   const [slidesError, setSlidesError] = useState(null)
-  const [currentPage, setCurrentPage] = useState('home')
+  const [currentPage, setCurrentPage] = useState('login')
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
-    checkApiHealth()
-    loadSlides()
-  }, [])
+    if (user) {
+      checkApiHealth()
+      loadSlides()
+    }
+  }, [user])
 
   const checkApiHealth = async () => {
     try {
@@ -36,49 +40,79 @@ function App() {
     }
   }
 
-    return (
+  const handleLoginSuccess = (userData) => {
+    setUser(userData)
+    setCurrentPage('home')
+  }
+
+  const handleLogout = () => {
+    setUser(null)
+    setCurrentPage('login')
+  }
+
+  // If not logged in, show login page
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />
+  }
+
+  return (
     <div className="App">
       
       <nav style={{ 
         position: 'absolute', 
         top: '1rem', 
         left: '1rem', 
-        zIndex: 1000 
+        zIndex: 1000,
+        display: 'flex',
+        gap: '0.5rem'
       }}>
         <button 
           onClick={() => setCurrentPage(currentPage === 'home' ? 'editor' : 'home')}
           style={{
             padding: '0.5rem 1rem',
-            borderRadius: '5px',
+            borderRadius: '0.5rem',
             border: 'none',
             background: 'rgba(102, 126, 234, 0.8)',
             color: 'white',
             cursor: 'pointer',
-            fontWeight: '600'
+            fontWeight: '600',
           }}
         >
           {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
         </button>
+        <button 
+          onClick={handleLogout}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: 'none',
+            background: 'rgba(239, 68, 68, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600',
+          }}
+        >
+          Logout
+        </button>
       </nav>
 
       {currentPage === 'home' ? (
-        
         <>
           <header>
             <h1>ProSlides</h1>
-            <p style={{ color: 'rgba(255, 255, 255, 0.9)', marginBottom: '1rem' }}>
-              Lag eller rediger presentajonene dine
+            <p>Lag eller rediger presentasjonene dine</p>
+            <p style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Logged in as: {user?.email}
             </p>
           </header>
+
           <main>
-            <section>
+            <section className="slides-list-section">
               <h2>Hva vil du gjøre?</h2>
-            
             </section>
           </main>
         </>
       ) : (
-        
         <>
           <header>
             <h1>ProSlides</h1>
@@ -88,10 +122,14 @@ function App() {
           </header>
 
           <main>
-            <section>
+            <section className="slides-list-section">
               <h2>Database Print connection</h2>
-              {slidesError && <div className="error">{slidesError}</div>}
-              <div className="data-textbox">
+              {slidesError && (
+                <div className="error-box">
+                  {slidesError}
+                </div>
+              )}
+              <div className="output-box">
                 {Array.isArray(slidesData) && slidesData.length > 0 ? (
                   slidesData.map((slide) => (
                     <div key={slide.slideid ?? slide.id ?? slide.slide_name}>
@@ -102,7 +140,9 @@ function App() {
                   <div>No slides found.</div>
                 )}
               </div>
-              <button type="button" onClick={loadSlides}>Refresh</button>
+              <button type="button" onClick={loadSlides}>
+                Refresh
+              </button>
             </section>
             <SlideEditor />
           </main>
