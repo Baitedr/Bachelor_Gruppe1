@@ -16,6 +16,12 @@ const api = {
     const response = await apiClient.get('/health')
     return response.data
   },
+
+  // Slides list
+  getSlides: async () => {
+    const response = await apiClient.get('/slides')
+    return response.data
+  },
 }
 
 export default api

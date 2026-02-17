@@ -5,9 +5,12 @@ import SlideEditor from './components/SlideEditor'
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
+  const [slidesData, setSlidesData] = useState(null)
+  const [slidesError, setSlidesError] = useState(null)
 
   useEffect(() => {
     checkApiHealth()
+    loadSlides()
   }, [])
 
   const checkApiHealth = async () => {
@@ -17,6 +20,18 @@ function App() {
     } catch (err) {
       setApiStatus('error')
       console.error('API health check failed:', err)
+    }
+  }
+
+  const loadSlides = async () => {
+    try {
+      const data = await api.getSlides()
+      setSlidesData(data.slides || [])
+      setSlidesError(null)
+    } catch (err) {
+      setSlidesError('Failed to load slides')
+      setSlidesData([])
+      console.error('Slides fetch failed:', err)
     }
   }
 
@@ -30,6 +45,16 @@ function App() {
       </header>
 
       <main>
+        <section>
+          <h2>Database Test</h2>
+          {slidesError && <div className="error">{slidesError}</div>}
+          <textarea
+            className="data-textbox"
+            readOnly
+            value={JSON.stringify(slidesData, null, 2)}
+          />
+          <button type="button" onClick={loadSlides}>Refresh</button>
+        </section>
         <SlideEditor />
       </main>
     </div>

@@ -94,6 +94,10 @@ GEM
       irb (~> 1.10)
       reline (>= 0.3.8)
     diff-lcs (1.6.2)
+    dotenv (3.2.0)
+    dotenv-rails (3.2.0)
+      dotenv (= 3.2.0)
+      railties (>= 6.1)
     drb (2.2.3)
     erb (6.0.1)
     erubi (1.13.1)
@@ -138,6 +142,8 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.0-x64-mingw-ucrt)
       racc (~> 1.4)
+    pg (1.6.3)
+    pg (1.6.3-x64-mingw-ucrt)
     pp (0.6.3)
       prettyprint
     prettyprint (0.2.0)
@@ -216,8 +222,6 @@ GEM
     rspec-support (3.13.7)
     securerandom (0.4.1)
     spring (4.4.2)
-    sqlite3 (1.7.3)
-      mini_portile2 (~> 2.8.0)
     stringio (3.2.0)
     thor (1.5.0)
     timeout (0.6.0)
@@ -233,18 +237,20 @@ GEM
     zeitwerk (2.7.4)
 
 PLATFORMS
+  ruby
   x64-mingw-ucrt
   x86-mingw32
 
 DEPENDENCIES
   bcrypt (~> 3.1.7)
   debug
+  dotenv-rails
+  pg (~> 1.5)
   puma (~> 6.0)
   rack-cors
   rails (~> 7.1.0)
   rspec-rails (~> 6.0)
   spring
-  sqlite3 (~> 1.4)
   tzinfo-data
 
 RUBY VERSION
