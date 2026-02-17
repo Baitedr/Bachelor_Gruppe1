@@ -7,6 +7,7 @@ function App() {
   const [apiStatus, setApiStatus] = useState(null)
   const [slidesData, setSlidesData] = useState(null)
   const [slidesError, setSlidesError] = useState(null)
+  const [currentPage, setCurrentPage] = useState('home')
 
   useEffect(() => {
     checkApiHealth()
