@@ -7,6 +7,7 @@ function App() {
   const [apiStatus, setApiStatus] = useState(null)
   const [slidesData, setSlidesData] = useState(null)
   const [slidesError, setSlidesError] = useState(null)
+  const [currentPage, setCurrentPage] = useState('home')
 
   useEffect(() => {
     checkApiHealth()
@@ -35,34 +36,80 @@ function App() {
     }
   }
 
-  return (
-    <div className="database-output">
-      <header>
-        <h1>ProSlides</h1>
-        <div className={`api-status ${apiStatus === 'ok' ? 'connected' : 'disconnected'}`}>
-          API Status: {apiStatus === 'ok' ? '🟢 Connected' : '🔴 Disconnected'}
-        </div>
-      </header>
+    return (
+    <div className="App">
+      
+      <nav style={{ 
+        position: 'absolute', 
+        top: '1rem', 
+        left: '1rem', 
+        zIndex: 1000 
+      }}>
+        <button 
+          onClick={() => setCurrentPage(currentPage === 'home' ? 'editor' : 'home')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '5px',
+            border: 'none',
+            background: 'rgba(102, 126, 234, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600'
+          }}
+        >
+          {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
+        </button>
+      </nav>
 
-      <main>
-        <section>
-          <h2>Database Print connection</h2>
-          {slidesError && <div className="error">{slidesError}</div>}
-          <div className="data-textbox">
-            {Array.isArray(slidesData) && slidesData.length > 0 ? (
-              slidesData.map((slide) => (
-                <div key={slide.slideid ?? slide.id ?? slide.slide_name}>
-                  {slide.slide_name}
-                </div>
-              ))
-            ) : (
-              <div>No slides found.</div>
-            )}
-          </div>
-          <button type="button" onClick={loadSlides}>Refresh</button>
-        </section>
-        <SlideEditor />
-      </main>
+      {currentPage === 'home' ? (
+        
+        <>
+          <header>
+            <h1>ProSlides</h1>
+            <p style={{ color: 'rgba(255, 255, 255, 0.9)', marginBottom: '1rem' }}>
+              Create and manage your presentations
+            </p>
+          </header>
+          <main>
+            <section>
+              <h2>Welcome to ProSlides</h2>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                Get started by clicking the button in the top left to go to the editor.
+              </p>
+            </section>
+          </main>
+        </>
+      ) : (
+        
+        <>
+          <header>
+            <h1>ProSlides</h1>
+            <div className={`api-status ${apiStatus === 'ok' ? 'connected' : 'disconnected'}`}>
+              API Status: {apiStatus === 'ok' ? '🟢 Connected' : '🔴 Disconnected'}
+            </div>
+          </header>
+
+          <main>
+            <section>
+              <h2>Database Print connection</h2>
+              {slidesError && <div className="error">{slidesError}</div>}
+              <div className="data-textbox">
+                {Array.isArray(slidesData) && slidesData.length > 0 ? (
+                  slidesData.map((slide) => (
+                    <div key={slide.slideid ?? slide.id ?? slide.slide_name}>
+                      {slide.slide_name}
+                    </div>
+                  ))
+                ) : (
+                  <div>No slides found.</div>
+                )}
+              </div>
+              <button type="button" onClick={loadSlides}>Refresh</button>
+            </section>
+            <SlideEditor />
+          </main>
+        </>
+      )}
     </div>
   )
 }
