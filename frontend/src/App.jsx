@@ -38,7 +38,7 @@ function App() {
 
     return (
     <div className="App">
-      {/* Navigation button in top left corner */}
+      
       <nav style={{ 
         position: 'absolute', 
         top: '1rem', 
@@ -62,7 +62,7 @@ function App() {
       </nav>
 
       {currentPage === 'home' ? (
-        // HomePage Content
+        
         <>
           <header>
             <h1>ProSlides</h1>
@@ -80,7 +80,7 @@ function App() {
           </main>
         </>
       ) : (
-        // Editor Content
+        
         <>
           <header>
             <h1>ProSlides</h1>
