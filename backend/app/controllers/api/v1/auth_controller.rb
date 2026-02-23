@@ -5,6 +5,7 @@ module Api
 
       def register
         user = User.new(auth_params)
+        user.password = params[:password]
 
         if user.save
           token = JsonWebToken.encode(user_id: user.id)
@@ -36,15 +37,14 @@ module Api
       private
 
       def auth_params
-        params.permit(:email, :password).tap do |permitted|
-          permitted[:email] = permitted[:email].to_s.downcase
-        end
+        params.permit(:email, :name)
       end
 
       def user_payload(user)
         {
           id: user.id,
-          email: user.email
+          email: user.email,
+          name: user.name
         }
       end
     end

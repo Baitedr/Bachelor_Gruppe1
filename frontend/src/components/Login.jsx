@@ -33,7 +33,14 @@ function Login({ onLoginSuccess }) {
         err?.response?.data?.error ||
         err?.response?.data?.errors?.join(', ')
 
-      setError(backendMessage || 'Authentication failed. Please try again.')
+      const networkMessage =
+        err?.code === 'ECONNABORTED'
+          ? 'Request timed out. Make sure backend server is running on port 3000.'
+          : !err?.response
+            ? 'Cannot reach backend. Make sure backend server is running on http://localhost:3000.'
+            : null
+
+      setError(networkMessage || backendMessage || 'Authentication failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
