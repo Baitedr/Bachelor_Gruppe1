@@ -144,34 +144,9 @@ function App() {
         <>
           <header>
             <h1>ProSlides</h1>
-            <div className={`api-status ${apiStatus === 'ok' ? 'connected' : 'disconnected'}`}>
-              API Status: {apiStatus === 'ok' ? '🟢 Connected' : '🔴 Disconnected'}
-            </div>
           </header>
 
           <main>
-            <section className="slides-list-section">
-              <h2>Database Print connection</h2>
-              {slidesError && (
-                <div className="error-box">
-                  {slidesError}
-                </div>
-              )}
-              <div className="output-box">
-                {Array.isArray(slidesData) && slidesData.length > 0 ? (
-                  slidesData.map((slide) => (
-                    <div key={slide.slideid ?? slide.id ?? slide.slide_name}>
-                      {slide.slide_name}
-                    </div>
-                  ))
-                ) : (
-                  <div>No slides found.</div>
-                )}
-              </div>
-              <button type="button" onClick={loadSlides}>
-                Refresh
-              </button>
-            </section>
             <SlideEditor />
           </main>
         </>
