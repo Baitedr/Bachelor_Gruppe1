@@ -139,6 +139,39 @@
   text-align: center;
 }
 
+.guest-join-section {
+  margin-bottom: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.guest-join-title {
+  color: white;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+.guest-join-description {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.875rem;
+  margin: 0 0 0.9rem;
+}
+
+.guest-join-button {
+  width: 100%;
+  padding: 0.875rem 1.5rem;
+  margin-top: 0.4rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .signup-text {
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.875rem;

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import api from './services/api'
-import SlideEditor from './components/SlideEditor'
+import PresentationEditor from './components/PresentationEditor'
 import Login from './components/Login'
 import PollPage from './components/PollPage'
+
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
@@ -15,11 +16,6 @@ function App() {
 
   useEffect(() => {
     const restoreSession = async () => {
-      // Warm up connection pool on app startup (async, don't wait)
-      api.checkHealth().catch(() => {
-        // Silent fail - connection warmup is best-effort
-      })
-
       if (!api.hasToken()) {
         setIsAuthChecking(false)
         return
@@ -169,7 +165,7 @@ function App() {
           </header>
 
           <main>
-            <SlideEditor />
+            <PresentationEditor />
           </main>
         </>
       )}
