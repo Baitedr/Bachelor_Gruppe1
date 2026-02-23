@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PollResults from './PollResults';
-import '../../CSScomponents/PollViewer.css';
+import '../../CSScomponents/PollCSScomponents/PollViewer.css';
 
 const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   const [hasVoted, setHasVoted] = useState(showResults);

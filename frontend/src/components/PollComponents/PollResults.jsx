@@ -1,5 +1,5 @@
 import React from 'react';
-import '../../CSScomponents/PollResults.css';
+import '../../CSScomponents//PollCSScomponents/PollResults.css';
 
 const PollResults = ({ pollData, selectedOption = null }) => {
   const getTotalVotes = () => {
