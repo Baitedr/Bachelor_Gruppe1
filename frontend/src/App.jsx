@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import api from './services/api'
-import SlideEditor from './components/SlideEditor'
+import PresentationEditor from './components/PresentationEditor'
 import Login from './components/Login'
+
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
@@ -13,7 +14,7 @@ function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true)
 
   useEffect(() => {
-    const restoreSession = async () => {
+    const restoreSession = async () => {  
       if (!api.hasToken()) {
         setIsAuthChecking(false)
         return
@@ -147,7 +148,7 @@ function App() {
           </header>
 
           <main>
-            <SlideEditor />
+            <PresentationEditor />
           </main>
         </>
       )}
