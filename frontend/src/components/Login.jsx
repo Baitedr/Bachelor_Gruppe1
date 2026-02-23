@@ -8,6 +8,7 @@ function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [name, setName] = useState('')
+  const [guestCode, setGuestCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -139,6 +140,33 @@ function Login({ onLoginSuccess }) {
           </form>
 
           <div className="login-footer">
+            {mode === 'login' && (
+              <div className="guest-join-section">
+                <p className="guest-join-title">Bli med som gjest</p>
+                <p className="guest-join-description">
+                  Skriv inn kode/ID for å bli med i en live presentasjon uten å logge inn.
+                </p>
+                <div className="form-group">
+                  <label htmlFor="guestCode">Presentasjonskode eller ID</label>
+                  <input
+                    id="guestCode"
+                    type="text"
+                    value={guestCode}
+                    onChange={(e) => setGuestCode(e.target.value)}
+                    placeholder="F.eks. LIVE-1234"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="guest-join-button"
+                  disabled
+                  title="Gjestefunksjon legges til senere"
+                >
+                  Bli med i live presentasjon
+                </button>
+              </div>
+            )}
+
             <p className="signup-text">
               {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
               <button
