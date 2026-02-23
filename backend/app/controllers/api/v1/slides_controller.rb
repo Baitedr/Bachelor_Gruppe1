@@ -1,6 +1,8 @@
 module Api
   module V1
     class SlidesController < ApplicationController
+      before_action :authenticate_request!
+
       def index
         render json: { slides: fetch_slides }
       end

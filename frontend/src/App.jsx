@@ -10,6 +10,29 @@ function App() {
   const [slidesError, setSlidesError] = useState(null)
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
+  const [isAuthChecking, setIsAuthChecking] = useState(true)
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      if (!api.hasToken()) {
+        setIsAuthChecking(false)
+        return
+      }
+
+      try {
+        const data = await api.me()
+        setUser(data.user)
+        setCurrentPage('home')
+      } catch (err) {
+        await api.logout()
+        setUser(null)
+      } finally {
+        setIsAuthChecking(false)
+      }
+    }
+
+    restoreSession()
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -45,9 +68,14 @@ function App() {
     setCurrentPage('home')
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await api.logout()
     setUser(null)
     setCurrentPage('login')
+  }
+
+  if (isAuthChecking) {
+    return <div className="App">Loading...</div>
   }
 
   // If not logged in, show login page

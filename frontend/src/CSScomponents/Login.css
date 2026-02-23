@@ -45,6 +45,7 @@
   padding: 2rem;
   border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -95,6 +96,20 @@
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.5);
 }
 
+.show-password-button {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: #667eea;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.show-password-button:hover {
+  color: #764ba2;
+}
+
 .login-button {
   width: 100%;
   padding: 0.875rem 1.5rem;
@@ -135,6 +150,11 @@
   font-weight: 600;
   text-decoration: none;
   transition: color 0.3s ease;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .signup-link:hover {

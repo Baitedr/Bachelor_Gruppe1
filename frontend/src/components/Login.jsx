@@ -1,9 +1,13 @@
 import React, { useState } from 'react'
 import '../CSScomponents/Login.css'
+import api from '../services/api'
 
 function Login({ onLoginSuccess }) {
+  const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -13,20 +17,24 @@ function Login({ onLoginSuccess }) {
     setIsLoading(true)
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.login({ email, password })
-      
-      // Simulated login for now
-      setTimeout(() => {
-        if (email && password) {
-          onLoginSuccess?.({ email })
-        } else {
-          setError('Please enter both email and password')
-        }
-        setIsLoading(false)
-      }, 500)
+      if (mode === 'register' && password !== confirmPassword) {
+        setError('Passwords do not match. Please type the same password twice.')
+        return
+      }
+
+      const credentials = { email, password }
+      const response = mode === 'login'
+        ? await api.login(credentials)
+        : await api.register(credentials)
+
+      onLoginSuccess?.(response.user)
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.')
+      const backendMessage =
+        err?.response?.data?.error ||
+        err?.response?.data?.errors?.join(', ')
+
+      setError(backendMessage || 'Authentication failed. Please try again.')
+    } finally {
       setIsLoading(false)
     }
   }
@@ -36,7 +44,7 @@ function Login({ onLoginSuccess }) {
       <div className="login-card">
         <div className="login-header">
           <h1>ProSlides</h1>
-          <p>Sign in to your account</p>
+          <p>{mode === 'login' ? 'Sign in to your account' : 'Create your account'}</p>
         </div>
 
         <div className="login-form-wrapper">
@@ -63,33 +71,64 @@ function Login({ onLoginSuccess }) {
               <label htmlFor="password">Password</label>
               <input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
               />
+              {mode === 'register' && (
+                <button
+                  type="button"
+                  className="show-password-button"
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? 'Hide password' : 'Show password'}
+                </button>
+              )}
             </div>
+
+            {mode === 'register' && (
+              <div className="form-group">
+                <label htmlFor="confirmPassword">Confirm password</label>
+                <input
+                  id="confirmPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={isLoading}
               className="login-button"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading
+                ? (mode === 'login' ? 'Signing in...' : 'Creating account...')
+                : (mode === 'login' ? 'Sign In' : 'Create Account')}
             </button>
           </form>
 
           <div className="login-footer">
             <p className="signup-text">
-              Don't have an account?{' '}
-              <a href="#" className="signup-link">
-                Sign up
-              </a>
+              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              <button
+                type="button"
+                className="signup-link"
+                onClick={() => {
+                  setMode(mode === 'login' ? 'register' : 'login')
+                  setConfirmPassword('')
+                  setShowPassword(false)
+                  setError(null)
+                }}
+              >
+                {mode === 'login' ? 'Sign up' : 'Sign in'}
+              </button>
             </p>
-            <a href="#" className="forgot-password">
-              Forgot password?
-            </a>
           </div>
         </div>
       </div>
