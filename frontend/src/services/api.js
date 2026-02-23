@@ -5,11 +5,39 @@ const TOKEN_KEY = 'auth_token'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000, // Extended from 10s to 15s to account for cold DB connections (~1.8s)
   headers: {
     'Content-Type': 'application/json',
   },
 })
+
+// Retry logic for auth endpoints under load
+const axiosRetry = async (axiosFunc, maxRetries = 2) => {
+  let lastError
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await axiosFunc()
+    } catch (error) {
+      lastError = error
+      // Retry only on timeout, connection errors, or 5xx status codes
+      const isRetryable =
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ENOTFOUND' ||
+        error.code === 'ECONNREFUSED' ||
+        (error.response && error.response.status >= 500)
+
+      if (!isRetryable || i === maxRetries) {
+        throw error
+      }
+
+      // Exponential backoff: 100ms, 300ms
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.pow(3, i) * 100)
+      )
+    }
+  }
+  throw lastError
+}
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
@@ -31,36 +59,42 @@ const setToken = (token) => {
 
 const api = {
   checkHealth: async () => {
-    const response = await apiClient.get('/health')
+    const response = await axiosRetry(() => apiClient.get('/health'), 1)
     return response.data
   },
 
   getSlides: async () => {
-    const response = await apiClient.get('/slides')
+    const response = await axiosRetry(() => apiClient.get('/slides'), 1)
     return response.data
   },
 
   // Authentication
   register: async (credentials) => {
-    const response = await apiClient.post('/auth/register', credentials)
+    const response = await axiosRetry(
+      () => apiClient.post('/auth/register', credentials),
+      2
+    )
     setToken(response.data?.token)
     return response.data
   },
 
   login: async (credentials) => {
-    const response = await apiClient.post('/auth/login', credentials)
+    const response = await axiosRetry(
+      () => apiClient.post('/auth/login', credentials),
+      2
+    )
     setToken(response.data?.token)
     return response.data
   },
 
   me: async () => {
-    const response = await apiClient.get('/auth/me')
+    const response = await axiosRetry(() => apiClient.get('/auth/me'), 1)
     return response.data
   },
 
   logout: async () => {
     try {
-      await apiClient.post('/auth/logout')
+      await axiosRetry(() => apiClient.post('/auth/logout'), 1)
     } finally {
       setToken(null)
     }

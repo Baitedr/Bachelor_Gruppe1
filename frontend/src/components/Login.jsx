@@ -7,6 +7,7 @@ function Login({ onLoginSuccess }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [name, setName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -23,6 +24,9 @@ function Login({ onLoginSuccess }) {
       }
 
       const credentials = { email, password }
+      if (mode === 'register') {
+        credentials.name = name
+      }
       const response = mode === 'login'
         ? await api.login(credentials)
         : await api.register(credentials)
@@ -73,6 +77,20 @@ function Login({ onLoginSuccess }) {
                 required
               />
             </div>
+
+            {mode === 'register' && (
+              <div className="form-group">
+                <label htmlFor="name">Name</label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your full name"
+                  required
+                />
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="password">Password</label>
@@ -129,6 +147,7 @@ function Login({ onLoginSuccess }) {
                 onClick={() => {
                   setMode(mode === 'login' ? 'register' : 'login')
                   setConfirmPassword('')
+                  setName('')
                   setShowPassword(false)
                   setError(null)
                 }}

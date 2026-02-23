@@ -13,6 +13,15 @@ module Backend
   class Application < Rails::Application
     config.load_defaults 7.1
     config.api_only = true
+
+    # Optimize database connection pool for cold-start requests
+    # Increase from default 5 to handle better concurrency under load
+    config.database_connection_pool_size = 10
+
+    # Eager load models in production to avoid cold-start penalties on first requests
+    if Rails.env.production?
+      config.eager_load_paths += %W(#{config.root}/app/models)
+    end
     
     # CORS configuration
     config.middleware.insert_before 0, Rack::Cors do

@@ -10,7 +10,14 @@ class User < ApplicationRecord
   def authenticate(raw_password)
     return false if raw_password.blank?
 
-    stored_hash = self[:password_hash].presence || self[:password_digest].presence
+    stored_hash =
+      if has_attribute?(:password_hash)
+        self[:password_hash]
+      elsif has_attribute?(:password_digest)
+        self[:password_digest]
+      end
+
+    stored_hash = stored_hash.presence
     return false if stored_hash.blank?
 
     BCrypt::Password.new(stored_hash).is_password?(raw_password) ? self : false

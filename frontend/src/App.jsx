@@ -14,6 +14,11 @@ function App() {
 
   useEffect(() => {
     const restoreSession = async () => {
+      // Warm up connection pool on app startup (async, don't wait)
+      api.checkHealth().catch(() => {
+        // Silent fail - connection warmup is best-effort
+      })
+
       if (!api.hasToken()) {
         setIsAuthChecking(false)
         return
