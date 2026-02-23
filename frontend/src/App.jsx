@@ -3,6 +3,7 @@ import './App.css'
 import api from './services/api'
 import SlideEditor from './components/SlideEditor'
 import Login from './components/Login'
+import PollPage from './components/PollPage'
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
@@ -114,6 +115,20 @@ function App() {
           {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
         </button>
         <button 
+          onClick={() => setCurrentPage('polls')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: 'none',
+            background: 'rgba(102, 126, 234, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600',
+          }}
+        >
+          → Polls
+        </button>
+        <button 
           onClick={handleLogout}
           style={{
             padding: '0.5rem 1rem',
@@ -145,6 +160,8 @@ function App() {
             </section>
           </main>
         </>
+      ) : currentPage === 'polls' ? (
+        <PollPage onNavigate={setCurrentPage} user={user} />
       ) : (
         <>
           <header>
