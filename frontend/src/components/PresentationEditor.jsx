@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
-import '../CSScomponents/PresentationEditor.css';
+import '../CSScomponents/SlideEditor.css';
 
 function PresentationEditor() {
     const canvasRef = useRef(null);
@@ -25,6 +25,10 @@ function PresentationEditor() {
                 height: 540,
                 backgroundColor: '#ffffff',
             });
+            
+            fabricCanvasRef.current.set({ backgroundColor: '#ffffff' });
+            fabricCanvasRef.current.renderAll();
+
         }
 
         return () => {
@@ -37,16 +41,17 @@ function PresentationEditor() {
 
     // Load slide when switching
     useEffect(() => {
-        if (fabricCanvasRef.current) {
+        if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
             
             if (currentSlide.fabricData) {
-                fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData, () => {
-                    fabricCanvasRef.current.renderAll();
-                });
+            fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                fabricCanvasRef.current.backgroundColor = '#ffffff';
+                fabricCanvasRef.current.renderAll();
+            });
             } else {
                 fabricCanvasRef.current.clear();
-                fabricCanvasRef.current.backgroundColor = currentSlide.backgroundColor;
+                fabricCanvasRef.current.set({ backgroundColor: '#ffffff'});
                 fabricCanvasRef.current.renderAll();
             }
         }
@@ -55,13 +60,15 @@ function PresentationEditor() {
     // Save current slide data
     const saveCurrentSlide = () => {
         if (!fabricCanvasRef.current) return;
+
+        fabricCanvasRef.current.backgroundColor = '#ffffff'
         
         const fabricData = fabricCanvasRef.current.toJSON();
         const newSlides = [...slides];
         newSlides[currentSlideIndex] = {
             ...newSlides[currentSlideIndex],
             fabricData: fabricData,
-            backgroundColor: fabricCanvasRef.current.backgroundColor
+            
         };
         setSlides(newSlides);
     };
@@ -216,6 +223,8 @@ function PresentationEditor() {
         if (!fabricCanvasRef.current) return;
         fabricCanvasRef.current.backgroundColor = color;
         fabricCanvasRef.current.renderAll();
+        
+      
     };
 
     return (
