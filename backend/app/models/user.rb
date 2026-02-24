@@ -1,6 +1,8 @@
 class User < ApplicationRecord
   attr_accessor :password
 
+  has_many :polls, foreign_key: :owner_id, dependent: :destroy
+
   validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :password, presence: true, on: :create
 

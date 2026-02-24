@@ -7,6 +7,13 @@ Rails.application.routes.draw do
       post 'auth/login', to: 'auth#login'
       get 'auth/me', to: 'auth#me'
       post 'auth/logout', to: 'auth#logout'
+
+      # Polls
+      resources :polls, only: [:index, :create, :destroy] do
+        member do
+          post :vote
+        end
+      end
     end
   end
 end

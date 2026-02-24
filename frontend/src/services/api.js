@@ -103,6 +103,36 @@ const api = {
   hasToken: () => {
     return Boolean(localStorage.getItem(TOKEN_KEY))
   },
+
+  // Polls
+  getPolls: async () => {
+    const response = await axiosRetry(() => apiClient.get('/polls'), 1)
+    return response.data
+  },
+
+  createPoll: async (pollData) => {
+    const response = await axiosRetry(
+      () => apiClient.post('/polls', { poll: pollData }),
+      1
+    )
+    return response.data
+  },
+
+  deletePoll: async (pollId) => {
+    const response = await axiosRetry(
+      () => apiClient.delete(`/polls/${pollId}`),
+      1
+    )
+    return response.data
+  },
+
+  votePoll: async (pollId, optionId) => {
+    const response = await axiosRetry(
+      () => apiClient.post(`/polls/${pollId}/vote`, { option_id: optionId }),
+      1
+    )
+    return response.data
+  },
 }
 
 export default api

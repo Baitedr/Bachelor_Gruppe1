@@ -7,7 +7,6 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   const [selectedOption, setSelectedOption] = useState(null);
 
   useEffect(() => {
-    // Check if user has already voted (could be from localStorage or backend)
     const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}');
     if (votedPolls[pollData.id]) {
       setHasVoted(true);
@@ -15,22 +14,22 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
     }
   }, [pollData.id]);
 
-  const handleVote = (optionIndex) => {
+  const handleVote = (option, index) => {
     if (hasVoted) {
       alert('You have already voted on this poll');
       return;
     }
 
-    // Save vote to localStorage
+    // Save to localStorage to persist across refresh
     const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}');
-    votedPolls[pollData.id] = optionIndex;
+    votedPolls[pollData.id] = index;
     localStorage.setItem('votedPolls', JSON.stringify(votedPolls));
 
     setHasVoted(true);
-    setSelectedOption(optionIndex);
-    
+    setSelectedOption(index);
+
     if (onVote) {
-      onVote(optionIndex);
+      onVote(option.id); // Pass the actual DB option ID
     }
   };
 
@@ -41,14 +40,14 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   return (
     <div className="poll-viewer">
       <h2 className="poll-question">{pollData.question}</h2>
-      
+
       {!hasVoted ? (
         <div className="poll-options">
           {pollData.options.map((option, index) => (
             <button
-              key={index}
+              key={option.id || index}
               className="poll-option-btn"
-              onClick={() => handleVote(index)}
+              onClick={() => handleVote(option, index)}
             >
               {option.text}
             </button>
