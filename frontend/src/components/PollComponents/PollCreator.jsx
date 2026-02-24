@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import '../../CSScomponents/PollCreator.css';
+import '../../CSScomponents//PollCSScomponents/PollCreator.css';
 
 const PollCreator = ({ initialData = null, onSave, onCancel }) => {
   const [pollQuestion, setPollQuestion] = useState(initialData?.question || '');
