@@ -104,9 +104,6 @@ const PhoneInteraction: React.FC = () => {
 
                 <section className="phone-interaction-card">
                     <h2>Bli med med kode</h2>
-                    <p className="phone-interaction-card-description">
-                        Kort kode fra presentatør.
-                    </p>
 
                     <form className="phone-interaction-join-form" onSubmit={handleJoinInteraction}>
                         <label htmlFor="liveInteractionCode">Live-kode</label>
