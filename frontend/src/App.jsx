@@ -4,7 +4,9 @@ import api from './services/api'
 import PresentationEditor from './components/PresentationEditor'
 import Login from './components/Login'
 import PollPage from './components/PollPage'
+import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
 
+const MOBILE_BREAKPOINT = 768;
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
@@ -13,6 +15,31 @@ function App() {
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
+
+  const isMobileDevice = () => {
+    const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
+    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
+    const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    return hasSmallViewport || isTouchDevice || userAgentIsMobile
+  }
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobile = isMobileDevice()
+      if (isMobile) {
+        setCurrentPage('phoneinteraction')
+      } else {
+        setCurrentPage((prevPage) => {
+          if (prevPage !== 'phoneinteraction') return prevPage
+          return user ? 'home' : 'login'
+        })
+      }
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [user])
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -24,7 +51,12 @@ function App() {
       try {
         const data = await api.me()
         setUser(data.user)
-        setCurrentPage('home')
+        
+        // Only set to home if we are not on mobile
+        const isMobile = isMobileDevice()
+        if (!isMobile) {
+          setCurrentPage('home')
+        }
       } catch (err) {
         await api.logout()
         setUser(null)
@@ -67,7 +99,7 @@ function App() {
 
   const handleLoginSuccess = (userData) => {
     setUser(userData)
-    setCurrentPage('home')
+    setCurrentPage(isMobileDevice() ? 'phoneinteraction' : 'home')
   }
 
   const handleLogout = async () => {
@@ -80,9 +112,13 @@ function App() {
     return <div className="App">Loading...</div>
   }
 
-  // If not logged in, show login page
-  if (!user) {
+  // If not logged in and not on phone interaction, show login page
+  if (!user && currentPage !== 'phoneinteraction') {
     return <Login onLoginSuccess={handleLoginSuccess} />
+  }
+
+  if (currentPage === 'phoneinteraction') {
+    return <PhoneInteraction />
   }
 
   return (
