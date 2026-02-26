@@ -258,6 +258,25 @@ function App() {
     }
   }
 
+  const handleDeletePermanently = (trashId) => {
+    const trashedItem = trashedPresentations.find((item) => item.id === trashId)
+    if (!trashedItem) return
+
+    const presentationTitle = trashedItem.presentation?.title || 'this presentation'
+    const shouldDelete = window.confirm(
+      `Permanently delete "${presentationTitle}"? This cannot be undone.`
+    )
+
+    if (!shouldDelete) return
+
+    setTrashedPresentations((prev) => prev.filter((item) => item.id !== trashId))
+
+    if (deleteUndoToast?.trashId === trashId) {
+      clearUndoToastTimer()
+      setDeleteUndoToast(null)
+    }
+  }
+
   const dismissDeleteUndoToast = () => {
     clearUndoToastTimer()
     setDeleteUndoToast(null)
@@ -455,12 +474,20 @@ function App() {
                             Deleted {new Date(trashedItem.deletedAt).toLocaleTimeString()}
                           </p>
                         </div>
-                        <button
-                          className="recent-action-btn restore-btn"
-                          onClick={() => handleRestorePresentation(trashedItem.id)}
-                        >
-                          Restore
-                        </button>
+                        <div className="trash-actions">
+                          <button
+                            className="recent-action-btn restore-btn"
+                            onClick={() => handleRestorePresentation(trashedItem.id)}
+                          >
+                            Restore
+                          </button>
+                          <button
+                            className="recent-action-btn permanent-delete-btn"
+                            onClick={() => handleDeletePermanently(trashedItem.id)}
+                          >
+                            Delete Forever
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

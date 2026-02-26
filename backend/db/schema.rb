@@ -1,4 +1,4 @@
-d# This file is auto-generated from the current state of the database. Instead
+# This file is auto-generated from the current state of the database. Instead
 # of editing this file, please use the migrations feature of Active Record to
 # incrementally modify your database, and then regenerate this schema definition.
 #
@@ -10,7 +10,7 @@ d# This file is auto-generated from the current state of the database. Instead
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_24_121350) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_26_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -56,6 +56,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_24_121350) do
     t.boolean "is_live", default: false
     t.uuid "owner_id"
     t.text "title", null: false
+    t.text "user_email", null: false
+    t.index ["user_email"], name: "index_presentations_on_user_email"
   end
 
   create_table "refresh_tokens", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|

@@ -5,4 +5,13 @@ class Presentation < ApplicationRecord
   has_many :presentation_sessions, dependent: :destroy
 
   validates :title, presence: true
+  validates :user_email, presence: true
+
+  before_validation :sync_user_email_from_owner
+
+  private
+
+  def sync_user_email_from_owner
+    self.user_email = owner&.email
+  end
 end

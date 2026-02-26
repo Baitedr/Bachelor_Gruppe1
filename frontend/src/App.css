@@ -268,6 +268,13 @@ button:active {
   gap: 0.75rem;
 }
 
+.trash-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .trash-meta {
   margin: 0.2rem 0 0;
   color: rgba(255, 255, 255, 0.7);
@@ -280,6 +287,14 @@ button:active {
 
 .restore-btn:hover {
   background: rgba(16, 185, 129, 0.42);
+}
+
+.permanent-delete-btn {
+  background: rgba(220, 38, 38, 0.34);
+}
+
+.permanent-delete-btn:hover {
+  background: rgba(220, 38, 38, 0.5);
 }
 
 .delete-undo-toast {

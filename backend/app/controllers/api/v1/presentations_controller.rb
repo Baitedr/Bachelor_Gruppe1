@@ -20,14 +20,20 @@ module Api
       end
 
       def create
-        presentation = current_user.presentations.create!(title: title_param)
+        presentation = current_user.presentations.create!(
+          title: title_param,
+          user_email: current_user.email
+        )
         replace_slides!(presentation, slides_payload)
 
         render json: { presentation: presentation_payload(presentation.reload) }, status: :created
       end
 
       def update
-        @presentation.update!(title: title_param)
+        @presentation.update!(
+          title: title_param,
+          user_email: current_user.email
+        )
         replace_slides!(@presentation, slides_payload)
 
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
@@ -120,6 +126,7 @@ module Api
         {
           id: presentation.id,
           title: presentation.title,
+          user_email: presentation.user_email,
           created_at: presentation.created_at,
           is_live: presentation.is_live,
           slide_count: presentation.slides.size,
@@ -147,6 +154,7 @@ module Api
         {
           id: presentation.id,
           title: presentation.title,
+          user_email: presentation.user_email,
           created_at: presentation.created_at,
           is_live: presentation.is_live,
           slides: presentation.slides.order(:slide_index).map { |slide| slide_payload(slide) }
