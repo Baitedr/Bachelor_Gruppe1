@@ -116,13 +116,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: white;
+    background: transparent;
     border-radius: 10px;
     padding: 2rem;
     min-height: 400px;
+    position: relative;
 }
 
 .canvas-container canvas {
-    box-shadow: 0 10px 40px #ffffff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
     border-radius: 8px;
 }
