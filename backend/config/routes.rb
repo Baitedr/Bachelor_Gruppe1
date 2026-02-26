@@ -7,19 +7,6 @@ Rails.application.routes.draw do
       post 'auth/login', to: 'auth#login'
       get 'auth/me', to: 'auth#me'
       post 'auth/logout', to: 'auth#logout'
-      resources :presentations, only: [:index, :show, :create, :update, :destroy] do
-        member do
-          post 'start_session', to: 'sessions#start'
-          post 'end_session', to: 'sessions#end_session'
-          post 'join', to: 'sessions#join'
-          get 'participants', to: 'sessions#participants'
-    end
-  end
-
-    resources :polls, only: [] do
-     member do
-       get 'results'
-      end
     end
   end
 end

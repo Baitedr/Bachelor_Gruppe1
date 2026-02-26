@@ -10,51 +10,60 @@ d# This file is auto-generated from the current state of the database. Instead
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_02_23_002000) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_24_121350) do
   # These are extensions that must be enabled in order to support this database
-  enable_extension "plpgsql"
+  enable_extension "pg_catalog.plpgsql"
+  enable_extension "pg_session_jwt"
   enable_extension "uuid-ossp"
 
-  create_table "poll_options", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.uuid "poll_id"
-    t.text "text", null: false
+  create_table "poll_options", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "poll_id", null: false
+    t.string "text", null: false
+    t.datetime "updated_at", null: false
+    t.index ["poll_id"], name: "index_poll_options_on_poll_id"
   end
 
-  create_table "poll_responses", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.uuid "poll_id"
+  create_table "poll_responses", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "answer", null: false
+    t.datetime "created_at", null: false
+    t.uuid "poll_id", null: false
+    t.datetime "updated_at", null: false
     t.uuid "user_id"
-    t.text "answer", null: false
-    t.datetime "submitted_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
-    t.index ["poll_id"], name: "idx_poll_responses_poll_id"
+    t.index ["poll_id"], name: "index_poll_responses_on_poll_id"
+    t.index ["user_id"], name: "index_poll_responses_on_user_id"
   end
 
-  create_table "polls", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
+  create_table "polls", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.boolean "is_active", default: true
+    t.uuid "owner_id"
+    t.string "poll_type", default: "multiple_choice", null: false
+    t.string "question", null: false
     t.uuid "slide_id"
-    t.text "question", null: false
-    t.text "poll_type", null: false
-    t.boolean "is_active", default: false
-    t.index ["slide_id"], name: "idx_polls_slide_id"
+    t.datetime "updated_at", null: false
+    t.index ["owner_id"], name: "index_polls_on_owner_id"
   end
 
   create_table "presentation_sessions", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
+    t.datetime "ended_at", precision: nil
     t.uuid "presentation_id"
     t.datetime "started_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
-    t.datetime "ended_at", precision: nil
   end
 
   create_table "presentations", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.text "title", null: false
-    t.uuid "owner_id"
-    t.boolean "is_live", default: false
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.boolean "is_live", default: false
+    t.uuid "owner_id"
+    t.text "title", null: false
   end
 
   create_table "refresh_tokens", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.uuid "user_id"
-    t.text "token", null: false
+    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "expires_at", precision: nil, null: false
     t.boolean "revoked", default: false
-    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.text "token", null: false
+    t.uuid "user_id"
 
     t.unique_constraint ["token"], name: "refresh_tokens_token_key"
   end
@@ -66,43 +75,43 @@ ActiveRecord::Schema[7.1].define(version: 2026_02_23_002000) do
   end
 
   create_table "session_participants", primary_key: ["session_id", "user_id"], force: :cascade do |t|
+    t.datetime "joined_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.uuid "session_id", null: false
     t.uuid "user_id", null: false
-    t.datetime "joined_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
   end
 
   create_table "slide_elements", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.uuid "slide_id"
-    t.text "type", null: false
-    t.jsonb "position", null: false
-    t.jsonb "style"
     t.jsonb "content"
-    t.integer "z_index", default: 0
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.jsonb "position", null: false
+    t.uuid "slide_id"
+    t.jsonb "style"
+    t.text "type", null: false
+    t.integer "z_index", default: 0
     t.index ["slide_id"], name: "idx_elements_slide_id"
   end
 
   create_table "slides", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.uuid "presentation_id"
-    t.integer "slide_index", null: false
     t.jsonb "background"
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.uuid "presentation_id"
+    t.integer "slide_index", null: false
     t.index ["presentation_id"], name: "idx_slides_presentation_id"
   end
 
   create_table "users", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.text "email", null: false
-    t.text "password_hash", null: false
-    t.text "name"
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.text "email", null: false
+    t.text "name"
+    t.text "password_hash", null: false
 
     t.unique_constraint ["email"], name: "users_email_key"
   end
 
-  add_foreign_key "poll_options", "polls", name: "poll_options_poll_id_fkey", on_delete: :cascade
-  add_foreign_key "poll_responses", "polls", name: "poll_responses_poll_id_fkey", on_delete: :cascade
-  add_foreign_key "poll_responses", "users", name: "poll_responses_user_id_fkey", on_delete: :nullify
-  add_foreign_key "polls", "slides", name: "polls_slide_id_fkey", on_delete: :cascade
+  add_foreign_key "poll_options", "polls"
+  add_foreign_key "poll_responses", "polls"
+  add_foreign_key "poll_responses", "users", on_delete: :nullify
+  add_foreign_key "polls", "users", column: "owner_id", on_delete: :cascade
   add_foreign_key "presentation_sessions", "presentations", name: "presentation_sessions_presentation_id_fkey", on_delete: :cascade
   add_foreign_key "presentations", "users", column: "owner_id", name: "presentations_owner_id_fkey", on_delete: :cascade
   add_foreign_key "refresh_tokens", "users", name: "refresh_tokens_user_id_fkey", on_delete: :cascade

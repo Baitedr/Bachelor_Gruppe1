@@ -67,6 +67,7 @@
     display: flex;
     gap: 0.75rem;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .toolbar-btn {
@@ -113,12 +114,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: white;
     border-radius: 10px;
     padding: 2rem;
+    min-height: 400px;
 }
 
 .canvas-container canvas {
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 40px #ffffff;
     border-radius: 8px;
 }
