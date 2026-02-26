@@ -122,7 +122,18 @@
     min-height: 400px;
 }
 
-.canvas-container canvas {
+.slide-boundary {
+    padding: 2px;
+    border-radius: 10px;
+    background:
+        repeating-linear-gradient(to right, #9ca3af 0 8px, transparent 8px 18px) top / 100% 2px no-repeat,
+        repeating-linear-gradient(to right, #9ca3af 0 8px, transparent 8px 18px) bottom / 100% 2px no-repeat,
+        repeating-linear-gradient(to bottom, #9ca3af 0 8px, transparent 8px 18px) left / 2px 100% no-repeat,
+        repeating-linear-gradient(to bottom, #9ca3af 0 8px, transparent 8px 18px) right / 2px 100% no-repeat;
     box-shadow: 0 10px 40px #ffffff;
+}
+
+.canvas-container canvas {
+    display: block;
     border-radius: 8px;
 }

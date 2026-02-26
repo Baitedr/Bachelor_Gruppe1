@@ -266,7 +266,9 @@ function PresentationEditor() {
                     </div>
                 </div>
                 <div className="canvas-container">
-                    <canvas ref={canvasRef} />
+                    <div className="slide-boundary">
+                        <canvas ref={canvasRef} />
+                    </div>
                 </div>
             </div>
         </div>
