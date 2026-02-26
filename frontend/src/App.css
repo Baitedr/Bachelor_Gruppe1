@@ -133,17 +133,30 @@ button:active {
 .item-card {
   background-color: rgba(255, 255, 255, 0.05);
   padding: 1.5rem;
+  max-height: 320px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  transition: transform 0.2s;
+  overflow: hidden;
+  transition: transform 0.25s ease, opacity 0.25s ease, max-height 0.28s ease, margin 0.28s ease, padding 0.28s ease;
 }
 
 .item-card:hover {
   transform: translateX(5px);
   border-color: rgba(102, 126, 234, 0.5);
+}
+
+.item-card.deleting {
+  opacity: 0;
+  transform: translateX(24px) scale(0.97);
+  max-height: 0;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+  pointer-events: none;
 }
 
 .item-content h3 {
@@ -155,19 +168,154 @@ button:active {
   color: rgba(255, 255, 255, 0.7);
 }
 
+.recent-slide-preview {
+  min-height: 88px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 0.65rem;
+  margin-bottom: 0.8rem;
+  color: #1f2937;
+  overflow: hidden;
+}
+
+.recent-slide-image {
+  width: 100%;
+  height: 100%;
+  min-height: 88px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.recent-slide-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-slide-content {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  max-height: 2.8em;
+  overflow: hidden;
+}
+
 .recent-meta {
   font-size: 0.9rem;
 }
 
-.delete-btn {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  padding: 0.5rem 1rem;
+.recent-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.recent-action-btn {
+  min-width: 92px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.9rem;
   font-size: 0.9rem;
 }
 
-.delete-btn:hover {
+.edit-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.recent-actions .delete-btn {
+  background: rgba(223, 43, 43, 0.25);
+  color: #ffffff;
+}
+
+.recent-actions .delete-btn:hover {
   background: rgba(239, 68, 68, 0.3);
+}
+
+.trash-section {
+  margin-top: 1.8rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.trash-section h3 {
+  margin: 0 0 0.9rem;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.trash-empty {
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+}
+
+.trash-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.trash-item {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trash-meta {
+  margin: 0.2rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.84rem;
+}
+
+.restore-btn {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.restore-btn:hover {
+  background: rgba(16, 185, 129, 0.42);
+}
+
+.delete-undo-toast {
+  position: fixed;
+  bottom: 1.2rem;
+  right: 1.2rem;
+  z-index: 2000;
+  background: rgba(31, 41, 55, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: #ffffff;
+}
+
+.delete-undo-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.undo-btn {
+  background: rgba(59, 130, 246, 0.34);
+}
+
+.undo-btn:hover {
+  background: rgba(59, 130, 246, 0.46);
+}
+
+.dismiss-btn {
+  background: rgba(107, 114, 128, 0.42);
+}
+
+.dismiss-btn:hover {
+  background: rgba(107, 114, 128, 0.55);
 }
 
 .empty-state {

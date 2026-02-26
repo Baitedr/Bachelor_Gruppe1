@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import api from './services/api'
 import PresentationEditor from './components/PresentationEditor'
@@ -7,10 +7,14 @@ import PollPage from './components/PollPage'
 import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
 
 const MOBILE_BREAKPOINT = 768;
+const DELETE_UNDO_TIMEOUT_MS = 6000;
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
   const [presentations, setPresentations] = useState([])
+  const [deletingPresentationIds, setDeletingPresentationIds] = useState({})
+  const [trashedPresentations, setTrashedPresentations] = useState([])
+  const [deleteUndoToast, setDeleteUndoToast] = useState(null)
   const [presentationsError, setPresentationsError] = useState(null)
   const [presentationsLoading, setPresentationsLoading] = useState(false)
   const [activePresentation, setActivePresentation] = useState(null)
@@ -18,6 +22,23 @@ function App() {
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
+  const undoToastTimerRef = useRef(null)
+
+  const clearUndoToastTimer = () => {
+    if (!undoToastTimerRef.current) return
+    window.clearTimeout(undoToastTimerRef.current)
+    undoToastTimerRef.current = null
+  }
+
+  const toRestorablePresentationPayload = (presentation) => ({
+    title: presentation?.title || 'Recovered Presentation',
+    slides: (presentation?.slides || []).map((slide, index) => ({
+      title: slide?.title || `Slide ${index + 1}`,
+      content: slide?.content || '',
+      backgroundColor: slide?.backgroundColor || '#ffffff',
+      fabricData: slide?.fabricData || null,
+    })),
+  })
 
   const isMobileDevice = () => {
     const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
@@ -77,6 +98,12 @@ function App() {
       loadPresentations()
     }
   }, [user])
+
+  useEffect(() => {
+    return () => {
+      clearUndoToastTimer()
+    }
+  }, [])
 
   const checkApiHealth = async () => {
     try {
@@ -142,8 +169,9 @@ function App() {
   const handleSavePresentation = async (payload) => {
     setIsSavingPresentation(true)
     try {
-      const data = payload.id
-        ? await api.updatePresentation(payload.id, payload)
+      const presentationId = payload.id || activePresentation?.id
+      const data = presentationId
+        ? await api.updatePresentation(presentationId, payload)
         : await api.createPresentation(payload)
 
       setActivePresentation(data.presentation)
@@ -154,6 +182,87 @@ function App() {
     }
   }
 
+  const handleDeletePresentation = async (presentationId) => {
+    if (deletingPresentationIds[presentationId]) return
+
+    setDeletingPresentationIds((prev) => ({ ...prev, [presentationId]: true }))
+
+    try {
+      const details = await api.getPresentation(presentationId)
+      const restorablePresentation = details?.presentation
+
+      await api.deletePresentation(presentationId)
+
+      if (activePresentation?.id === presentationId) {
+        setActivePresentation(null)
+      }
+
+      const trashId = `trash-${presentationId}-${Date.now()}`
+      const trashedItem = {
+        id: trashId,
+        presentation: restorablePresentation,
+        deletedAt: new Date().toISOString(),
+      }
+
+      setTrashedPresentations((prev) => [trashedItem, ...prev])
+      setDeleteUndoToast({
+        trashId,
+        title: restorablePresentation?.title || 'Presentation',
+      })
+
+      clearUndoToastTimer()
+      undoToastTimerRef.current = window.setTimeout(() => {
+        setDeleteUndoToast(null)
+        undoToastTimerRef.current = null
+      }, DELETE_UNDO_TIMEOUT_MS)
+
+      window.setTimeout(() => {
+        setPresentations((prev) => prev.filter((item) => item.id !== presentationId))
+        setDeletingPresentationIds((prev) => {
+          const next = { ...prev }
+          delete next[presentationId]
+          return next
+        })
+      }, 280)
+    } catch (err) {
+      setDeletingPresentationIds((prev) => {
+        const next = { ...prev }
+        delete next[presentationId]
+        return next
+      })
+      setPresentationsError('Failed to delete presentation')
+      console.error('Delete presentation failed:', err)
+    }
+  }
+
+  const handleRestorePresentation = async (trashId) => {
+    const trashedItem = trashedPresentations.find((item) => item.id === trashId)
+    if (!trashedItem?.presentation) return
+
+    try {
+      const payload = toRestorablePresentationPayload(trashedItem.presentation)
+      await api.createPresentation(payload)
+
+      setTrashedPresentations((prev) => prev.filter((item) => item.id !== trashId))
+
+      if (deleteUndoToast?.trashId === trashId) {
+        clearUndoToastTimer()
+        setDeleteUndoToast(null)
+      }
+
+      await loadPresentations()
+      setPresentationsError(null)
+    } catch (err) {
+      setPresentationsError('Failed to restore presentation')
+      console.error('Restore presentation failed:', err)
+    }
+  }
+
+  const dismissDeleteUndoToast = () => {
+    clearUndoToastTimer()
+    setDeleteUndoToast(null)
+  }
+
   const handleLoginSuccess = (userData) => {
     setUser(userData)
     setCurrentPage(isMobileDevice() ? 'phoneinteraction' : 'home')
@@ -161,8 +270,11 @@ function App() {
 
   const handleLogout = async () => {
     await api.logout()
+    clearUndoToastTimer()
     setUser(null)
     setPresentations([])
+    setTrashedPresentations([])
+    setDeleteUndoToast(null)
     setActivePresentation(null)
     setCurrentPage('login')
   }
@@ -274,22 +386,105 @@ function App() {
               ) : (
                 <div className="item-list">
                   {presentations.map((presentation) => (
-                    <div key={presentation.id} className="item-card">
+                    <div
+                      key={presentation.id}
+                      className={`item-card ${deletingPresentationIds[presentation.id] ? 'deleting' : ''}`}
+                    >
                       <div className="item-content">
+                        <div
+                          className="recent-slide-preview"
+                          style={{
+                            backgroundColor:
+                              presentation.first_slide?.backgroundColor || '#ffffff',
+                          }}
+                        >
+                          {presentation.first_slide?.previewImage ? (
+                            <img
+                              src={presentation.first_slide.previewImage}
+                              alt={`${presentation.title} first slide preview`}
+                              className="recent-slide-image"
+                            />
+                          ) : (
+                            <>
+                              <div className="recent-slide-title">
+                                {presentation.first_slide?.title || 'Slide 1'}
+                              </div>
+                              <div className="recent-slide-content">
+                                {presentation.first_slide?.content || 'No content yet'}
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <h3>{presentation.title}</h3>
                         <p className="recent-meta">
                           {presentation.slide_count} slide(s) • {new Date(presentation.created_at).toLocaleString()}
                         </p>
                       </div>
-                      <button onClick={() => handleOpenPresentation(presentation.id)}>
-                        Open
-                      </button>
+                      <div className="recent-actions">
+                        <button
+                          className="recent-action-btn edit-btn"
+                          onClick={() => handleOpenPresentation(presentation.id)}
+                          disabled={deletingPresentationIds[presentation.id]}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="recent-action-btn delete-btn"
+                          onClick={() => handleDeletePresentation(presentation.id)}
+                          disabled={deletingPresentationIds[presentation.id]}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
+
+              <div className="trash-section">
+                <h3>Trash Bin</h3>
+                {trashedPresentations.length === 0 ? (
+                  <p className="trash-empty">Deleted presentations appear here.</p>
+                ) : (
+                  <div className="trash-list">
+                    {trashedPresentations.map((trashedItem) => (
+                      <div key={trashedItem.id} className="trash-item">
+                        <div>
+                          <strong>{trashedItem.presentation?.title || 'Untitled Presentation'}</strong>
+                          <p className="trash-meta">
+                            Deleted {new Date(trashedItem.deletedAt).toLocaleTimeString()}
+                          </p>
+                        </div>
+                        <button
+                          className="recent-action-btn restore-btn"
+                          onClick={() => handleRestorePresentation(trashedItem.id)}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
           </main>
+
+          {deleteUndoToast && (
+            <div className="delete-undo-toast" role="status" aria-live="polite">
+              <span>Deleted “{deleteUndoToast.title}”.</span>
+              <div className="delete-undo-actions">
+                <button
+                  className="recent-action-btn undo-btn"
+                  onClick={() => handleRestorePresentation(deleteUndoToast.trashId)}
+                >
+                  Undo
+                </button>
+                <button className="recent-action-btn dismiss-btn" onClick={dismissDeleteUndoToast}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : currentPage === 'polls' ? (
         <PollPage onNavigate={setCurrentPage} user={user} />

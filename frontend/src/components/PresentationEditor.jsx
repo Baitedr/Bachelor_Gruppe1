@@ -14,14 +14,72 @@ const defaultSlide = () => ({
 function PresentationEditor({ presentation, onSavePresentation, isSaving = false }) {
     const canvasRef = useRef(null);
     const fabricCanvasRef = useRef(null);
+    const isApplyingCanvasStateRef = useRef(false);
     const [slides, setSlides] = useState([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+    const [presentationId, setPresentationId] = useState(null);
     const [presentationTitle, setPresentationTitle] = useState('Untitled Presentation');
     const [saveError, setSaveError] = useState(null);
     const [lastSavedAt, setLastSavedAt] = useState(null);
+    const [undoStack, setUndoStack] = useState([]);
+    const [redoStack, setRedoStack] = useState([]);
+    const [slidePreviewImages, setSlidePreviewImages] = useState({});
+
+    const createCanvasSnapshot = () => {
+        if (!fabricCanvasRef.current) return null;
+
+        return {
+            backgroundColor: fabricCanvasRef.current.backgroundColor || '#ffffff',
+            fabricData: fabricCanvasRef.current.toJSON(),
+        };
+    };
+
+    const areSnapshotsEqual = (first, second) => {
+        if (!first || !second) return false;
+        return JSON.stringify(first) === JSON.stringify(second);
+    };
+
+    const pushHistorySnapshot = (snapshot) => {
+        if (!snapshot) return;
+
+        setUndoStack((previousStack) => {
+            const lastSnapshot = previousStack[previousStack.length - 1];
+            if (areSnapshotsEqual(lastSnapshot, snapshot)) {
+                return previousStack;
+            }
+            return [...previousStack, snapshot];
+        });
+        setRedoStack([]);
+    };
+
+    const resetHistoryWithSnapshot = (snapshot) => {
+        if (!snapshot) {
+            setUndoStack([]);
+            setRedoStack([]);
+            return;
+        }
+
+        setUndoStack([snapshot]);
+        setRedoStack([]);
+    };
+
+    const applyCanvasSnapshot = async (snapshot) => {
+        if (!fabricCanvasRef.current || !snapshot) return;
+
+        isApplyingCanvasStateRef.current = true;
+
+        try {
+            await fabricCanvasRef.current.loadFromJSON(snapshot.fabricData || null);
+            fabricCanvasRef.current.backgroundColor = snapshot.backgroundColor || '#ffffff';
+            fabricCanvasRef.current.renderAll();
+        } finally {
+            isApplyingCanvasStateRef.current = false;
+        }
+    };
 
     useEffect(() => {
         if (!presentation) {
+            setPresentationId(null);
             setPresentationTitle('Untitled Presentation');
             setSlides([defaultSlide()]);
             setCurrentSlideIndex(0);
@@ -36,6 +94,7 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
             fabricData: slide.fabricData || null,
         }));
 
+        setPresentationId(presentation.id || null);
         setPresentationTitle(presentation.title || 'Untitled Presentation');
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
@@ -71,18 +130,47 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
             
             const backgroundColor = currentSlide.backgroundColor || '#ffffff';
 
+            isApplyingCanvasStateRef.current = true;
+
             if (currentSlide.fabricData) {
-            fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
-                fabricCanvasRef.current.backgroundColor = backgroundColor;
-                fabricCanvasRef.current.renderAll();
-            });
+                fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                    fabricCanvasRef.current.backgroundColor = backgroundColor;
+                    fabricCanvasRef.current.renderAll();
+                    isApplyingCanvasStateRef.current = false;
+                    resetHistoryWithSnapshot(createCanvasSnapshot());
+                });
             } else {
                 fabricCanvasRef.current.clear();
                 fabricCanvasRef.current.set({ backgroundColor });
                 fabricCanvasRef.current.renderAll();
+                isApplyingCanvasStateRef.current = false;
+                resetHistoryWithSnapshot(createCanvasSnapshot());
             }
+        } else {
+            setUndoStack([]);
+            setRedoStack([]);
         }
     }, [currentSlideIndex, slides]);
+
+    useEffect(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        const handleCanvasChange = () => {
+            if (isApplyingCanvasStateRef.current) return;
+            pushHistorySnapshot(createCanvasSnapshot());
+        };
+
+        canvas.on('object:added', handleCanvasChange);
+        canvas.on('object:modified', handleCanvasChange);
+        canvas.on('object:removed', handleCanvasChange);
+
+        return () => {
+            canvas.off('object:added', handleCanvasChange);
+            canvas.off('object:modified', handleCanvasChange);
+            canvas.off('object:removed', handleCanvasChange);
+        };
+    }, []);
 
     const buildSlidesWithCurrentCanvasState = () => {
         if (!fabricCanvasRef.current || !slides[currentSlideIndex]) return slides;
@@ -100,6 +188,68 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
 
         return newSlides;
     };
+
+    const createSlideSnapshot = async (slide) => {
+        const tempElement = document.createElement('canvas');
+        tempElement.width = 960;
+        tempElement.height = 540;
+
+        const tempFabricCanvas = new Canvas(tempElement, {
+            width: 960,
+            height: 540,
+            backgroundColor: slide?.backgroundColor || '#ffffff',
+        });
+
+        try {
+            if (slide?.fabricData) {
+                await tempFabricCanvas.loadFromJSON(slide.fabricData);
+            }
+
+            tempFabricCanvas.backgroundColor = slide?.backgroundColor || '#ffffff';
+            tempFabricCanvas.renderAll();
+
+            return tempFabricCanvas.toDataURL({
+                format: 'png',
+                quality: 0.8,
+                multiplier: 0.2,
+            });
+        } finally {
+            tempFabricCanvas.dispose();
+        }
+    };
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        const buildSlidePreviews = async () => {
+            if (!slides.length) {
+                setSlidePreviewImages({});
+                return;
+            }
+
+            const previews = {};
+
+            for (const slide of slides) {
+                if (!slide?.id) continue;
+
+                try {
+                    previews[slide.id] = await createSlideSnapshot(slide);
+                } catch {
+                    previews[slide.id] = null;
+                }
+            }
+
+            if (!isCancelled) {
+                setSlidePreviewImages(previews);
+            }
+        };
+
+        buildSlidePreviews();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [slides]);
 
     // Save current slide data locally
     const saveCurrentSlide = () => {
@@ -269,20 +419,64 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
             };
             return newSlides;
         });
+
+        pushHistorySnapshot(createCanvasSnapshot());
+    };
+
+    const handleUndo = async () => {
+        if (undoStack.length <= 1) return;
+
+        const currentSnapshot = undoStack[undoStack.length - 1];
+        const previousSnapshot = undoStack[undoStack.length - 2];
+
+        await applyCanvasSnapshot(previousSnapshot);
+        setUndoStack((previousStack) => previousStack.slice(0, -1));
+        setRedoStack((previousStack) => [currentSnapshot, ...previousStack]);
+    };
+
+    const handleRedo = async () => {
+        if (!redoStack.length) return;
+
+        const [nextSnapshot, ...remainingSnapshots] = redoStack;
+
+        await applyCanvasSnapshot(nextSnapshot);
+        setUndoStack((previousStack) => {
+            const lastSnapshot = previousStack[previousStack.length - 1];
+            if (areSnapshotsEqual(lastSnapshot, nextSnapshot)) {
+                return previousStack;
+            }
+
+            return [...previousStack, nextSnapshot];
+        });
+        setRedoStack(remainingSnapshots);
     };
 
     const handleSavePresentation = async () => {
-        if (!onSavePresentation) return;
+        if (!onSavePresentation || isSaving) return;
 
         const slidesToSave = saveCurrentSlide();
         setSaveError(null);
 
         try {
-            await onSavePresentation({
-                id: presentation?.id,
+            const firstSlideSnapshot = await createSlideSnapshot(slidesToSave[0]);
+            const slidesWithPreview = slidesToSave.map((slide, index) => (
+                index === 0
+                    ? {
+                        ...slide,
+                        previewImage: firstSlideSnapshot,
+                    }
+                    : slide
+            ));
+
+            const savedPresentation = await onSavePresentation({
+                id: presentationId,
                 title: presentationTitle.trim() || 'Untitled Presentation',
-                slides: slidesToSave,
+                slides: slidesWithPreview,
             });
+
+            if (savedPresentation?.id) {
+                setPresentationId(savedPresentation.id);
+            }
 
             setLastSavedAt(new Date());
         } catch (error) {
@@ -299,6 +493,7 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
                 </div>
                 <SlideThumbnails
                     slides={slides}
+                    slidePreviewImages={slidePreviewImages}
                     currentSlideIndex={currentSlideIndex}
                     onSlideSelect={handleSlideSelect}
                     onSlideDelete={deleteSlide}
@@ -321,6 +516,20 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
                     </div>
                     <div className="toolbar-actions">
                         <button
+                            onClick={handleUndo}
+                            className="toolbar-btn history-btn"
+                            disabled={undoStack.length <= 1}
+                        >
+                            ↶ Undo
+                        </button>
+                        <button
+                            onClick={handleRedo}
+                            className="toolbar-btn history-btn"
+                            disabled={!redoStack.length}
+                        >
+                            ↷ Redo
+                        </button>
+                        <button
                             onClick={handleSavePresentation}
                             className="toolbar-btn save-btn"
                             disabled={isSaving}
@@ -339,7 +548,6 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
                                 type="color"
                                 value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
                                 onChange={(e) => changeBackgroundColor(e.target.value)}
-                                style={{ marginLeft: '8px' }}
                             />
                         </label>
                     </div>

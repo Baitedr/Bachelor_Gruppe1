@@ -140,6 +140,14 @@ const api = {
     return response.data
   },
 
+  deletePresentation: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.delete(`/presentations/${presentationId}`),
+      1
+    )
+    return response.data
+  },
+
   // Polls
   getPolls: async () => {
     const response = await axiosRetry(() => apiClient.get('/polls'), 1)
