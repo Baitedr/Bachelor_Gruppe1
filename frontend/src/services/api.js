@@ -104,6 +104,42 @@ const api = {
     return Boolean(localStorage.getItem(TOKEN_KEY))
   },
 
+  // Presentations
+  getPresentations: async (limit = 10) => {
+    const response = await axiosRetry(
+      () => apiClient.get('/presentations', { params: { limit } }),
+      1
+    )
+    return response.data
+  },
+
+  getPresentation: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.get(`/presentations/${presentationId}`),
+      1
+    )
+    return response.data
+  },
+
+  createPresentation: async (presentationData) => {
+    const response = await axiosRetry(
+      () => apiClient.post('/presentations', { presentation: presentationData }),
+      1
+    )
+    return response.data
+  },
+
+  updatePresentation: async (presentationId, presentationData) => {
+    const response = await axiosRetry(
+      () =>
+        apiClient.put(`/presentations/${presentationId}`, {
+          presentation: presentationData,
+        }),
+      1
+    )
+    return response.data
+  },
+
   // Polls
   getPolls: async () => {
     const response = await axiosRetry(() => apiClient.get('/polls'), 1)

@@ -10,8 +10,11 @@ const MOBILE_BREAKPOINT = 768;
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
-  const [slidesData, setSlidesData] = useState(null)
-  const [slidesError, setSlidesError] = useState(null)
+  const [presentations, setPresentations] = useState([])
+  const [presentationsError, setPresentationsError] = useState(null)
+  const [presentationsLoading, setPresentationsLoading] = useState(false)
+  const [activePresentation, setActivePresentation] = useState(null)
+  const [isSavingPresentation, setIsSavingPresentation] = useState(false)
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
@@ -71,7 +74,7 @@ function App() {
   useEffect(() => {
     if (user) {
       checkApiHealth()
-      loadSlides()
+      loadPresentations()
     }
   }, [user])
 
@@ -85,15 +88,69 @@ function App() {
     }
   }
 
-  const loadSlides = async () => {
+  const loadPresentations = async () => {
+    setPresentationsLoading(true)
     try {
-      const data = await api.getSlides()
-      setSlidesData(data.slides || [])
-      setSlidesError(null)
+      const data = await api.getPresentations(8)
+      setPresentations(data.presentations || [])
+      setPresentationsError(null)
     } catch (err) {
-      setSlidesError('Failed to load slides')
-      setSlidesData([])
-      console.error('Slides fetch failed:', err)
+      setPresentationsError('Failed to load presentations')
+      setPresentations([])
+      console.error('Presentations fetch failed:', err)
+    } finally {
+      setPresentationsLoading(false)
+    }
+  }
+
+  const createBlankPresentationPayload = (title = 'Untitled Presentation') => ({
+    title,
+    slides: [
+      {
+        title: 'Slide 1',
+        content: '',
+        backgroundColor: '#ffffff',
+        fabricData: null,
+      },
+    ],
+  })
+
+  const handleCreatePresentation = async () => {
+    try {
+      const defaultTitle = `Presentation ${presentations.length + 1}`
+      const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
+      setActivePresentation(data.presentation)
+      setCurrentPage('editor')
+      await loadPresentations()
+    } catch (err) {
+      setPresentationsError('Failed to create presentation')
+      console.error('Create presentation failed:', err)
+    }
+  }
+
+  const handleOpenPresentation = async (presentationId) => {
+    try {
+      const data = await api.getPresentation(presentationId)
+      setActivePresentation(data.presentation)
+      setCurrentPage('editor')
+    } catch (err) {
+      setPresentationsError('Failed to open presentation')
+      console.error('Open presentation failed:', err)
+    }
+  }
+
+  const handleSavePresentation = async (payload) => {
+    setIsSavingPresentation(true)
+    try {
+      const data = payload.id
+        ? await api.updatePresentation(payload.id, payload)
+        : await api.createPresentation(payload)
+
+      setActivePresentation(data.presentation)
+      await loadPresentations()
+      return data.presentation
+    } finally {
+      setIsSavingPresentation(false)
     }
   }
 
@@ -105,7 +162,22 @@ function App() {
   const handleLogout = async () => {
     await api.logout()
     setUser(null)
+    setPresentations([])
+    setActivePresentation(null)
     setCurrentPage('login')
+  }
+
+  const handleEditorNav = async () => {
+    if (currentPage === 'home') {
+      if (activePresentation?.id) {
+        setCurrentPage('editor')
+      } else {
+        await handleCreatePresentation()
+      }
+      return
+    }
+
+    setCurrentPage('home')
   }
 
   if (isAuthChecking) {
@@ -133,7 +205,7 @@ function App() {
         gap: '0.5rem'
       }}>
         <button 
-          onClick={() => setCurrentPage(currentPage === 'home' ? 'editor' : 'home')}
+          onClick={handleEditorNav}
           style={{
             padding: '0.5rem 1rem',
             borderRadius: '0.5rem',
@@ -188,7 +260,34 @@ function App() {
 
           <main>
             <section className="slides-list-section">
-              <h2>Hva vil du gjøre?</h2>
+              <h2>Recent presentations</h2>
+              <div className="home-actions">
+                <button onClick={handleCreatePresentation}>+ New presentation</button>
+              </div>
+
+              {presentationsError && <p className="error">{presentationsError}</p>}
+
+              {presentationsLoading ? (
+                <p>Loading presentations...</p>
+              ) : presentations.length === 0 ? (
+                <div className="empty-state">No presentations yet.</div>
+              ) : (
+                <div className="item-list">
+                  {presentations.map((presentation) => (
+                    <div key={presentation.id} className="item-card">
+                      <div className="item-content">
+                        <h3>{presentation.title}</h3>
+                        <p className="recent-meta">
+                          {presentation.slide_count} slide(s) • {new Date(presentation.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <button onClick={() => handleOpenPresentation(presentation.id)}>
+                        Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </main>
         </>
@@ -201,7 +300,11 @@ function App() {
           </header>
 
           <main>
-            <PresentationEditor />
+            <PresentationEditor
+              presentation={activePresentation}
+              onSavePresentation={handleSavePresentation}
+              isSaving={isSavingPresentation}
+            />
           </main>
         </>
       )}

@@ -13,4 +13,8 @@ class ApplicationController < ActionController::API
 	def current_user
 		@current_user
 	end
+
+	def authenticate_user!
+		authenticate_request!
+	end
 end

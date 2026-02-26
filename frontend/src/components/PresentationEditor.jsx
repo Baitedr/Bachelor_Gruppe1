@@ -3,19 +3,44 @@ import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
 import '../CSScomponents/PresentationEditor.css';
 
-function PresentationEditor() {
+const defaultSlide = () => ({
+    id: `local-${Date.now()}`,
+    title: 'Slide 1',
+    content: '',
+    backgroundColor: '#ffffff',
+    fabricData: null,
+});
+
+function PresentationEditor({ presentation, onSavePresentation, isSaving = false }) {
     const canvasRef = useRef(null);
     const fabricCanvasRef = useRef(null);
-    const [slides, setSlides] = useState([
-        {
-            id: 1,
-            title: 'Slide 1',
-            content: '',
-            backgroundColor: '#ffffff',
-            fabricData: null
-        }
-    ]);
+    const [slides, setSlides] = useState([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+    const [presentationTitle, setPresentationTitle] = useState('Untitled Presentation');
+    const [saveError, setSaveError] = useState(null);
+    const [lastSavedAt, setLastSavedAt] = useState(null);
+
+    useEffect(() => {
+        if (!presentation) {
+            setPresentationTitle('Untitled Presentation');
+            setSlides([defaultSlide()]);
+            setCurrentSlideIndex(0);
+            return;
+        }
+
+        const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
+            id: slide.id || `local-${Date.now()}-${index}`,
+            title: slide.title || `Slide ${index + 1}`,
+            content: slide.content || '',
+            backgroundColor: slide.backgroundColor || '#ffffff',
+            fabricData: slide.fabricData || null,
+        }));
+
+        setPresentationTitle(presentation.title || 'Untitled Presentation');
+        setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
+        setCurrentSlideIndex(0);
+        setSaveError(null);
+    }, [presentation]);
 
     // Initialize Fabric Canvas
     useEffect(() => {
@@ -44,46 +69,56 @@ function PresentationEditor() {
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
             
+            const backgroundColor = currentSlide.backgroundColor || '#ffffff';
+
             if (currentSlide.fabricData) {
             fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
-                fabricCanvasRef.current.backgroundColor = '#ffffff';
+                fabricCanvasRef.current.backgroundColor = backgroundColor;
                 fabricCanvasRef.current.renderAll();
             });
             } else {
                 fabricCanvasRef.current.clear();
-                fabricCanvasRef.current.set({ backgroundColor: '#ffffff'});
+                fabricCanvasRef.current.set({ backgroundColor });
                 fabricCanvasRef.current.renderAll();
             }
         }
     }, [currentSlideIndex, slides]);
 
-    // Save current slide data
-    const saveCurrentSlide = () => {
-        if (!fabricCanvasRef.current) return;
+    const buildSlidesWithCurrentCanvasState = () => {
+        if (!fabricCanvasRef.current || !slides[currentSlideIndex]) return slides;
 
-        fabricCanvasRef.current.backgroundColor = '#ffffff'
-        
-        const fabricData = fabricCanvasRef.current.toJSON();
+        const currentSlide = slides[currentSlideIndex];
+        const backgroundColor =
+            fabricCanvasRef.current.backgroundColor || currentSlide.backgroundColor || '#ffffff';
+
         const newSlides = [...slides];
         newSlides[currentSlideIndex] = {
-            ...newSlides[currentSlideIndex],
-            fabricData: fabricData,
-            
+            ...currentSlide,
+            backgroundColor,
+            fabricData: fabricCanvasRef.current.toJSON(),
         };
+
+        return newSlides;
+    };
+
+    // Save current slide data locally
+    const saveCurrentSlide = () => {
+        const newSlides = buildSlidesWithCurrentCanvasState();
         setSlides(newSlides);
+        return newSlides;
     };
 
     const addSlide = () => {
-        saveCurrentSlide();
+        const currentSlides = saveCurrentSlide();
         const newSlide = {
-            id: Date.now(),
-            title: `Slide ${slides.length + 1}`,
+            id: `local-${Date.now()}`,
+            title: `Slide ${currentSlides.length + 1}`,
             content: '',
             backgroundColor: '#ffffff',
             fabricData: null
         };
-        setSlides([...slides, newSlide]);
-        setCurrentSlideIndex(slides.length);
+        setSlides([...currentSlides, newSlide]);
+        setCurrentSlideIndex(currentSlides.length);
     };
 
     const deleteSlide = (index) => {
@@ -99,14 +134,14 @@ function PresentationEditor() {
     };
 
     const duplicateSlide = (index) => {
-        saveCurrentSlide();
-        const slideToDuplicate = slides[index];
+        const currentSlides = saveCurrentSlide();
+        const slideToDuplicate = currentSlides[index];
         const newSlide = {
             ...slideToDuplicate,
-            id: Date.now(),
+            id: `local-${Date.now()}`,
             title: slideToDuplicate.title + ' (Kopi)',
         };
-        const newSlides = [...slides];
+        const newSlides = [...currentSlides];
         newSlides.splice(index + 1, 0, newSlide);
         setSlides(newSlides);
         setCurrentSlideIndex(index + 1);
@@ -223,8 +258,36 @@ function PresentationEditor() {
         if (!fabricCanvasRef.current) return;
         fabricCanvasRef.current.backgroundColor = color;
         fabricCanvasRef.current.renderAll();
-        
-      
+
+        setSlides((prevSlides) => {
+            const newSlides = [...prevSlides];
+            if (!newSlides[currentSlideIndex]) return prevSlides;
+
+            newSlides[currentSlideIndex] = {
+                ...newSlides[currentSlideIndex],
+                backgroundColor: color,
+            };
+            return newSlides;
+        });
+    };
+
+    const handleSavePresentation = async () => {
+        if (!onSavePresentation) return;
+
+        const slidesToSave = saveCurrentSlide();
+        setSaveError(null);
+
+        try {
+            await onSavePresentation({
+                id: presentation?.id,
+                title: presentationTitle.trim() || 'Untitled Presentation',
+                slides: slidesToSave,
+            });
+
+            setLastSavedAt(new Date());
+        } catch (error) {
+            setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.');
+        }
     };
 
     return (
@@ -244,10 +307,26 @@ function PresentationEditor() {
             </div>
             <div className="editor-main">
                 <div className="editor-toolbar">
-                    <span className="slide-counter">
-                        Slide {currentSlideIndex + 1} of {slides.length}
-                    </span>
+                    <div className="toolbar-left">
+                        <input
+                            type="text"
+                            className="presentation-title-input"
+                            value={presentationTitle}
+                            onChange={(e) => setPresentationTitle(e.target.value)}
+                            placeholder="Presentation title"
+                        />
+                        <span className="slide-counter">
+                            Slide {currentSlideIndex + 1} of {slides.length}
+                        </span>
+                    </div>
                     <div className="toolbar-actions">
+                        <button
+                            onClick={handleSavePresentation}
+                            className="toolbar-btn save-btn"
+                            disabled={isSaving}
+                        >
+                            {isSaving ? 'Saving...' : '💾 Save'}
+                        </button>
                         <button onClick={addTitle} className="toolbar-btn">📝 Title</button>
                         <button onClick={addText} className="toolbar-btn">Aa Text</button>
                         <button onClick={addImage} className="toolbar-btn">🖼️ Image</button>
@@ -258,13 +337,19 @@ function PresentationEditor() {
                             🎨 Background
                             <input
                                 type="color"
-                                defaultValue="#ffffff"
+                                value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
                                 onChange={(e) => changeBackgroundColor(e.target.value)}
                                 style={{ marginLeft: '8px' }}
                             />
                         </label>
                     </div>
                 </div>
+                {saveError && <div className="save-status error">{saveError}</div>}
+                {lastSavedAt && !saveError && (
+                    <div className="save-status success">
+                        Last saved {lastSavedAt.toLocaleTimeString()}
+                    </div>
+                )}
                 <div className="canvas-container">
                     <div className="slide-boundary">
                         <canvas ref={canvasRef} />
