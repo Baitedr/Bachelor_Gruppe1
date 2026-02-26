@@ -10,6 +10,8 @@
     display: flex;
     flex-direction: column;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    height: 100vh;
+    overflow-y: auto;
 }
 
 .sidebar-header {
@@ -21,7 +23,7 @@
     margin: 0 0 1rem 0;
     color: #1f2937;
     font-size: 1.25rem;
-}
+}   
 
 .add-slide-btn {
     width: 100%;
