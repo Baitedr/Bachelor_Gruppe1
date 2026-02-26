@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
-import '../CSScomponents/SlideEditor.css';
+import '../CSScomponents/PresentationEditor.css';
 
 function PresentationEditor() {
     const canvasRef = useRef(null);
