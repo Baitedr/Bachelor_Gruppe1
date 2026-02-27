@@ -7,12 +7,30 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   const [selectedOption, setSelectedOption] = useState(null);
 
   useEffect(() => {
-    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}');
-    if (votedPolls[pollData.id]) {
+    // Prefer backend truth
+    if (pollData?.user_has_voted) {
+      const selectedIndex = pollData.options.findIndex(
+        (opt) => opt.text === pollData.user_vote_answer
+      );
       setHasVoted(true);
-      setSelectedOption(votedPolls[pollData.id]);
+      setSelectedOption(selectedIndex >= 0 ? selectedIndex : null);
+      return;
     }
-  }, [pollData.id]);
+
+    // Fallback to local storage (per user + poll)
+    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}');
+    const key = `${userId || 'anon'}:${pollData.id}`;
+    const storedOptionId = votedPolls[key];
+
+    if (storedOptionId) {
+      const selectedIndex = pollData.options.findIndex((opt) => opt.id === storedOptionId);
+      setHasVoted(selectedIndex >= 0);
+      setSelectedOption(selectedIndex >= 0 ? selectedIndex : null);
+    } else {
+      setHasVoted(false);
+      setSelectedOption(null);
+    }
+  }, [pollData, userId]);
 
   const handleVote = (option, index) => {
     if (hasVoted) {
@@ -20,17 +38,15 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
       return;
     }
 
-    // Save to localStorage to persist across refresh
     const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}');
-    votedPolls[pollData.id] = index;
+    const key = `${userId || 'anon'}:${pollData.id}`;
+    votedPolls[key] = option.id; // store stable option id, not index
     localStorage.setItem('votedPolls', JSON.stringify(votedPolls));
 
     setHasVoted(true);
     setSelectedOption(index);
 
-    if (onVote) {
-      onVote(option.id); // Pass the actual DB option ID
-    }
+    if (onVote) onVote(option.id);
   };
 
   if (!pollData) {

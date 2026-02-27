@@ -73,6 +73,7 @@ module Api
 
       def poll_payload(poll)
         counts = poll.poll_responses.group(:answer).count
+        user_response = poll.poll_responses.find { |response| response.user_id == current_user.id }
 
         {
           id: poll.id,
@@ -85,6 +86,8 @@ module Api
               votes: counts[option.text].to_i
             }
           end,
+          user_has_voted: user_response.present?,
+          user_vote_answer: user_response&.answer,
           createdAt: poll.created_at
         }
       end
