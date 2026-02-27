@@ -18,9 +18,10 @@ Rails.application.routes.draw do
         end
       end
 
-      resources :polls, only: [] do
+      resources :polls, only: [:index, :create, :destroy] do
         member do
           get 'results'
+          post 'vote'
         end
       end
     end
