@@ -56,7 +56,7 @@ function Login({ onLoginSuccess }) {
       <div className="login-card">
         <div className="login-header">
           <h1>ProSlides</h1>
-          <p>{mode === 'login' ? 'Sign in to your account' : 'Create your account'}</p>
+          <p>{mode === 'login' ? 'Logg inn med din bruker' : 'Lag en ny bruker'}</p>
         </div>
 
         <div className="login-form-wrapper">
@@ -168,7 +168,7 @@ function Login({ onLoginSuccess }) {
             )}
 
             <p className="signup-text">
-              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              {mode === 'login' ? "Har ikke bruker?" : 'Har en eksisterende bruker?'}{' '}
               <button
                 type="button"
                 className="signup-link"
@@ -180,7 +180,7 @@ function Login({ onLoginSuccess }) {
                   setError(null)
                 }}
               >
-                {mode === 'login' ? 'Sign up' : 'Sign in'}
+                {mode === 'login' ? 'Meld deg inn' : 'Logg inn'}
               </button>
             </p>
           </div>
