@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import '../CSScomponents/Login.css'
 import api from '../services/api'
 
-function Login({ onLoginSuccess }) {
+function Login({ onLoginSuccess, onGuestJoin }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -12,6 +12,27 @@ function Login({ onLoginSuccess }) {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [guestLoading, setGuestLoading] = useState(false)
+  const [guestError, setGuestError] = useState(null)
+
+  const handleGuestJoin = async () => {
+    const normalizedCode = guestCode.trim().toUpperCase()
+    if (!normalizedCode) {
+      setGuestError('Skriv inn en kode.')
+      return
+    }
+    setGuestLoading(true)
+    setGuestError(null)
+    try {
+      const data = await api.guestJoin(normalizedCode)
+      onGuestJoin?.(data.presentation_id)
+    } catch (err) {
+      const msg = err?.response?.data?.error
+      setGuestError(msg || 'Fant ikke aktiv sesjon for denne koden.')
+    } finally {
+      setGuestLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -153,16 +174,20 @@ function Login({ onLoginSuccess }) {
                     type="text"
                     value={guestCode}
                     onChange={(e) => setGuestCode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleGuestJoin()}
                     placeholder="F.eks. LIVE-1234"
                   />
                 </div>
+                {guestError && (
+                  <div className="error-message">{guestError}</div>
+                )}
                 <button
                   type="button"
                   className="guest-join-button"
-                  disabled
-                  title="Gjestefunksjon legges til senere"
+                  onClick={handleGuestJoin}
+                  disabled={guestLoading}
                 >
-                  Bli med i live presentasjon
+                  {guestLoading ? 'Kobler til...' : 'Bli med i live presentasjon'}
                 </button>
               </div>
             )}

@@ -9,6 +9,7 @@ Rails.application.routes.draw do
       get 'auth/me', to: 'auth#me'
       post 'auth/logout', to: 'auth#logout'
 
+      post 'sessions/guest_join', to: 'sessions#guest_join'
       post 'sessions/join_by_code', to: 'sessions#join_by_code'
 
       resources :presentations, only: [:index, :show, :create, :update, :destroy] do

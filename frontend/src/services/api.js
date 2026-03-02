@@ -185,6 +185,16 @@ const api = {
     return response.data
   },
 
+  guestJoin: async (code) => {
+    const response = await axiosRetry(
+      () => apiClient.post('/sessions/guest_join', { code }),
+      1
+    )
+    // Store the guest token so WebSocket + joinPresentation calls work
+    setToken(response.data?.token)
+    return response.data
+  },
+
   getParticipants: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.get(`/presentations/${presentationId}/participants`),

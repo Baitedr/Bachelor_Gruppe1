@@ -25,6 +25,7 @@ function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true)
   const [livePresentationId, setLivePresentationId] = useState(null)
   const [liveJoinCode, setLiveJoinCode] = useState(null)
+  const [guestMode, setGuestMode] = useState(false)
   const undoToastTimerRef = useRef(null)
 
   const clearUndoToastTimer = () => {
@@ -301,6 +302,13 @@ function App() {
     }
   }
 
+  const handleGuestJoin = (presentationId) => {
+    setLivePresentationId(presentationId)
+    setLiveJoinCode(null)
+    setGuestMode(true)
+    setCurrentPage('live')
+  }
+
   const handleLogout = async () => {
     await api.logout()
     clearUndoToastTimer()
@@ -330,8 +338,8 @@ function App() {
   }
 
   // If not logged in, always show login page (mobile users log in then are redirected to phoneinteraction)
-  if (!user) {
-    return <Login onLoginSuccess={handleLoginSuccess} />
+  if (!user && !guestMode) {
+    return <Login onLoginSuccess={handleLoginSuccess} onGuestJoin={handleGuestJoin} />
   }
 
   if (currentPage === 'phoneinteraction') {
@@ -339,6 +347,24 @@ function App() {
       setLivePresentationId(presentationId)
       setCurrentPage('live')
     }} />
+  }
+
+  // Guest: go straight to live view, no nav bar
+  if (guestMode && currentPage === 'live') {
+    return (
+      <div>
+        <div style={{ background: '#1e293b', color: '#fff', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span>ProSlides – Gjest</span>
+          <button
+            onClick={() => { setGuestMode(false); setLivePresentationId(null); api.logout() }}
+            style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
+          >
+            Forlat sesjon
+          </button>
+        </div>
+        <LivePresentation presentationId={livePresentationId} isPresenter={false} />
+      </div>
+    )
   }
 
   return (

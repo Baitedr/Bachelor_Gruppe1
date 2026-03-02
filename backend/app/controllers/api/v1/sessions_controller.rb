@@ -1,7 +1,39 @@
 module Api
     module V1
         class SessionsController < ApplicationController
-            before_action :authenticate_user!
+            before_action :authenticate_user!, except: [:guest_join]
+
+            # POST /api/v1/sessions/guest_join
+            # No auth required – creates a temporary guest user and returns a JWT.
+            def guest_join
+                session = PresentationSession.find_by(
+                    join_code: params[:code]&.upcase,
+                    ended_at: nil
+                )
+
+                unless session
+                    return render json: { error: 'Ingen aktiv sesjon funnet for denne koden.' }, status: :not_found
+                end
+
+                guest_user = User.create!(
+                    email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
+                    password: SecureRandom.hex(16),
+                    name: 'Gjest'
+                )
+
+                SessionParticipant.create!(
+                    session_id: session.id,
+                    user_id: guest_user.id
+                )
+
+                token = JsonWebToken.encode(user_id: guest_user.id, guest: true)
+
+                render json: {
+                    token: token,
+                    presentation_id: session.presentation_id,
+                    join_code: session.join_code
+                }, status: :ok
+            end
 
             # POST /api/v1/sessions/join_by_code
             # Called by PhoneInteraction – no presentation_id needed, just the code.
@@ -30,7 +62,7 @@ module Api
             # POST /api/v1/presentations/:presentation_id/join
             # Called when the participant already knows the presentation_id.
             def join
-                presentation = Presentation.find(params[:presentation_id])
+                presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.find_by(ended_at: nil)
 
                 unless session
@@ -56,7 +88,7 @@ module Api
             end
 
             def end_session
-                presentation = Presentation.find(params[:presentation_id])
+                presentation = Presentation.find(params[:id])
 
                 unless presentation.owner_id == @current_user.id
                     return render json: { error: 'Unauthorized' }, status: :forbidden
@@ -83,7 +115,7 @@ module Api
             end
 
             def participants
-                presentation = Presentation.find(params[:presentation_id])
+                presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.where(ended_at: nil).last
 
                 if session
