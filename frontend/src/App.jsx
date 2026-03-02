@@ -7,7 +7,7 @@ import PollPage from './components/PollPage'
 import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
 
 const MOBILE_BREAKPOINT = 768;
-const DELETE_UNDO_TIMEOUT_MS = 6000;
+const DELETE_UNDO_TIMEOUT_MS = 10000;
 
 function App() {
   const [apiStatus, setApiStatus] = useState(null)
@@ -22,7 +22,12 @@ function App() {
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
+  const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
+  const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
+  const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
+  const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
   const undoToastTimerRef = useRef(null)
+  const presentationEditorRef = useRef(null)
 
   const clearUndoToastTimer = () => {
     if (!undoToastTimerRef.current) return
@@ -147,6 +152,8 @@ function App() {
       const defaultTitle = `Presentation ${presentations.length + 1}`
       const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
       setActivePresentation(data.presentation)
+      setIsNewPresentationSession(true)
+      setHasSavedCurrentSession(false)
       setCurrentPage('editor')
       await loadPresentations()
     } catch (err) {
@@ -159,6 +166,8 @@ function App() {
     try {
       const data = await api.getPresentation(presentationId)
       setActivePresentation(data.presentation)
+      setIsNewPresentationSession(false)
+      setHasSavedCurrentSession(false)
       setCurrentPage('editor')
     } catch (err) {
       setPresentationsError('Failed to open presentation')
@@ -175,6 +184,8 @@ function App() {
         : await api.createPresentation(payload)
 
       setActivePresentation(data.presentation)
+      setHasSavedCurrentSession(true)
+      setIsNewPresentationSession(false)
       await loadPresentations()
       return data.presentation
     } finally {
@@ -295,6 +306,8 @@ function App() {
     setTrashedPresentations([])
     setDeleteUndoToast(null)
     setActivePresentation(null)
+    setIsNewPresentationSession(false)
+    setHasSavedCurrentSession(false)
     setCurrentPage('login')
   }
 
@@ -308,7 +321,39 @@ function App() {
       return
     }
 
-    setCurrentPage('home')
+    setIsExitEditorDialogOpen(true)
+  }
+
+  const handleDiscardAndGoHome = async () => {
+    if (isSavingPresentation || isDiscardingPresentation) return
+
+    setIsDiscardingPresentation(true)
+
+    try {
+      if (isNewPresentationSession && !hasSavedCurrentSession && activePresentation?.id) {
+        await api.deletePresentation(activePresentation.id)
+        setActivePresentation(null)
+        await loadPresentations()
+      }
+
+      setIsExitEditorDialogOpen(false)
+      setCurrentPage('home')
+    } catch (err) {
+      setPresentationsError('Failed to discard presentation')
+      console.error('Discard presentation failed:', err)
+    } finally {
+      setIsDiscardingPresentation(false)
+    }
+  }
+
+  const handleSaveAndGoHome = async () => {
+    if (isSavingPresentation) return
+
+    const didSave = await presentationEditorRef.current?.savePresentation?.()
+    if (didSave) {
+      setIsExitEditorDialogOpen(false)
+      setCurrentPage('home')
+    }
   }
 
   if (isAuthChecking) {
@@ -523,12 +568,40 @@ function App() {
 
           <main>
             <PresentationEditor
+              ref={presentationEditorRef}
               presentation={activePresentation}
               onSavePresentation={handleSavePresentation}
               isSaving={isSavingPresentation}
             />
           </main>
         </>
+      )}
+
+      {isExitEditorDialogOpen && (
+        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Leave editor">
+          <div className="editor-exit-dialog">
+            <h3>Leave editor?</h3>
+            <p>Do you want to save your changes before going home?</p>
+            <div className="editor-exit-dialog-actions">
+              <button
+                type="button"
+                className="recent-action-btn permanent-delete-btn"
+                onClick={handleDiscardAndGoHome}
+                  disabled={isSavingPresentation || isDiscardingPresentation}
+              >
+                  {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
+              </button>
+              <button
+                type="button"
+                className="recent-action-btn edit-btn"
+                onClick={handleSaveAndGoHome}
+                disabled={isSavingPresentation}
+              >
+                {isSavingPresentation ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

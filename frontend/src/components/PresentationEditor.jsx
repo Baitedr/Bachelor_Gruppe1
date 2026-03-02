@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
 import '../CSScomponents/PresentationEditor.css';
@@ -11,7 +11,7 @@ const defaultSlide = () => ({
     fabricData: null,
 });
 
-function PresentationEditor({ presentation, onSavePresentation, isSaving = false }) {
+const PresentationEditor = forwardRef(function PresentationEditor({ presentation, onSavePresentation, isSaving = false }, ref) {
     const canvasRef = useRef(null);
     const fabricCanvasRef = useRef(null);
     const isApplyingCanvasStateRef = useRef(false);
@@ -452,7 +452,7 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
     };
 
     const handleSavePresentation = async () => {
-        if (!onSavePresentation || isSaving) return;
+        if (!onSavePresentation || isSaving) return false;
 
         const slidesToSave = saveCurrentSlide();
         setSaveError(null);
@@ -479,10 +479,16 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
             }
 
             setLastSavedAt(new Date());
+            return true;
         } catch (error) {
             setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.');
+            return false;
         }
     };
+
+    useImperativeHandle(ref, () => ({
+        savePresentation: handleSavePresentation,
+    }));
 
     return (
         <div className="slide-editor">
@@ -566,6 +572,6 @@ function PresentationEditor({ presentation, onSavePresentation, isSaving = false
             </div>
         </div>
     );
-}
+});
 
 export default PresentationEditor;
