@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import '../../CSScomponents/PhoneInteraction.css';
 
@@ -16,7 +15,7 @@ interface JoinResponse {
     join_code?: string;
 }
 
-const PhoneInteraction: React.FC = () => {
+const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }> = ({ onJoined }) => {
     const [joinCode, setJoinCode] = useState<string>('');
     const [isJoining, setIsJoining] = useState<boolean>(false);
     const [joinStatus, setJoinStatus] = useState<JoinStatus>({
@@ -24,7 +23,6 @@ const PhoneInteraction: React.FC = () => {
         title: '',
         message: '',
     });
-    const navigate = useNavigate();
 
     useEffect(() => {
         setJoinStatus({ type: null, title: '', message: '' });
@@ -73,8 +71,8 @@ const PhoneInteraction: React.FC = () => {
             });
             setJoinCode('');
 
-            if (payload.presentation_id) {
-                navigate(`/live/${payload.presentation_id}`);
+            if (payload.presentation_id && onJoined) {
+                onJoined(payload.presentation_id);
             }
         } catch (err: unknown) {
             const backendMessage =
