@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 import '../../CSScomponents/PhoneInteraction.css';
 
 interface JoinStatus {
@@ -10,6 +12,8 @@ interface JoinStatus {
 interface JoinResponse {
     message?: string;
     error?: string;
+    presentation_id?: string;
+    join_code?: string;
 }
 
 const PhoneInteraction: React.FC = () => {
@@ -20,6 +24,7 @@ const PhoneInteraction: React.FC = () => {
         title: '',
         message: '',
     });
+    const navigate = useNavigate();
 
     useEffect(() => {
         setJoinStatus({ type: null, title: '', message: '' });
@@ -59,20 +64,7 @@ const PhoneInteraction: React.FC = () => {
         setJoinStatus({ type: null, title: '', message: '' });
 
         try {
-            const response = await fetch('/api/interactions/join', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ code: normalizedCode }),
-            });
-
-            const payload = (await response.json().catch(() => ({}))) as JoinResponse;
-
-            if (!response.ok) {
-                const backendMessage = payload?.error || payload?.message;
-                throw new Error(backendMessage || 'Fant ikke live interaction for denne koden.');
-            }
+            const payload = await api.joinByCode(normalizedCode) as JoinResponse;
 
             setJoinStatus({
                 type: 'success',
@@ -80,14 +72,17 @@ const PhoneInteraction: React.FC = () => {
                 message: payload?.message || 'Du er nå koblet til live interaction.',
             });
             setJoinCode('');
+
+            if (payload.presentation_id) {
+                navigate(`/live/${payload.presentation_id}`);
+            }
         } catch (err: unknown) {
-            const isNetworkError = err instanceof TypeError;
+            const backendMessage =
+                (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
             setJoinStatus({
                 type: 'error',
                 title: 'Kunne ikke koble til',
-                message: isNetworkError
-                    ? 'Får ikke kontakt med server akkurat nå. Sjekk tilkoblingen og prøv igjen.'
-                    : extractErrorMessage(err),
+                message: backendMessage || extractErrorMessage(err),
             });
         } finally {
             setIsJoining(false);

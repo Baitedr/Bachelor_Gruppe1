@@ -1,9 +1,9 @@
-import {useState, UseEffect} from 'react'
+import { useState, useEffect } from 'react'
 import {usePresentation} from '../hooks/usePresentation'
 import api from '../services/api'
 
-const livePresentation = () => ({ presentationId, isPresenter }) => {
-    const {presentation, setPresentation} = useState(null)
+const LivePresentation = ({ presentationId, isPresenter }) => {
+    const [presentation, setPresentation] = useState(null)
     const [loading, setLoading] = useState(true)
 
     const {
@@ -12,12 +12,12 @@ const livePresentation = () => ({ presentationId, isPresenter }) => {
         pollResults,
         navigateSlide,
         activatePoll,
-        submitPollResponse,
-    } = usePresentation(presentationId, api.getToken())
+        submitPollAnswer,
+    } = usePresentation(presentationId, localStorage.getItem('auth_token'))
 
-    UseEffect(() => {
+    useEffect(() => {
         loadPresentation()
-    }, [presentationid])
+    }, [presentationId])
 
     const loadPresentation = async () => {
         try {
@@ -46,7 +46,7 @@ const livePresentation = () => ({ presentationId, isPresenter }) => {
     }
 
     const handlePollSubmit = (pollId, answer) => {
-        submitPollResponse(pollId, answer)
+        submitPollAnswer(pollId, answer)
     }
 
     if (loading) return <div>laster presentasjon...</div>
@@ -76,7 +76,7 @@ const livePresentation = () => ({ presentationId, isPresenter }) => {
                 <button onClick={handlePrevSlide} disabled={currentSlide === 0}>
                     Forrige
                 </button>
-                <button onClick={handleNextSlide} disabled={currentSlide === presentation.slide.length - 1}>
+                <button onClick={handleNextSlide} disabled={currentSlide === presentation.slides.length - 1}>
                     Neste
                 </button>
 
@@ -104,7 +104,7 @@ const livePresentation = () => ({ presentationId, isPresenter }) => {
                             {activePoll.options.map(option => (
                                 <button
                                 key={option.id}
-                                onClick={() => handlePollSubmit(activatePoll.id, option.text)}
+                                onClick={() => handlePollSubmit(activePoll.id, option.text)}
                                 style={{ display: 'block', margin: '0.5rem 0'}}
                                 >
                                 {option.text}

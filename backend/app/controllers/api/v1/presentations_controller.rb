@@ -46,11 +46,17 @@ module Api
 
       def start
         @presentation.update!(is_live: true)
-        render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
+        session = @presentation.presentation_sessions.create!(started_at: Time.current)
+        render json: {
+          presentation: presentation_payload(@presentation.reload),
+          join_code: session.join_code
+        }, status: :ok
       end
 
       def end_session
         @presentation.update!(is_live: false)
+        active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
+        active_session&.update!(ended_at: Time.current)
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
 

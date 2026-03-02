@@ -104,6 +104,10 @@ const api = {
     return Boolean(localStorage.getItem(TOKEN_KEY))
   },
 
+  getToken: () => {
+    return localStorage.getItem(TOKEN_KEY)
+  },
+
   // Presentations
   getPresentations: async (limit = 10) => {
     const response = await axiosRetry(
@@ -143,6 +147,47 @@ const api = {
   deletePresentation: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.delete(`/presentations/${presentationId}`),
+      1
+    )
+    return response.data
+  },
+
+  // Sessions
+  startSession: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.post(`/presentations/${presentationId}/start`),
+      1
+    )
+    return response.data
+  },
+
+  endSession: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.post(`/presentations/${presentationId}/end_session`),
+      1
+    )
+    return response.data
+  },
+
+  joinPresentation: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.post(`/presentations/${presentationId}/join`),
+      1
+    )
+    return response.data
+  },
+
+  joinByCode: async (code) => {
+    const response = await axiosRetry(
+      () => apiClient.post('/sessions/join_by_code', { code }),
+      1
+    )
+    return response.data
+  },
+
+  getParticipants: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.get(`/presentations/${presentationId}/participants`),
       1
     )
     return response.data

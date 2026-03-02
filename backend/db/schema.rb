@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_26_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_02_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -47,8 +47,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_26_000100) do
 
   create_table "presentation_sessions", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
     t.datetime "ended_at", precision: nil
+    t.string "join_code"
     t.uuid "presentation_id"
     t.datetime "started_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.index ["join_code"], name: "index_presentation_sessions_on_join_code", unique: true
   end
 
   create_table "presentations", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|

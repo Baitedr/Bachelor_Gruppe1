@@ -1,7 +1,7 @@
-import {useEffect, useState} from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createConsumer } from '@rails/actioncable';
 
-export const usePresentation = (presentationid) => {
+export const usePresentation = (presentationid, token) => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [activePoll, setActivePoll] = useState(null);
     const [pollResults, setPollResults] = useState({})
@@ -11,7 +11,7 @@ export const usePresentation = (presentationid) => {
     useEffect(() => {
         if (!presentationid || !token) return
 
-        const consumer = createConsumer('ws://localhost:3000/cable?token=${token}')
+        const consumer = createConsumer(`ws://localhost:3000/cable?token=${token}`)
         cableRef.current = consumer
 
         const subscription = consumer.subscriptions.create(
@@ -33,7 +33,7 @@ export const usePresentation = (presentationid) => {
                         ...prev,
                         [data.poll_id]: {
                             results: data.results,
-                            total: data.total_votes
+                            total: data.total
                         }
                     }))
                     break
@@ -64,7 +64,7 @@ export const usePresentation = (presentationid) => {
 
     const submitPollAnswer = (pollId, answer) => {
         if (subscriptionRef.current) {
-            subscriptionRef.current.perform('submit_poll_answer', {
+            subscriptionRef.current.perform('submit_poll_response', {
                 poll_id: pollId,
                 answer: answer
             })
