@@ -5,6 +5,7 @@ import PresentationEditor from './components/PresentationEditor'
 import Login from './components/Login'
 import PollPage from './components/PollPage'
 import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
+import LivePresentation from './components/LivePresentation'
 
 const MOBILE_BREAKPOINT = 768;
 const DELETE_UNDO_TIMEOUT_MS = 10000;
@@ -22,6 +23,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
+  const [livePresentationId, setLivePresentationId] = useState(null)
+  const [liveJoinCode, setLiveJoinCode] = useState(null)
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
@@ -298,6 +301,17 @@ function App() {
     setCurrentPage(isMobileDevice() ? 'phoneinteraction' : 'home')
   }
 
+  const handleStartLive = async (presentationId) => {
+    try {
+      const data = await api.startSession(presentationId)
+      setLivePresentationId(presentationId)
+      setLiveJoinCode(data.join_code)
+      setCurrentPage('live')
+    } catch (err) {
+      console.error('Failed to start live session', err)
+    }
+  }
+
   const handleLogout = async () => {
     await api.logout()
     clearUndoToastTimer()
@@ -360,13 +374,16 @@ function App() {
     return <div className="App">Loading...</div>
   }
 
-  // If not logged in and not on phone interaction, show login page
-  if (!user && currentPage !== 'phoneinteraction') {
+  // If not logged in, always show login page (mobile users log in then are redirected to phoneinteraction)
+  if (!user) {
     return <Login onLoginSuccess={handleLoginSuccess} />
   }
 
   if (currentPage === 'phoneinteraction') {
-    return <PhoneInteraction />
+    return <PhoneInteraction onJoined={(presentationId) => {
+      setLivePresentationId(presentationId)
+      setCurrentPage('live')
+    }} />
   }
 
   return (
@@ -493,6 +510,14 @@ function App() {
                           Edit
                         </button>
                         <button
+                          className="recent-action-btn"
+                          onClick={() => handleStartLive(presentation.id)}
+                          disabled={deletingPresentationIds[presentation.id]}
+                          style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '0.25rem', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
+                        >
+                          ▶ Start Live
+                        </button>
+                        <button
                           className="recent-action-btn delete-btn"
                           onClick={() => handleDeletePresentation(presentation.id)}
                           disabled={deletingPresentationIds[presentation.id]}
@@ -560,6 +585,28 @@ function App() {
         </>
       ) : currentPage === 'polls' ? (
         <PollPage onNavigate={setCurrentPage} user={user} />
+      ) : currentPage === 'live' ? (
+        <div>
+          {liveJoinCode && (
+            <div style={{
+              background: '#1e293b',
+              color: '#fff',
+              padding: '0.75rem 1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem'
+            }}>
+              <span>Join code: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
+              <button
+                onClick={() => { setCurrentPage('home'); setLiveJoinCode(null); setLivePresentationId(null) }}
+                style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
+              >
+                End Session
+              </button>
+            </div>
+          )}
+          <LivePresentation presentationId={livePresentationId} isPresenter={!!liveJoinCode} />
+        </div>
       ) : (
         <>
           <header>
