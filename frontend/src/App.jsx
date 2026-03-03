@@ -25,6 +25,11 @@ function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true)
   const [livePresentationId, setLivePresentationId] = useState(null)
   const [liveJoinCode, setLiveJoinCode] = useState(null)
+  const [guestMode, setGuestMode] = useState(false)
+  const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
+  const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
+  const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
+  const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
   const undoToastTimerRef = useRef(null)
   const presentationEditorRef = useRef(null)
 
