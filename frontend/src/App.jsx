@@ -84,7 +84,7 @@ function App() {
       try {
         const data = await api.me()
         setUser(data.user)
-        
+
         // Only set to home if we are not on mobile
         const isMobile = isMobileDevice()
         if (!isMobile) {
@@ -448,8 +448,11 @@ function App() {
             onClick={() => setCurrentPage('polls')}
             className="nav-btn"
           >
-          
+            Polls
           </button>
+        </div>
+        <div className="nav-group nav-middle" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+          <span style={{ fontSize: '1rem', fontWeight: '900', letterSpacing: '0.05em' }}>ProSlides</span>
         </div>
         <div className="nav-group nav-right">
           <button
@@ -660,9 +663,9 @@ function App() {
                 type="button"
                 className="recent-action-btn permanent-delete-btn"
                 onClick={handleDiscardAndGoHome}
-                  disabled={isSavingPresentation || isDiscardingPresentation}
+                disabled={isSavingPresentation || isDiscardingPresentation}
               >
-                  {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
+                {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
               </button>
               <button
                 type="button"
