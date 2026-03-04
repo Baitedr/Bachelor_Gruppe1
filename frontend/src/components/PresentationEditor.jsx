@@ -42,6 +42,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [slidePreviewImages, setSlidePreviewImages] = useState({});
     const [isShapesMenuOpen, setIsShapesMenuOpen] = useState(false);
     const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
+    const [deletingSlideIds, setDeletingSlideIds] = useState(new Set());
+    const [slideTransitionClass, setSlideTransitionClass] = useState('');
     const shapesMenuRef = useRef(null);
     const backgroundPickerRef = useRef(null);
 
@@ -129,7 +131,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 height: 540,
                 backgroundColor: '#ffffff',
             });
-            
+
             fabricCanvasRef.current.set({ backgroundColor: '#ffffff' });
             fabricCanvasRef.current.renderAll();
 
@@ -147,7 +149,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     useEffect(() => {
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
-            
+
             const backgroundColor = currentSlide.backgroundColor || '#ffffff';
 
             isApplyingCanvasStateRef.current = true;
@@ -296,17 +298,38 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         return newSlides;
     };
 
+    const scrollLockRef = useRef(false);
+
+    const executeWithTransition = (transitionClass, action, delay = 200, enterClass) => {
+        if (scrollLockRef.current) return;
+        scrollLockRef.current = true;
+
+        setSlideTransitionClass(transitionClass);
+        setTimeout(() => {
+            action();
+            setSlideTransitionClass(enterClass || `${transitionClass}-enter`);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setSlideTransitionClass('');
+                    setTimeout(() => { scrollLockRef.current = false; }, 350);
+                });
+            });
+        }, delay);
+    };
+
     const addSlide = () => {
-        const currentSlides = saveCurrentSlide();
-        const newSlide = {
-            id: `local-${Date.now()}`,
-            title: `Slide ${currentSlides.length + 1}`,
-            content: '',
-            backgroundColor: '#ffffff',
-            fabricData: null
-        };
-        setSlides([...currentSlides, newSlide]);
-        setCurrentSlideIndex(currentSlides.length);
+        executeWithTransition('creating-new', () => {
+            const currentSlides = saveCurrentSlide();
+            const newSlide = {
+                id: `local-${Date.now()}`,
+                title: `Slide ${currentSlides.length + 1}`,
+                content: '',
+                backgroundColor: '#ffffff',
+                fabricData: null
+            };
+            setSlides([...currentSlides, newSlide]);
+            setCurrentSlideIndex(currentSlides.length);
+        }, 150);
     };
 
     const deleteSlide = (index) => {
@@ -314,38 +337,85 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             alert('Du må ha minst èn slide');
             return;
         }
-        const newSlides = slides.filter((_, i) => i !== index);
-        setSlides(newSlides);
-        if (currentSlideIndex >= newSlides.length) {
-            setCurrentSlideIndex(newSlides.length - 1);
+
+        const slideToDelete = slides[index];
+        const slideId = slideToDelete.id;
+
+        setDeletingSlideIds(prev => {
+            const next = new Set(prev);
+            next.add(slideId);
+            return next;
+        });
+
+        const isCurrentSlide = index === currentSlideIndex;
+
+        const performDeletion = () => {
+            setSlides(prev => {
+                const actualIndex = prev.findIndex(s => s.id === slideId);
+                if (actualIndex === -1) return prev;
+                const newSlides = prev.filter(s => s.id !== slideId);
+                setCurrentSlideIndex(curr => {
+                    if (curr === actualIndex) return Math.max(0, actualIndex - 1);
+                    if (curr > actualIndex) return curr - 1;
+                    return curr;
+                });
+                return newSlides;
+            });
+
+            setDeletingSlideIds(prev => {
+                const next = new Set(prev);
+                next.delete(slideId);
+                return next;
+            });
+        };
+
+        if (isCurrentSlide) {
+            executeWithTransition('deleting-current', performDeletion, 250);
+        } else {
+            setTimeout(performDeletion, 300); // Wait for CSS animation
         }
     };
 
     const duplicateSlide = (index) => {
-        const currentSlides = saveCurrentSlide();
-        const slideToDuplicate = currentSlides[index];
-        const newSlide = {
-            ...slideToDuplicate,
-            id: `local-${Date.now()}`,
-            title: slideToDuplicate.title + ' (Kopi)',
-        };
-        const newSlides = [...currentSlides];
-        newSlides.splice(index + 1, 0, newSlide);
-        setSlides(newSlides);
-        setCurrentSlideIndex(index + 1);
+        executeWithTransition('creating-new', () => {
+            const currentSlides = saveCurrentSlide();
+            const slideToDuplicate = currentSlides[index];
+            const newSlide = {
+                ...slideToDuplicate,
+                id: `local-${Date.now()}`,
+                title: slideToDuplicate.title + ' (Kopi)',
+            };
+            const newSlides = [...currentSlides];
+            newSlides.splice(index + 1, 0, newSlide);
+            setSlides(newSlides);
+            setCurrentSlideIndex(index + 1);
+        }, 150);
     };
 
-    const handleSlideSelect = (index) => {
-        saveCurrentSlide();
-        setCurrentSlideIndex(index);
-        setIsShapesMenuOpen(false);
-        setIsBackgroundPickerOpen(false);
+    const handleSlideSelect = (index, hint) => {
+        if (index === currentSlideIndex) return;
+        const direction = hint || (index > currentSlideIndex ? 'down' : 'up');
+        executeWithTransition(`switching-${direction}`, () => {
+            saveCurrentSlide();
+            setCurrentSlideIndex(index);
+            setIsShapesMenuOpen(false);
+            setIsBackgroundPickerOpen(false);
+        }, 180);
+    };
+
+    const handleWheel = (e) => {
+        if (Math.abs(e.deltaY) > 40) {
+            if (e.deltaY > 0 && currentSlideIndex < slides.length - 1) {
+                handleSlideSelect(currentSlideIndex + 1, 'down');
+            } else if (e.deltaY < 0 && currentSlideIndex > 0) {
+                handleSlideSelect(currentSlideIndex - 1, 'up');
+            }
+        }
     };
 
     // Fabric.js Tools
     const addText = () => {
-        if (!fabricCanvasRef.current) return;
-        
+
         const text = new IText('Click to edit', {
             left: 100,
             top: 100,
@@ -353,7 +423,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             fill: '#000000',
             fontFamily: 'Arial',
         });
-        
+
         fabricCanvasRef.current.add(text);
         fabricCanvasRef.current.setActiveObject(text);
         fabricCanvasRef.current.renderAll();
@@ -363,7 +433,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
-        
+
         const text = new IText('Slide Title', {
             left: 50,
             top: 50,
@@ -372,7 +442,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             fontFamily: 'Arial',
             fontWeight: 'bold',
         });
-        
+
         fabricCanvasRef.current.add(text);
         fabricCanvasRef.current.setActiveObject(text);
         fabricCanvasRef.current.renderAll();
@@ -384,7 +454,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        
+
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (file) {
@@ -405,7 +475,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     const addShape = (shapeType) => {
         if (!fabricCanvasRef.current) return;
-        
+
         let shape;
         switch (shapeType) {
             case 'rectangle':
@@ -426,7 +496,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 });
                 break;
         }
-        
+
         if (shape) {
             fabricCanvasRef.current.add(shape);
             fabricCanvasRef.current.setActiveObject(shape);
@@ -532,6 +602,49 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     const currentBackgroundColor = slides[currentSlideIndex]?.backgroundColor || '#ffffff';
 
+    const canvasContainerRef = useRef(null);
+
+    useEffect(() => {
+        const calculateScale = () => {
+            if (!canvasContainerRef.current) return;
+            const container = canvasContainerRef.current;
+
+            // We need to account for padding inside editor-canvas-stage
+            const paddingX = 64; // Horizontal padding
+            const paddingY = 140; // Vertical padding for toolbar + margins
+
+            const availableWidth = container.clientWidth - paddingX;
+            const availableHeight = container.clientHeight - paddingY;
+
+            const targetWidth = 960;
+            const targetHeight = 540;
+
+            const scaleX = availableWidth / targetWidth;
+            const scaleY = availableHeight / targetHeight;
+
+            // Scale down to fit, or scale up a bit (max 1.5)
+            const scale = Math.min(scaleX, scaleY, 1.3);
+
+            const scaler = container.querySelector('.slide-stage-animator-scaler');
+            if (scaler) {
+                scaler.style.transform = `scale(${Math.max(scale, 0.1)})`;
+            }
+        };
+
+        window.addEventListener('resize', calculateScale);
+        calculateScale(); // Run initially
+
+        const observer = new ResizeObserver(calculateScale);
+        if (canvasContainerRef.current) {
+            observer.observe(canvasContainerRef.current);
+        }
+
+        return () => {
+            window.removeEventListener('resize', calculateScale);
+            observer.disconnect();
+        };
+    }, []);
+
     return (
         <div className="slide-editor">
             <div className="editor-sidebar">
@@ -546,6 +659,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                     onSlideSelect={handleSlideSelect}
                     onSlideDelete={deleteSlide}
                     onSlideDuplicate={duplicateSlide}
+                    deletingSlideIds={deletingSlideIds}
                 />
             </div>
             <div className="editor-main">
@@ -592,7 +706,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         Last saved {lastSavedAt.toLocaleTimeString()}
                     </div>
                 )}
-                <div className="editor-canvas-stage">
+                <div className="editor-canvas-stage" ref={canvasContainerRef} onWheel={handleWheel}>
                     <div className="floating-toolbar" role="toolbar" aria-label="Slide tools">
                         <button onClick={addTitle} className="floating-tool-btn" title="Add title">T</button>
                         <button onClick={addText} className="floating-tool-btn" title="Add text">Aa</button>
@@ -686,8 +800,32 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         </div>
                         <button onClick={deleteSelected} className="floating-tool-btn danger" title="Delete selected">🗑</button>
                     </div>
-                    <div className="slide-boundary">
-                        <canvas ref={canvasRef} />
+                    <div className="slide-stage-animator-scaler">
+                        <div className={`slide-stage-scroller ${slideTransitionClass}`}>
+                            {currentSlideIndex > 0 && (
+                                <div className="adjacent-slide-preview previous-slide" onClick={(e) => { e.stopPropagation(); handleSlideSelect(currentSlideIndex - 1, 'up'); }}>
+                                    {slidePreviewImages[slides[currentSlideIndex - 1]?.id] ? (
+                                        <img src={slidePreviewImages[slides[currentSlideIndex - 1].id]} alt="Previous slide" />
+                                    ) : (
+                                        <div style={{ width: '100%', height: '100%', backgroundColor: slides[currentSlideIndex - 1]?.backgroundColor || '#fff' }}></div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="slide-boundary">
+                                <canvas ref={canvasRef} />
+                            </div>
+
+                            {currentSlideIndex < slides.length - 1 && (
+                                <div className="adjacent-slide-preview next-slide" onClick={(e) => { e.stopPropagation(); handleSlideSelect(currentSlideIndex + 1, 'down'); }}>
+                                    {slidePreviewImages[slides[currentSlideIndex + 1]?.id] ? (
+                                        <img src={slidePreviewImages[slides[currentSlideIndex + 1].id]} alt="Next slide" />
+                                    ) : (
+                                        <div style={{ width: '100%', height: '100%', backgroundColor: slides[currentSlideIndex + 1]?.backgroundColor || '#fff' }}></div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

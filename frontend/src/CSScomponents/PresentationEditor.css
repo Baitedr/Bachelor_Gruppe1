@@ -12,6 +12,19 @@
     flex-direction: column;
     height: 100vh;
     overflow-y: auto;
+    animation: sidebarSlideFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sidebarSlideFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .sidebar-header {
@@ -51,6 +64,20 @@
     padding: 1rem;
     gap: 0.75rem;
     min-width: 0;
+    overflow: hidden;
+    animation: mainEditorFadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mainEditorFadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .editor-toolbar {
@@ -292,15 +319,150 @@
     align-items: center;
     justify-content: center;
     padding: 4.5rem 1.5rem 1.5rem;
-    min-height: 400px;
+    min-height: 0;
+    /* allows infinite shrinking */
+    overflow: hidden;
+}
+
+.slide-stage-animator-scaler {
+    width: 960px;
+    height: 540px;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* scaling is applied inline by JS */
+}
+
+.slide-stage-scroller {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.adjacent-slide-preview {
+    width: 960px;
+    height: 540px;
+    position: absolute;
+    border-radius: 14px;
+    background: transparent;
+    opacity: 0.2;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    left: 0;
+    pointer-events: none;
+    /* enable auto when content exists */
+    z-index: 1;
+}
+
+.adjacent-slide-preview>img,
+.adjacent-slide-preview>div {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.adjacent-slide-preview.previous-slide {
+    top: calc(-100% - 40px);
+    transform: scale(0.85);
+}
+
+.adjacent-slide-preview.next-slide {
+    top: calc(100% + 40px);
+    transform: scale(0.85);
+}
+
+.adjacent-slide-preview:has(img),
+.adjacent-slide-preview:has(div) {
+    pointer-events: auto;
+}
+
+.adjacent-slide-preview:hover {
+    opacity: 0.65;
+    transform: scale(0.9);
 }
 
 .slide-boundary {
+    position: relative;
+    z-index: 2;
     padding: 0.5rem;
     border-radius: 14px;
     background: #ffffff;
     border: 1px solid #d1d5db;
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.35);
+}
+
+/* Animations using the scroller */
+
+/* SWITCHING DOWN (next slide) */
+.slide-stage-scroller.switching-down {
+    transform: translateY(-80px) scale(0.96);
+    opacity: 0;
+    filter: blur(5px);
+    transition: all 0.18s cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+.slide-stage-scroller.switching-down-enter {
+    transform: translateY(80px) scale(0.96);
+    opacity: 0;
+    filter: blur(5px);
+    transition: none;
+    /* instant snap to bottom */
+}
+
+/* SWITCHING UP (previous slide) */
+.slide-stage-scroller.switching-up {
+    transform: translateY(80px) scale(0.96);
+    opacity: 0;
+    filter: blur(5px);
+    transition: all 0.18s cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+.slide-stage-scroller.switching-up-enter {
+    transform: translateY(-80px) scale(0.96);
+    opacity: 0;
+    filter: blur(5px);
+    transition: none;
+    /* instant snap to top */
+}
+
+/* DELETING */
+.slide-stage-scroller.deleting-current {
+    transform: scale(0.7) translateY(40px);
+    opacity: 0;
+    filter: blur(12px) contrast(150%);
+    transition: all 0.25s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+}
+
+.slide-stage-scroller.deleting-current-enter {
+    transform: scale(1.1);
+    opacity: 0;
+    filter: blur(8px);
+    transition: none;
+}
+
+/* CREATING NEW */
+.slide-stage-scroller.creating-new {
+    transform: scale(1.1);
+    opacity: 0;
+    filter: blur(4px);
+    transition: all 0.15s ease-out;
+}
+
+.slide-stage-scroller.creating-new-enter {
+    transform: scale(0.8) translateY(60px);
+    opacity: 0;
+    filter: blur(8px);
+    transition: none;
 }
 
 .slide-boundary canvas {
@@ -428,9 +590,7 @@
         left: 50%;
     }
 
-    .slide-boundary {
-        transform: scale(0.92);
-    }
+
 }
 
 @media (max-width: 900px) {

@@ -27,23 +27,24 @@ const getSlidePreviewContent = (slide) => {
   return `${objects.length} object${objects.length > 1 ? 's' : ''}`
 }
 
-function SlideThumbnails({ 
-  slides, 
+function SlideThumbnails({
+  slides,
   slidePreviewImages = {},
-  currentSlideIndex, 
-  onSlideSelect, 
+  currentSlideIndex,
+  onSlideSelect,
   onSlideDelete,
-  onSlideDuplicate 
+  onSlideDuplicate,
+  deletingSlideIds = new Set()
 }) {
   return (
     <div className="slide-thumbnails">
       {slides.map((slide, index) => (
         <div
           key={slide.id}
-          className={`thumbnail ${index === currentSlideIndex ? 'active' : ''}`}
+          className={`thumbnail ${index === currentSlideIndex ? 'active' : ''} ${deletingSlideIds?.has(slide.id) ? 'deleting' : ''}`}
           onClick={() => onSlideSelect(index)}
         >
-          <div 
+          <div
             className="thumbnail-preview"
             style={{ backgroundColor: slide.backgroundColor }}
           >

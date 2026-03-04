@@ -7,13 +7,16 @@
 }
 
 .App.editor-mode {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #111418;
+  box-sizing: border-box;
 }
 
 .editor-page-shell {
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 .global-nav {
