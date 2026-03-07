@@ -5,15 +5,31 @@ class PresentationChannel < ApplicationCable::Channel
 
     stream_for presentation
 
-    if presentation.is_live && presentation.presentation_sessions.where(ended_at: nil).exists?
-        SessionParticipant.find_or_create_by(
-            session_id: presentation.presentation_sessions.where(ended_at: nil).last&.id,
-            user_id: current_user.id 
-        )
+    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    if presentation.is_live && active_session
+      SessionParticipant.find_or_create_by(
+        session_id: active_session.id,
+        user_id: current_user.id
+      )
+      count = active_session.session_participants.count
+      PresentationChannel.broadcast_to(
+        presentation,
+        { type: 'participant_joined', count: count }
+      )
     end
-end
+  end
 
 def unsubscribed
+end
+
+def start_session(data)
+  presentation = Presentation.find(params[:presentation_id])
+  return unless presentation.owner_id == current_user.id
+
+  PresentationChannel.broadcast_to(
+    presentation,
+    { type: 'session_started' }
+  )
 end
 
 # Navigerer til en spesifikk slide
@@ -56,6 +72,37 @@ def submit_poll_response(data)
     )
 
     broadcast_poll_results(poll)
+end
+
+def subscribed
+    presentation = Presentation.find_by(id: params[:presentation_id])
+    return reject unless presentation
+
+    stream_for presentation
+
+    activate_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    if presentation.is_live && activate_session
+        SessionParticipant.find_or_create_by(
+            session_id: activate_session.id,
+            user_id: current_user.id
+        )
+        # Sender oppdatert deltakerliste til alle klienter
+        count = activate_session.session_participants.count
+        PresentationChannel.broadcast_to(
+            presentation,
+            { type: 'participant_count', count: count }
+        )
+    end
+end
+
+def start_session(data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    PresentationChannel.broadcast_to(
+        presentation,
+        { type: 'session_started' }
+    )
 end
 
 private 

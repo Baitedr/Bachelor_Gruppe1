@@ -6,6 +6,7 @@ import Login from './components/Login'
 import PollPage from './components/PollPage'
 import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
 import LivePresentation from './components/LivePresentation'
+import SessionLobby from './components/SessionLobby'
 
 const MOBILE_BREAKPOINT = 768;
 const DELETE_UNDO_TIMEOUT_MS = 10000;
@@ -321,7 +322,7 @@ function App() {
       const data = await api.startSession(presentationId)
       setLivePresentationId(presentationId)
       setLiveJoinCode(data.join_code)
-      setCurrentPage('live')
+      setCurrentPage('lobby')
     } catch (err) {
       console.error('Failed to start live session', err)
     }
@@ -617,6 +618,13 @@ function App() {
         </>
       ) : currentPage === 'polls' ? (
         <PollPage onNavigate={setCurrentPage} user={user} />
+      ) : currentPage === 'lobby' ? (
+        <SessionLobby
+        presentationId={livePresentationId}
+        joinCode={liveJoinCode}
+        isPresenter={true}
+        onSessionStarted={() => setCurrentPage('live')}
+        />
       ) : currentPage === 'live' ? (
         <div>
           {liveJoinCode && (
