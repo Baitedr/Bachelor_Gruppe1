@@ -21,6 +21,7 @@ function App() {
   const [presentationsLoading, setPresentationsLoading] = useState(false)
   const [activePresentation, setActivePresentation] = useState(null)
   const [isSavingPresentation, setIsSavingPresentation] = useState(false)
+  const [isCreatingPresentation, setIsCreatingPresentation] = useState(false)  // ✨ Added
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
@@ -86,7 +87,6 @@ function App() {
         const data = await api.me()
         setUser(data.user)
         
-        // Only set to home if we are not on mobile
         const isMobile = isMobileDevice()
         if (!isMobile) {
           setCurrentPage('home')
@@ -153,6 +153,7 @@ function App() {
   })
 
   const handleCreatePresentation = async () => {
+    setIsCreatingPresentation(true)  // ✨ Start loading
     try {
       const defaultTitle = `Presentation ${presentations.length + 1}`
       const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
@@ -164,6 +165,8 @@ function App() {
     } catch (err) {
       setPresentationsError('Failed to create presentation')
       console.error('Create presentation failed:', err)
+    } finally {
+      setIsCreatingPresentation(false)  // ✨ Stop loading
     }
   }
 
@@ -383,7 +386,6 @@ function App() {
     return <div className="App">Loading...</div>
   }
 
-  // If not logged in, always show login page (mobile users log in then are redirected to phoneinteraction)
   if (!user && !guestMode) {
     return <Login onLoginSuccess={handleLoginSuccess} onGuestJoin={handleGuestJoin} />
   }
@@ -395,7 +397,6 @@ function App() {
     }} />
   }
 
-  // Guest: go straight to live view, no nav bar
   if (guestMode && currentPage === 'live') {
     return (
       <div>
@@ -415,7 +416,6 @@ function App() {
 
   return (
     <div className="App">
-      
       <nav style={{ 
         position: 'absolute', 
         top: '1rem', 
@@ -482,15 +482,26 @@ function App() {
             <section className="slides-list-section">
               <h2>Recent presentations</h2>
               <div className="home-actions">
-                <button onClick={handleCreatePresentation}>+ New presentation</button>
+                {/* ✨ Updated button with loading indicator */}
+                <button
+                  onClick={handleCreatePresentation}
+                  disabled={isCreatingPresentation}
+                  style={{ opacity: isCreatingPresentation ? 0.7 : 1 }}
+                >
+                  {isCreatingPresentation ? (
+                    <span>⏳ Setter sammen...</span>
+                  ) : (
+                    <span>+ Ny presentasjon</span>
+                  )}
+                </button>
               </div>
 
               {presentationsError && <p className="error">{presentationsError}</p>}
 
               {presentationsLoading ? (
-                <p>Loading presentations...</p>
+                <p>Laster inn presentasjoner...</p>
               ) : presentations.length === 0 ? (
-                <div className="empty-state">No presentations yet.</div>
+                <div className="empty-state">Ingen presentasjoner tilgjengelig.</div>
               ) : (
                 <div className="item-list">
                   {presentations.map((presentation) => (
@@ -595,7 +606,7 @@ function App() {
 
           {deleteUndoToast && (
             <div className="delete-undo-toast" role="status" aria-live="polite">
-              <span>Deleted “{deleteUndoToast.title}”.</span>
+              <span>Deleted "{deleteUndoToast.title}".</span>
               <div className="delete-undo-actions">
                 <button
                   className="recent-action-btn undo-btn"
@@ -614,10 +625,10 @@ function App() {
         <PollPage onNavigate={setCurrentPage} user={user} />
       ) : currentPage === 'lobby' ? (
         <SessionLobby
-        presentationId={livePresentationId}
-        joinCode={liveJoinCode}
-        isPresenter={true}
-        onSessionStarted={() => setCurrentPage('live')}
+          presentationId={livePresentationId}
+          joinCode={liveJoinCode}
+          isPresenter={true}
+          onSessionStarted={() => setCurrentPage('live')}
         />
       ) : currentPage === 'live' ? (
         <div>
@@ -646,7 +657,6 @@ function App() {
           <header>
             <h1>ProSlides</h1>
           </header>
-
           <main>
             <PresentationEditor
               ref={presentationEditorRef}
@@ -668,9 +678,9 @@ function App() {
                 type="button"
                 className="recent-action-btn permanent-delete-btn"
                 onClick={handleDiscardAndGoHome}
-                  disabled={isSavingPresentation || isDiscardingPresentation}
+                disabled={isSavingPresentation || isDiscardingPresentation}
               >
-                  {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
+                {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
               </button>
               <button
                 type="button"
