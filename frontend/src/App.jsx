@@ -78,6 +78,18 @@ function App() {
 
   useEffect(() => {
     const restoreSession = async () => {
+      const savedRaw = sessionStorage.getItem('proslides_session')
+      const saved = savedRaw ? JSON.parse(savedRaw) : null
+
+      
+      if (saved?.guestMode) {
+        setLivePresentationId(saved.presentationId)
+        setGuestMode(true)
+        setCurrentPage(saved.page)
+        setIsAuthChecking(false)
+        return
+      }
+
       if (!api.hasToken()) {
         setIsAuthChecking(false)
         return
@@ -86,10 +98,17 @@ function App() {
       try {
         const data = await api.me()
         setUser(data.user)
-        
-        const isMobile = isMobileDevice()
-        if (!isMobile) {
-          setCurrentPage('home')
+
+        if (saved?.page === 'lobby' || saved?.page === 'live') {
+          
+          setLivePresentationId(saved.presentationId)
+          setLiveJoinCode(saved.joinCode ?? null)
+          setCurrentPage(saved.page)
+        } else {
+          const isMobile = isMobileDevice()
+          if (!isMobile) {
+            setCurrentPage('home')
+          }
         }
       } catch (err) {
         await api.logout()
@@ -306,11 +325,18 @@ function App() {
     setCurrentPage(isMobileDevice() ? 'phoneinteraction' : 'home')
   }
 
+  const saveSessionState = (page, presentationId, joinCode, guestMode) => {
+    sessionStorage.setItem('proslides_session', JSON.stringify({ page, presentationId, joinCode: joinCode ?? null, guestMode }))
+  }
+
+  const clearSessionState = () => sessionStorage.removeItem('proslides_session')
+
   const handleStartLive = async (presentationId) => {
     try {
       const data = await api.startSession(presentationId)
       setLivePresentationId(presentationId)
       setLiveJoinCode(data.join_code)
+      saveSessionState('lobby', presentationId, data.join_code, false)
       setCurrentPage('lobby')
     } catch (err) {
       console.error('Failed to start live session', err)
@@ -318,15 +344,17 @@ function App() {
   }
 
   const handleGuestJoin = (presentationId) => {
+    saveSessionState('lobby', presentationId, null, true)
     setLivePresentationId(presentationId)
     setLiveJoinCode(null)
     setGuestMode(true)
-    setCurrentPage('live')
+    setCurrentPage('lobby')
   }
 
   const handleLogout = async () => {
     await api.logout()
     clearUndoToastTimer()
+    clearSessionState()
     setUser(null)
     setPresentations([])
     setTrashedPresentations([])
@@ -397,19 +425,35 @@ function App() {
     }} />
   }
 
-  if (guestMode && currentPage === 'live') {
+  if (guestMode) {
+    const leaveGuestSession = () => {
+      clearSessionState()
+      setGuestMode(false)
+      setLivePresentationId(null)
+      setCurrentPage('login')
+      api.logout()
+    }
     return (
       <div>
         <div style={{ background: '#1e293b', color: '#fff', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <span>ProSlides – Gjest</span>
-          <button
-            onClick={() => { setGuestMode(false); setLivePresentationId(null); api.logout() }}
-            style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
-          >
+          <button onClick={leaveGuestSession} style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}>
             Forlat sesjon
           </button>
         </div>
-        <LivePresentation presentationId={livePresentationId} isPresenter={false} />
+        {currentPage === 'lobby' ? (
+          <SessionLobby
+            presentationId={livePresentationId}
+            joinCode={null}
+            isPresenter={false}
+            onSessionStarted={() => {
+              saveSessionState('live', livePresentationId, null, true)
+              setCurrentPage('live')
+            }}
+          />
+        ) : (
+          <LivePresentation presentationId={livePresentationId} isPresenter={false} />
+        )}
       </div>
     )
   }
@@ -628,7 +672,10 @@ function App() {
           presentationId={livePresentationId}
           joinCode={liveJoinCode}
           isPresenter={true}
-          onSessionStarted={() => setCurrentPage('live')}
+          onSessionStarted={() => {
+            saveSessionState('live', livePresentationId, liveJoinCode, false)
+            setCurrentPage('live')
+          }}
         />
       ) : currentPage === 'live' ? (
         <div>
@@ -643,7 +690,7 @@ function App() {
             }}>
               <span>Join code: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
               <button
-                onClick={() => { setCurrentPage('home'); setLiveJoinCode(null); setLivePresentationId(null) }}
+                onClick={() => { clearSessionState(); setCurrentPage('home'); setLiveJoinCode(null); setLivePresentationId(null) }}
                 style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
               >
                 End Session

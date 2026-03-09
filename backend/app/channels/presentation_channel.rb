@@ -6,7 +6,14 @@ class PresentationChannel < ApplicationCable::Channel
     stream_for presentation
 
     active_session = presentation.presentation_sessions.find_by(ended_at: nil)
-    if presentation.is_live && active_session
+    return unless active_session && presentation.is_live
+
+    if current_user.id == presentation.owner_id
+      
+      count = active_session.session_participants.count
+      transmit({ type: 'participant_joined', count: count })
+    else
+      
       SessionParticipant.find_or_create_by(
         session_id: active_session.id,
         user_id: current_user.id
@@ -16,7 +23,6 @@ class PresentationChannel < ApplicationCable::Channel
         presentation,
         { type: 'participant_joined', count: count }
       )
-      transmit({ type: 'participant_joined', count: count })
     end
   end
 
