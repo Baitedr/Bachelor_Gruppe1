@@ -16,6 +16,7 @@ class PresentationChannel < ApplicationCable::Channel
         presentation,
         { type: 'participant_joined', count: count }
       )
+      transmit({ type: 'participant_joined', count: count })
     end
   end
 
@@ -72,37 +73,6 @@ def submit_poll_response(data)
     )
 
     broadcast_poll_results(poll)
-end
-
-def subscribed
-    presentation = Presentation.find_by(id: params[:presentation_id])
-    return reject unless presentation
-
-    stream_for presentation
-
-    activate_session = presentation.presentation_sessions.find_by(ended_at: nil)
-    if presentation.is_live && activate_session
-        SessionParticipant.find_or_create_by(
-            session_id: activate_session.id,
-            user_id: current_user.id
-        )
-        # Sender oppdatert deltakerliste til alle klienter
-        count = activate_session.session_participants.count
-        PresentationChannel.broadcast_to(
-            presentation,
-            { type: 'participant_count', count: count }
-        )
-    end
-end
-
-def start_session(data)
-    presentation = Presentation.find(params[:presentation_id])
-    return unless presentation.owner_id == current_user.id
-
-    PresentationChannel.broadcast_to(
-        presentation,
-        { type: 'session_started' }
-    )
 end
 
 private 
