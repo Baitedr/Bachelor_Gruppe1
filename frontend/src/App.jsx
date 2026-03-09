@@ -115,20 +115,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const rootElement = document.getElementById('root')
-    if (!rootElement) return
-
-    const isEditorPage = currentPage === 'editor'
-    rootElement.classList.toggle('editor-root', isEditorPage)
-    document.body.classList.toggle('editor-body', isEditorPage)
-
-    return () => {
-      rootElement.classList.remove('editor-root')
-      document.body.classList.remove('editor-body')
-    }
-  }, [currentPage])
-
   const checkApiHealth = async () => {
     try {
       const data = await api.checkHealth()
@@ -348,14 +334,6 @@ function App() {
     setCurrentPage('login')
   }
 
-  const handleJoinLive = () => {
-    setCurrentPage('phoneinteraction')
-  }
-
-  const handleProfileNav = () => {
-    setCurrentPage('home')
-  }
-
   const handleEditorNav = async () => {
     if (currentPage === 'home') {
       if (activePresentation?.id) {
@@ -436,42 +414,58 @@ function App() {
   }
 
   return (
-    <div className={`App has-global-nav ${currentPage === 'editor' ? 'editor-mode' : ''}`}>
-      <nav className={`global-nav ${currentPage === 'editor' ? 'editor-nav' : ''}`}>
-        <div className="nav-group nav-left">
-          <button
-            onClick={() => setCurrentPage('home')}
-            className="nav-btn"
-          >
-            Back to Home
-          </button>
-          <button
-            onClick={() => setCurrentPage('polls')}
-            className="nav-btn"
-          >
-          
-          </button>
-        </div>
-        <div className="nav-group nav-right">
-          <button
-            onClick={handleJoinLive}
-            className="nav-btn nav-btn-join"
-          >
-            Join Live
-          </button>
-          <button
-            onClick={handleProfileNav}
-            className="nav-btn nav-btn-profile"
-          >
-            Profile
-          </button>
-          <button
-            onClick={handleLogout}
-            className="nav-btn nav-btn-danger"
-          >
-            Logout
-          </button>
-        </div>
+    <div className="App">
+      
+      <nav style={{ 
+        position: 'absolute', 
+        top: '1rem', 
+        left: '1rem', 
+        zIndex: 1000,
+        display: 'flex',
+        gap: '0.5rem'
+      }}>
+        <button 
+          onClick={handleEditorNav}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: 'none',
+            background: 'rgba(102, 126, 234, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600',
+          }}
+        >
+          {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
+        </button>
+        <button 
+          onClick={() => setCurrentPage('polls')}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: 'none',
+            background: 'rgba(102, 126, 234, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600',
+          }}
+        >
+          → Polls
+        </button>
+        <button 
+          onClick={handleLogout}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            border: 'none',
+            background: 'rgba(239, 68, 68, 0.8)',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: '600',
+          }}
+        >
+          Logout
+        </button>
       </nav>
 
       {currentPage === 'home' ? (
@@ -648,14 +642,20 @@ function App() {
           <LivePresentation presentationId={livePresentationId} isPresenter={!!liveJoinCode} />
         </div>
       ) : (
-        <div className="editor-page-shell">
-          <PresentationEditor
-            ref={presentationEditorRef}
-            presentation={activePresentation}
-            onSavePresentation={handleSavePresentation}
-            isSaving={isSavingPresentation}
-          />
-        </div>
+        <>
+          <header>
+            <h1>ProSlides</h1>
+          </header>
+
+          <main>
+            <PresentationEditor
+              ref={presentationEditorRef}
+              presentation={activePresentation}
+              onSavePresentation={handleSavePresentation}
+              isSaving={isSavingPresentation}
+            />
+          </main>
+        </>
       )}
 
       {isExitEditorDialogOpen && (

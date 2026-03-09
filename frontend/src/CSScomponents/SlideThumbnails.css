@@ -2,34 +2,32 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.75rem;
 }
 
 .thumbnail {
-  border: 1px solid #374151;
-  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.2s, background-color 0.2s;
-  background: #111827;
+  transition: all 0.2s;
 }
 
 .thumbnail:hover {
-  border-color: #6b7280;
-  background: #0f172a;
+  border-color: rgba(102, 126, 234, 0.5);
+  transform: translateX(5px);
 }
 
 .thumbnail.active {
-  border-color: #93c5fd;
-  background: #1e293b;
+  border-color: #667eea;
+  box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
 .thumbnail-preview {
   aspect-ratio: 16 / 9;
-  padding: 0.45rem;
+  padding: 0.4rem;
   font-size: 0.65rem;
   overflow: hidden;
-  background-color: #f8fafc;
+  background-color: white;
 }
 
 .thumbnail-preview-image {
@@ -41,7 +39,7 @@
 }
 
 .thumbnail-title {
-  font-weight: 600;
+  font-weight: bold;
   color: #1a1a1a;
   margin-bottom: 0.25rem;
   overflow: hidden;
@@ -50,7 +48,7 @@
 }
 
 .thumbnail-content {
-  color: #9ca3af;
+  color: #666;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -63,12 +61,11 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem;
-  border-top: 1px solid #1f2937;
-  background-color: #111827;
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .thumbnail-number {
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -87,14 +84,12 @@
   justify-content: center;
   padding: 0;
   font-size: 0.8rem;
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 8px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.2s, background-color 0.2s;
 }
 
 .thumbnail-btn:hover {
-  border-color: #6b7280;
-  background-color: #111827;
+  background-color: rgba(255, 255, 255, 0.1);
 }

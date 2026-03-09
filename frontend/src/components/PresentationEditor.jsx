@@ -3,22 +3,6 @@ import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
 import '../CSScomponents/PresentationEditor.css';
 
-const BACKGROUND_PRESETS = [
-    '#ffffff',
-    '#fff1f2',
-    '#ffe4e6',
-    '#ffedd5',
-    '#fef3c7',
-    '#ecfccb',
-    '#d1fae5',
-    '#ccfbf1',
-    '#cffafe',
-    '#dbeafe',
-    '#e0e7ff',
-    '#f3e8ff',
-    '#fae8ff',
-];
-
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
     title: 'Slide 1',
@@ -40,10 +24,6 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [undoStack, setUndoStack] = useState([]);
     const [redoStack, setRedoStack] = useState([]);
     const [slidePreviewImages, setSlidePreviewImages] = useState({});
-    const [isShapesMenuOpen, setIsShapesMenuOpen] = useState(false);
-    const [isBackgroundPickerOpen, setIsBackgroundPickerOpen] = useState(false);
-    const shapesMenuRef = useRef(null);
-    const backgroundPickerRef = useRef(null);
 
     const createCanvasSnapshot = () => {
         if (!fabricCanvasRef.current) return null;
@@ -192,24 +172,6 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         };
     }, []);
 
-    useEffect(() => {
-        const handlePointerDown = (event) => {
-            if (shapesMenuRef.current && !shapesMenuRef.current.contains(event.target)) {
-                setIsShapesMenuOpen(false);
-            }
-
-            if (backgroundPickerRef.current && !backgroundPickerRef.current.contains(event.target)) {
-                setIsBackgroundPickerOpen(false);
-            }
-        };
-
-        document.addEventListener('mousedown', handlePointerDown);
-
-        return () => {
-            document.removeEventListener('mousedown', handlePointerDown);
-        };
-    }, []);
-
     const buildSlidesWithCurrentCanvasState = () => {
         if (!fabricCanvasRef.current || !slides[currentSlideIndex]) return slides;
 
@@ -338,8 +300,6 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const handleSlideSelect = (index) => {
         saveCurrentSlide();
         setCurrentSlideIndex(index);
-        setIsShapesMenuOpen(false);
-        setIsBackgroundPickerOpen(false);
     };
 
     // Fabric.js Tools
@@ -530,8 +490,6 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         savePresentation: handleSavePresentation,
     }));
 
-    const currentBackgroundColor = slides[currentSlideIndex]?.backgroundColor || '#ffffff';
-
     return (
         <div className="slide-editor">
             <div className="editor-sidebar">
@@ -562,7 +520,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             Slide {currentSlideIndex + 1} of {slides.length}
                         </span>
                     </div>
-                    <div className="toolbar-meta-actions">
+                    <div className="toolbar-actions">
                         <button
                             onClick={handleUndo}
                             className="toolbar-btn history-btn"
@@ -582,8 +540,22 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             className="toolbar-btn save-btn"
                             disabled={isSaving}
                         >
-                            {isSaving ? 'Saving...' : 'Save'}
+                            {isSaving ? 'Saving...' : '💾 Save'}
                         </button>
+                        <button onClick={addTitle} className="toolbar-btn">📝 Title</button>
+                        <button onClick={addText} className="toolbar-btn">Aa Text</button>
+                        <button onClick={addImage} className="toolbar-btn">🖼️ Image</button>
+                        <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rectangle</button>
+                        <button onClick={() => addShape('circle')} className="toolbar-btn">● Circle</button>
+                        <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Delete</button>
+                        <label className="toolbar-btn color-label">
+                            🎨 Background
+                            <input
+                                type="color"
+                                value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
+                                onChange={(e) => changeBackgroundColor(e.target.value)}
+                            />
+                        </label>
                     </div>
                 </div>
                 {saveError && <div className="save-status error">{saveError}</div>}
@@ -592,100 +564,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         Last saved {lastSavedAt.toLocaleTimeString()}
                     </div>
                 )}
-                <div className="editor-canvas-stage">
-                    <div className="floating-toolbar" role="toolbar" aria-label="Slide tools">
-                        <button onClick={addTitle} className="floating-tool-btn" title="Add title">T</button>
-                        <button onClick={addText} className="floating-tool-btn" title="Add text">Aa</button>
-                        <div className="tool-dropdown background-picker" ref={backgroundPickerRef}>
-                            <button
-                                type="button"
-                                className={`floating-tool-btn background-btn ${isBackgroundPickerOpen ? 'active' : ''}`}
-                                title="Slide background"
-                                onClick={() => setIsBackgroundPickerOpen((previous) => !previous)}
-                                aria-expanded={isBackgroundPickerOpen}
-                                aria-haspopup="true"
-                            >
-                                <span
-                                    className="background-color-preview"
-                                    style={{ backgroundColor: currentBackgroundColor }}
-                                />
-                            </button>
-                            <div className={`background-picker-popover ${isBackgroundPickerOpen ? 'open' : ''}`}>
-                                <div className="background-current-row">
-                                    <span className="background-current-label">Current</span>
-                                    <div className="background-current-preview">
-                                        <span
-                                            className="background-current-swatch"
-                                            style={{ backgroundColor: currentBackgroundColor }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="background-preset-title">Presets</div>
-                                <div className="background-picker-swatches">
-                                    {BACKGROUND_PRESETS.map((color) => (
-                                        <button
-                                            key={color}
-                                            type="button"
-                                            className={`color-swatch ${currentBackgroundColor === color ? 'active' : ''}`}
-                                            style={{ backgroundColor: color }}
-                                            onClick={() => changeBackgroundColor(color)}
-                                            title={`Set background ${color}`}
-                                        />
-                                    ))}
-                                </div>
-                                <label className="custom-color-row">
-                                    Custom
-                                    <div className="custom-color-preview">
-                                        <span
-                                            className="custom-color-chip"
-                                            style={{ backgroundColor: currentBackgroundColor }}
-                                        />
-                                        <input
-                                            type="color"
-                                            value={currentBackgroundColor}
-                                            onChange={(e) => changeBackgroundColor(e.target.value)}
-                                        />
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                        <button onClick={addImage} className="floating-tool-btn" title="Add image">🖼</button>
-                        <div className="tool-dropdown" ref={shapesMenuRef}>
-                            <button
-                                type="button"
-                                className="floating-tool-btn"
-                                title="Shapes"
-                                onClick={() => setIsShapesMenuOpen((previous) => !previous)}
-                                aria-expanded={isShapesMenuOpen}
-                                aria-haspopup="true"
-                            >
-                                ◇
-                            </button>
-                            <div className={`tool-dropdown-menu ${isShapesMenuOpen ? 'open' : ''}`}>
-                                <button
-                                    type="button"
-                                    className="tool-dropdown-item"
-                                    onClick={() => {
-                                        addShape('rectangle');
-                                        setIsShapesMenuOpen(false);
-                                    }}
-                                >
-                                    ▭ Rectangle
-                                </button>
-                                <button
-                                    type="button"
-                                    className="tool-dropdown-item"
-                                    onClick={() => {
-                                        addShape('circle');
-                                        setIsShapesMenuOpen(false);
-                                    }}
-                                >
-                                    ● Circle
-                                </button>
-                            </div>
-                        </div>
-                        <button onClick={deleteSelected} className="floating-tool-btn danger" title="Delete selected">🗑</button>
-                    </div>
+                <div className="canvas-container">
                     <div className="slide-boundary">
                         <canvas ref={canvasRef} />
                     </div>
