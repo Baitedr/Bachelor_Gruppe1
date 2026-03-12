@@ -524,7 +524,7 @@ function App() {
 
           <main>
             <section className="slides-list-section">
-              <h2>Recent presentations</h2>
+              <h2>Tidligere presentasjoner</h2>
               <div className="home-actions">
                 {/* ✨ Updated button with loading indicator */}
                 <button
@@ -545,7 +545,7 @@ function App() {
               {presentationsLoading ? (
                 <p>Laster inn presentasjoner...</p>
               ) : presentations.length === 0 ? (
-                <div className="empty-state">Ingen presentasjoner tilgjengelig.</div>
+                <div className="empty-state">Ingen presentasjoner tilgjengelig</div>
               ) : (
                 <div className="item-list">
                   {presentations.map((presentation) => (
@@ -613,9 +613,9 @@ function App() {
               )}
 
               <div className="trash-section">
-                <h3>Trash Bin</h3>
+                <h3>Søppelkasse</h3>
                 {trashedPresentations.length === 0 ? (
-                  <p className="trash-empty">Deleted presentations appear here.</p>
+                  <p className="trash-empty">Slettet presentasjoner vises her.</p>
                 ) : (
                   <div className="trash-list">
                     {trashedPresentations.map((trashedItem) => (
@@ -631,13 +631,13 @@ function App() {
                             className="recent-action-btn restore-btn"
                             onClick={() => handleRestorePresentation(trashedItem.id)}
                           >
-                            Restore
+                            Gjenopprette
                           </button>
                           <button
                             className="recent-action-btn permanent-delete-btn"
                             onClick={() => handleDeletePermanently(trashedItem.id)}
                           >
-                            Delete Forever
+                            Slett for alltid
                           </button>
                         </div>
                       </div>
@@ -718,8 +718,8 @@ function App() {
       {isExitEditorDialogOpen && (
         <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Leave editor">
           <div className="editor-exit-dialog">
-            <h3>Leave editor?</h3>
-            <p>Do you want to save your changes before going home?</p>
+            <h3>Gå ut av editor?</h3>
+            <p>Vil du lagre endringene dine før du går tilbake?</p>
             <div className="editor-exit-dialog-actions">
               <button
                 type="button"
