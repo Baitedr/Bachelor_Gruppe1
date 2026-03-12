@@ -21,7 +21,7 @@ function App() {
   const [presentationsLoading, setPresentationsLoading] = useState(false)
   const [activePresentation, setActivePresentation] = useState(null)
   const [isSavingPresentation, setIsSavingPresentation] = useState(false)
-  const [isCreatingPresentation, setIsCreatingPresentation] = useState(false)  // ✨ Added
+  const [isCreatingPresentation, setIsCreatingPresentation] = useState(false)
   const [currentPage, setCurrentPage] = useState('login')
   const [user, setUser] = useState(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
@@ -32,6 +32,7 @@ function App() {
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
+  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState(null) // ✨ Added
   const undoToastTimerRef = useRef(null)
   const presentationEditorRef = useRef(null)
 
@@ -81,7 +82,6 @@ function App() {
       const savedRaw = sessionStorage.getItem('proslides_session')
       const saved = savedRaw ? JSON.parse(savedRaw) : null
 
-      
       if (saved?.guestMode) {
         setLivePresentationId(saved.presentationId)
         setGuestMode(true)
@@ -100,7 +100,6 @@ function App() {
         setUser(data.user)
 
         if (saved?.page === 'lobby' || saved?.page === 'live') {
-          
           setLivePresentationId(saved.presentationId)
           setLiveJoinCode(saved.joinCode ?? null)
           setCurrentPage(saved.page)
@@ -172,7 +171,7 @@ function App() {
   })
 
   const handleCreatePresentation = async () => {
-    setIsCreatingPresentation(true)  // ✨ Start loading
+    setIsCreatingPresentation(true)
     try {
       const defaultTitle = `Presentation ${presentations.length + 1}`
       const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
@@ -185,7 +184,7 @@ function App() {
       setPresentationsError('Failed to create presentation')
       console.error('Create presentation failed:', err)
     } finally {
-      setIsCreatingPresentation(false)  // ✨ Stop loading
+      setIsCreatingPresentation(false)
     }
   }
 
@@ -296,16 +295,22 @@ function App() {
     }
   }
 
+  // Egendefinert vindu for permanent sletting av presentasjon fra søppelkassen
   const handleDeletePermanently = (trashId) => {
     const trashedItem = trashedPresentations.find((item) => item.id === trashId)
     if (!trashedItem) return
 
-    const presentationTitle = trashedItem.presentation?.title || 'this presentation'
-    const shouldDelete = window.confirm(
-      `Permanently delete "${presentationTitle}"? This cannot be undone.`
-    )
+    setPermanentDeleteDialog({
+      trashId,
+      title: trashedItem.presentation?.title || 'Untitled Presentation',
+    })
+  }
 
-    if (!shouldDelete) return
+  // ✨ Kalles på når bruker bekrefter permanent sletting i dialogen
+  const confirmDeletePermanently = () => {
+    if (!permanentDeleteDialog) return
+
+    const { trashId } = permanentDeleteDialog
 
     setTrashedPresentations((prev) => prev.filter((item) => item.id !== trashId))
 
@@ -313,6 +318,8 @@ function App() {
       clearUndoToastTimer()
       setDeleteUndoToast(null)
     }
+
+    setPermanentDeleteDialog(null)
   }
 
   const dismissDeleteUndoToast = () => {
@@ -526,7 +533,6 @@ function App() {
             <section className="slides-list-section">
               <h2>Tidligere presentasjoner</h2>
               <div className="home-actions">
-                {/* ✨ Updated button with loading indicator */}
                 <button
                   onClick={handleCreatePresentation}
                   disabled={isCreatingPresentation}
@@ -736,6 +742,32 @@ function App() {
                 disabled={isSavingPresentation}
               >
                 {isSavingPresentation ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Egendefinert vindu for sletting av presentasjon */}
+      {permanentDeleteDialog && (
+        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Confirm permanent delete">
+          <div className="editor-exit-dialog">
+            <h3>🗑️ Slett for alltid?</h3>
+            <p>Er du sikker på at du vil slette <strong>"{permanentDeleteDialog.title}"</strong> permanent? Dette kan ikke angres.</p>
+            <div className="editor-exit-dialog-actions">
+              <button
+                type="button"
+                className="recent-action-btn"
+                onClick={() => setPermanentDeleteDialog(null)}
+              >
+                Avbryt
+              </button>
+              <button
+                type="button"
+                className="recent-action-btn permanent-delete-btn"
+                onClick={confirmDeletePermanently}
+              >
+                Ja, slett for alltid
               </button>
             </div>
           </div>
