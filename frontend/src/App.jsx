@@ -32,7 +32,7 @@ function App() {
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
-  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState(null) // ✨ Added
+  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState(null) 
   const undoToastTimerRef = useRef(null)
   const presentationEditorRef = useRef(null)
 
