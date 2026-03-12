@@ -155,8 +155,8 @@ function Login({ onLoginSuccess, onGuestJoin }) {
               className="login-button"
             >
               {isLoading
-                ? (mode === 'login' ? 'Signing in...' : 'Creating account...')
-                : (mode === 'login' ? 'Sign In' : 'Create Account')}
+                ? (mode === 'login' ? 'Logger inn...' : 'Lager bruker...')
+                : (mode === 'login' ? 'Logg inn' : 'Lag bruker')}
             </button>
           </form>
 
