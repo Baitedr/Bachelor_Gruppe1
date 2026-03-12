@@ -2,10 +2,12 @@
     display: flex;
     height: 100vh;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    align-items: stretch;
 }
 
 .editor-sidebar {
-    width: 250px;
+    width: 290px;
+    flex: 0 0 290px;
     background-color: rgba(255, 255, 255, 0.95);
     display: flex;
     flex-direction: column;
@@ -42,11 +44,14 @@
 }
 
 .editor-main {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    padding: 2rem;
+    align-items: center;           /* centers horizontally */
+    justify-content: center;       /* ADD THIS - centers vertically */
+    padding: 1rem;
     gap: 1.5rem;
+    overflow: hidden;
 }
 
 .editor-toolbar {
@@ -58,6 +63,8 @@
     flex-direction: column;
     align-items: stretch;
     gap: 0.75rem;
+    max-width: 900px;             /* ADD THIS */
+    width: 100%;                  /* ADD THIS */
 }
 
 .toolbar-left {
@@ -195,4 +202,265 @@
 .save-status.error {
     background-color: rgba(239, 68, 68, 0.12);
     color: #7f1d1d;
+}
+
+.slide-polls-panel {
+    width: 320px;
+    flex: 0 0 320px;
+    height: 100vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background: #ffffff;
+    padding: 1.25rem;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+    border-left: 1px solid rgba(226, 232, 240, 0.9);
+    color: #111827;
+}
+
+.slide-polls-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;    /* aligns to the left */
+    gap: 0.75rem;
+    position: sticky;
+    top: 0;
+    background: #ffffff;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+    z-index: 1;
+}
+
+.slide-polls-header h4 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.05rem;
+}
+
+.slide-polls-header p {
+    margin: 0.25rem 0 0;
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.slide-polls-add-btn {
+    padding: 0.7rem 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.slide-polls-add-btn:hover {
+    opacity: 0.95;
+}
+
+.slide-polls-empty-state {
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #f8fafc;
+    color: #475569;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.slide-polls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.slide-poll-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #f8fafc;
+}
+
+.slide-poll-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.slide-poll-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.slide-poll-copy strong {
+    color: #111827;
+    font-size: 0.98rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.slide-poll-total {
+    flex-shrink: 0;
+    color: #6b7280;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: #e2e8f0;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+}
+
+.slide-poll-results {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.slide-poll-result-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.slide-poll-result-copy {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.slide-poll-option-text {
+    color: #334155;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.slide-poll-option-stats {
+    flex-shrink: 0;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.slide-poll-result-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.slide-poll-result-fill {
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}
+
+.slide-poll-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.slide-poll-action-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0.7rem 0.85rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.slide-poll-action-btn:hover {
+    background: #5568d3;
+}
+
+.slide-poll-action-btn.danger {
+    background: #ef4444;
+}
+
+.slide-poll-action-btn.danger:hover {
+    background: #dc2626;
+}
+
+.poll-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 1200;
+    backdrop-filter: blur(4px);
+}
+
+.poll-modal-card {
+    width: min(720px, 96vw);
+    max-height: 90vh;
+    overflow: auto;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+    padding: 1.25rem;
+}
+
+.slide-poll-history {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.75rem;
+}
+
+.slide-poll-history summary {
+    cursor: pointer;
+    color: #475569;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.slide-poll-history-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.slide-poll-history-item {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+.slide-poll-history-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.slide-poll-history-results {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.slide-poll-history-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: #334155;
 }

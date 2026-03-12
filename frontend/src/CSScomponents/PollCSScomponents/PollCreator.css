@@ -1,5 +1,6 @@
 .poll-creator {
   animation: fadeIn 0.3s;
+  color: white;
 }
 
 .poll-creator h2 {
@@ -16,28 +17,28 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 600;
-  color: white;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .form-group input {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background-color: rgba(255, 255, 255, 0.05);
-  color: white;
-  border-radius: 8px;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  border-radius: 0;
   font-size: 1rem;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
 .form-group input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: #6b7280;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.5);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
 }
 
 .option-input-group {
@@ -52,17 +53,17 @@
 
 .remove-option-btn {
   padding: 0.75rem 1rem;
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid #ef4444;
-  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.16);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 0;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
   font-weight: 600;
 }
 
 .remove-option-btn:hover {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.28);
 }
 
 .form-actions {
@@ -76,37 +77,36 @@
 .clear-btn,
 .cancel-btn {
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.1);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
 .add-option-btn:hover,
 .clear-btn:hover,
 .cancel-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(102, 126, 234, 0.5);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .save-poll-btn {
   padding: 0.75rem 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: #ffffff;
+  color: #4f46e5;
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 0;
+  font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .save-poll-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(15, 23, 42, 0.22);
 }
 
 @keyframes fadeIn {
@@ -124,7 +124,7 @@
   .form-actions {
     flex-direction: column;
   }
-  
+
   .form-actions button {
     width: 100%;
   }

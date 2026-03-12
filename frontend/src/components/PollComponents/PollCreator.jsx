@@ -59,7 +59,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
 
   return (
     <div className="poll-creator">
-      <h2>Create Poll</h2>
+      <h2>{initialData ? 'Edit Poll' : 'Create Poll'}</h2>
       <form onSubmit={handleSave}>
         <div className="form-group">
           <label>Poll Question</label>

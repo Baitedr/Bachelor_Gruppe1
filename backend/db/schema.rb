@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_02_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_12_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -28,9 +28,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_02_000001) do
     t.string "answer", null: false
     t.datetime "created_at", null: false
     t.uuid "poll_id", null: false
+    t.uuid "presentation_session_id"
     t.datetime "updated_at", null: false
     t.uuid "user_id"
+    t.index ["poll_id", "user_id", "presentation_session_id"], name: "index_poll_responses_on_poll_user_session", unique: true
     t.index ["poll_id"], name: "index_poll_responses_on_poll_id"
+    t.index ["presentation_session_id"], name: "index_poll_responses_on_presentation_session_id"
     t.index ["user_id"], name: "index_poll_responses_on_user_id"
   end
 
@@ -114,6 +117,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_02_000001) do
 
   add_foreign_key "poll_options", "polls"
   add_foreign_key "poll_responses", "polls"
+  add_foreign_key "poll_responses", "presentation_sessions"
   add_foreign_key "poll_responses", "users", on_delete: :nullify
   add_foreign_key "polls", "users", column: "owner_id", on_delete: :cascade
   add_foreign_key "presentation_sessions", "presentations", name: "presentation_sessions_presentation_id_fkey", on_delete: :cascade

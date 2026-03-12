@@ -94,13 +94,17 @@ module Api
                             end
 
         Presentation.transaction do
+          existing_slide_ids = presentation.slides.pluck(:id)
+          Poll.where(slide_id: existing_slide_ids).destroy_all if existing_slide_ids.any?
           presentation.slides.destroy_all
 
           normalized_slides.each_with_index do |slide_data, index|
-            presentation.slides.create!(
+            slide = presentation.slides.create!(
               slide_index: index,
               background: normalize_slide_background(slide_data, index)
             )
+
+            create_slide_polls!(slide, slide_data)
           end
         end
       end
@@ -169,6 +173,9 @@ module Api
 
       def slide_payload(slide)
         payload = slide.background.is_a?(Hash) ? slide.background : {}
+        polls = slide.polls.includes(:poll_options, :poll_responses)
+        sessions = slide.presentation.presentation_sessions.order(started_at: :desc).to_a
+        latest_session = sessions.first
 
         {
           id: slide.id,
@@ -176,7 +183,54 @@ module Api
           title: payload['title'] || "Slide #{slide.slide_index + 1}",
           content: payload['content'] || '',
           backgroundColor: payload['backgroundColor'] || '#ffffff',
-          fabricData: payload['fabricData']
+          fabricData: payload['fabricData'],
+          polls: polls.map { |poll| poll_payload_for_editor(poll, latest_session, sessions) }
+        }
+      end
+
+      def poll_payload_for_editor(poll, latest_session, sessions)
+        latest_counts = counts_for_session(poll, latest_session)
+
+        {
+          id: poll.id,
+          question: poll.question,
+          options: poll.poll_options.map do |option|
+            {
+              id: option.id,
+              text: option.text,
+              votes: latest_counts[option.text].to_i
+            }
+          end,
+          latestSessionId: latest_session&.id,
+          sessionHistory: sessions.filter_map do |session|
+            payload = session_history_payload(poll, session)
+            payload if payload[:total] > 0
+          end
+        }
+      end
+
+      def counts_for_session(poll, session)
+        return {} unless session
+
+        poll.poll_responses.where(presentation_session_id: session.id).group(:answer).count
+      end
+
+      def session_history_payload(poll, session)
+        counts = counts_for_session(poll, session)
+        total = counts.values.sum
+
+        {
+          id: session.id,
+          startedAt: session.started_at,
+          endedAt: session.ended_at,
+          total: total,
+          options: poll.poll_options.map do |option|
+            {
+              id: option.id,
+              text: option.text,
+              votes: counts[option.text].to_i
+            }
+          end
         }
       end
     end

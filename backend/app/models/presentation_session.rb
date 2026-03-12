@@ -3,6 +3,7 @@ class PresentationSession < ApplicationRecord
 
   belongs_to :presentation
   has_many :session_participants, foreign_key: :session_id, dependent: :destroy
+  has_many :poll_responses, dependent: :destroy
 
   before_create :generate_join_code
 
