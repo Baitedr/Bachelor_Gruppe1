@@ -487,7 +487,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
+          {currentPage === 'home' ? '→ Gå til Editor' : '← Hjem'}
         </button>
         <button 
           onClick={() => setCurrentPage('polls')}
@@ -515,7 +515,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          Logout
+          Logg ut
         </button>
       </nav>
 
