@@ -33,6 +33,11 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
     const [editingPollIndex, setEditingPollIndex] = useState(null);
 
+    const currentSlideIdRef = useRef(null);
+    useEffect(() => {
+        currentSlideIdRef.current = slides[currentSlideIndex]?.id || null;
+    }, [slides, currentSlideIndex]);
+
     const createCanvasSnapshot = () => {
         if (!fabricCanvasRef.current) return null;
 
@@ -71,6 +76,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setRedoStack([]);
     };
 
+    // Gjenoppretter et definert state (snapshot) tilbake til canvas-lerretet
     const applyCanvasSnapshot = async (snapshot) => {
         if (!fabricCanvasRef.current || !snapshot) return;
 
@@ -112,7 +118,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setSaveError(null);
     }, [presentation]);
 
-    // Initialize Fabric Canvas
+    // Initialiserer selve Fabric.js lerretet når komponenten blir montert
     useEffect(() => {
         if (canvasRef.current && !fabricCanvasRef.current) {
             fabricCanvasRef.current = new Canvas(canvasRef.current, {
@@ -134,7 +140,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         };
     }, []);
 
-    // Load slide when switching
+    // Laster inn riktig lysbilde-data til lerretet hver gang man bytter lysbilde
     useEffect(() => {
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
@@ -163,6 +169,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }
     }, [currentSlideIndex, slides]);
 
+    // Lyttere for endringer på lerretet (legge til, flytte eller fjerne objekter) for å bygge opp angre-historikken
     useEffect(() => {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
@@ -172,17 +179,42 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             pushHistorySnapshot(createCanvasSnapshot());
         };
 
-        canvas.on('object:added', handleCanvasChange);
-        canvas.on('object:modified', handleCanvasChange);
-        canvas.on('object:removed', handleCanvasChange);
+        const updatePreview = () => {
+            if (isApplyingCanvasStateRef.current) return;
+            
+            const currentId = currentSlideIdRef.current;
+            if (currentId && fabricCanvasRef.current) {
+                const dataUrl = fabricCanvasRef.current.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                });
+                setSlidePreviewImages(prev => ({
+                    ...prev,
+                    [currentId]: dataUrl
+                }));
+            }
+        };
+
+        const handleCanvasChangeWithPreview = () => {
+            handleCanvasChange();
+            updatePreview();
+        };
+
+        canvas.on('object:added', handleCanvasChangeWithPreview);
+        canvas.on('object:modified', handleCanvasChangeWithPreview);
+        canvas.on('object:removed', handleCanvasChangeWithPreview);
+        canvas.on('text:changed', updatePreview);
 
         return () => {
-            canvas.off('object:added', handleCanvasChange);
-            canvas.off('object:modified', handleCanvasChange);
-            canvas.off('object:removed', handleCanvasChange);
+            canvas.off('object:added', handleCanvasChangeWithPreview);
+            canvas.off('object:modified', handleCanvasChangeWithPreview);
+            canvas.off('object:removed', handleCanvasChangeWithPreview);
+            canvas.off('text:changed', updatePreview);
         };
     }, []);
 
+    // Oppdaterer state-arrayen med oppdatert JSON-data fra lerretet (canvas) for gjeldende lysbilde
     const buildSlidesWithCurrentCanvasState = () => {
         if (!fabricCanvasRef.current || !slides[currentSlideIndex]) return slides;
 
@@ -200,6 +232,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         return newSlides;
     };
 
+    // Lager et miniatyrbilde av lysbildet (snapshot) i bakgrunnen uten å påvirke hovedlerretet
     const createSlideSnapshot = async (slide) => {
         const tempElement = document.createElement('canvas');
         tempElement.width = 960;
@@ -221,8 +254,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             return tempFabricCanvas.toDataURL({
                 format: 'png',
-                quality: 0.8,
-                multiplier: 0.2,
+                quality: 0.9,
+                multiplier: 0.8,
             });
         } finally {
             tempFabricCanvas.dispose();
@@ -262,13 +295,14 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         };
     }, [slides]);
 
-    // Save current slide data locally
+    // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
     const saveCurrentSlide = () => {
         const newSlides = buildSlidesWithCurrentCanvasState();
         setSlides(newSlides);
         return newSlides;
     };
 
+    // Legger til et nytt, tomt lysbilde og setter fokus til det
     const addSlide = () => {
         const currentSlides = saveCurrentSlide();
         const newSlide = {
@@ -283,6 +317,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setCurrentSlideIndex(currentSlides.length);
     };
 
+    // Sletter et lysbilde (krever at det finnes minst ett igjen)
     const deleteSlide = (index) => {
         if (slides.length === 1) {
             alert('Du må ha minst èn slide');
@@ -295,6 +330,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }
     };
 
+    // Dupliserer et eksisterende lysbilde og plasserer den etter originalen
     const duplicateSlide = (index) => {
         const currentSlides = saveCurrentSlide();
         const slideToDuplicate = currentSlides[index];
@@ -443,6 +479,18 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         });
 
         pushHistorySnapshot(createCanvasSnapshot());
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId) {
+            setSlidePreviewImages(prev => ({
+                ...prev,
+                [currentId]: fabricCanvasRef.current.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                })
+            }));
+        }
     };
 
     const handleUndo = async () => {
@@ -454,6 +502,18 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         await applyCanvasSnapshot(previousSnapshot);
         setUndoStack((previousStack) => previousStack.slice(0, -1));
         setRedoStack((previousStack) => [currentSnapshot, ...previousStack]);
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId && fabricCanvasRef.current) {
+            setSlidePreviewImages(prev => ({
+                ...prev,
+                [currentId]: fabricCanvasRef.current.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                })
+            }));
+        }
     };
 
     const handleRedo = async () => {
@@ -471,8 +531,21 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             return [...previousStack, nextSnapshot];
         });
         setRedoStack(remainingSnapshots);
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId && fabricCanvasRef.current) {
+            setSlidePreviewImages(prev => ({
+                ...prev,
+                [currentId]: fabricCanvasRef.current.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                })
+            }));
+        }
     };
 
+    // Klargjør og lagrer hele presentasjonen, inkludert state og et preview-bilde av første lysbilde
     const handleSavePresentation = async () => {
         if (!onSavePresentation || isSaving) return false;
 
@@ -542,21 +615,10 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setIsPollCreatorOpen(false);
     };
 
+    // Lagrer eller oppdaterer en avstemning (poll) på gjeldende lysbilde
     const handleSavePoll = (pollData) => {
-        const normalizedPoll = {
-            id: pollData?.id || `local-poll-${Date.now()}`,
-            question: pollData?.question || '',
-            options: Array.isArray(pollData?.options)
-                ? pollData.options.map((option, optionIndex) => ({
-                    id: option?.id || `local-option-${Date.now()}-${optionIndex}`,
-                    text: typeof option === 'string' ? option : (option?.text || ''),
-                    votes: Number(option?.votes || 0),
-                }))
-                : [],
-            latestSessionId: pollData?.latestSessionId || null,
-            sessionHistory: Array.isArray(pollData?.sessionHistory) ? pollData.sessionHistory : [],
-            createdAt: pollData?.createdAt || new Date().toISOString(),
-        };
+        // Gjenbruker normalizePoll-hjelpefunksjonen for å sikre konsistent datastruktur
+        const normalizedPoll = normalizePoll(pollData, editingPollIndex !== null ? editingPollIndex : 0);
 
         updateCurrentSlidePolls((currentPolls) => {
             if (editingPollIndex === null) {

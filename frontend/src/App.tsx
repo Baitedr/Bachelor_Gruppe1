@@ -101,6 +101,7 @@ function App() {
     undoToastTimerRef.current = null
   }
 
+  // Hjelpefunksjon for å generere en "clean" payload når vi gjenoppretter en presentasjon fra papirkurven.
   const toRestorablePresentationPayload = (presentation: PresentationSummary) => ({
     title: presentation?.title || 'Gjenopprettet presentasjon',
     slides: (presentation?.slides || []).map((slide, index) => ({
@@ -111,6 +112,7 @@ function App() {
     })),
   })
 
+  // Sjekker om brukeren benytter en mobil enhet basert på skjermstørrelse og touch-mulighet.
   const isMobileDevice = () => {
     const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
     const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
@@ -138,6 +140,7 @@ function App() {
   }, [user])
 
   useEffect(() => {
+    // Sjekker om det finnes en aktiv økt eller token ved oppstart
     const restoreSession = async () => {
       const savedRaw = sessionStorage.getItem('proslides_session')
       const saved = savedRaw ? JSON.parse(savedRaw) : null
@@ -197,6 +200,7 @@ function App() {
     }
   }
 
+  // Henter inn og oppdaterer brukerens lagrede presentasjoner
   const loadPresentations = async () => {
     setPresentationsLoading(true)
     try {
@@ -211,6 +215,7 @@ function App() {
     }
   }
 
+  // Genererer en standard payload for en helt ny, blank presentasjon.
   const createBlankPresentationPayload = (title = 'Uten navn') => ({
     title,
     slides: [
@@ -223,6 +228,7 @@ function App() {
     ],
   })
 
+  // Håndterer opprettelsen av en ny presentasjon (via backend-kall) og navigerer deretter til editoren.
   const handleCreatePresentation = async () => {
     setIsCreatingPresentation(true)
     try {
@@ -270,6 +276,7 @@ function App() {
     }
   }
 
+  // Sletter en presentasjon og flytter den midlertidig til en intern "papirkurv" for angrerett
   const handleDeletePresentation = async (presentationId: string) => {
     if (deletingPresentationIds[presentationId]) return
 
@@ -321,6 +328,7 @@ function App() {
     }
   }
 
+  // Gjenoppretter en midlertidig slettet presentasjon fra papirkurven ved å lage en ny kopi
   const handleRestorePresentation = async (trashId: string) => {
     const trashedItem = trashedPresentations.find((item) => item.id === trashId)
     if (!trashedItem?.presentation) return
