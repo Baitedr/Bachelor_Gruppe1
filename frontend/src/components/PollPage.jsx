@@ -22,7 +22,7 @@ const PollPage = ({ onNavigate, user }) => {
       setPolls(data.polls || []);
       setError(null);
     } catch (err) {
-      setError('Failed to load polls');
+      setError('Kunne ikke laste inn avstemninger'); // Failed to load polls
     } finally {
       setIsLoading(false);
     }
@@ -39,7 +39,7 @@ const PollPage = ({ onNavigate, user }) => {
       setActiveTab('view');
       setError(null);
     } catch (err) {
-      setError('Failed to save poll');
+      setError('Kunne ikke lagre avstemning'); // Failed to save poll
     }
   };
 
@@ -50,7 +50,7 @@ const PollPage = ({ onNavigate, user }) => {
       setPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
       setError(null);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to vote');
+      setError(err?.response?.data?.error || 'Kunne ikke stemme'); // Failed to vote
     }
   };
 
@@ -60,14 +60,14 @@ const PollPage = ({ onNavigate, user }) => {
       setPolls(prev => prev.filter(p => p.id !== pollId));
       setError(null);
     } catch (err) {
-      setError('Failed to delete poll');
+      setError('Kunne ikke slette avstemning'); // Failed to delete poll
     }
   };
 
   return (
     <div className="poll-page">
       <div className="poll-container">
-        <h1>Polls</h1>
+        <h1>Avstemninger</h1>
 
         {error && (
           <div style={{ color: '#ef4444', marginBottom: '1rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
@@ -80,25 +80,25 @@ const PollPage = ({ onNavigate, user }) => {
             className={activeTab === 'create' ? 'active' : ''}
             onClick={() => setActiveTab('create')}
           >
-            Create Poll
+            Opprett avstemning 
           </button>
           <button
             className={activeTab === 'view' ? 'active' : ''}
             onClick={() => setActiveTab('view')}
           >
-            View Polls ({polls.length})
+            Vis avstemninger ({polls.length})
           </button>
         </div>
 
         {activeTab === 'create' ? (
           <PollCreator onSave={handleSavePoll} />
         ) : isLoading ? (
-          <div className="no-polls"><p>Loading polls...</p></div>
+          <div className="no-polls"><p>Laster avstemninger...</p></div>
         ) : (
           <div className="view-polls-section">
             {polls.length === 0 ? (
               <div className="no-polls">
-                <p>No polls created yet. Create your first poll!</p>
+                <p>Ingen avstemninger opprettet ennå. Opprett din første avstemning!</p>
               </div>
             ) : (
               polls.map(poll => (
@@ -109,7 +109,7 @@ const PollPage = ({ onNavigate, user }) => {
                       className="delete-poll-btn"
                       onClick={() => handleDeletePoll(poll.id)}
                     >
-                      Delete
+                      Slett
                     </button>
                   </div>
                   <PollViewer

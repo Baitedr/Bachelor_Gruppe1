@@ -24,7 +24,7 @@ const PollResults = ({ pollData, selectedOption = null }) => {
               <div className="result-header">
                 <span className="option-text">
                   {option.text}
-                  {isSelected && <span className="your-vote"> (Your vote)</span>}
+                  {isSelected && <span className="your-vote"> (Din stemme)</span>}
                 </span>
                 <span className="option-stats">
                   {option.votes} ({percentage}%)
@@ -41,7 +41,7 @@ const PollResults = ({ pollData, selectedOption = null }) => {
         })}
       </div>
       <div className="results-footer">
-        Total votes: {totalVotes}
+        Totalt antall stemmer: {totalVotes}
       </div>
     </div>
   );

@@ -43,9 +43,9 @@ function App() {
   }
 
   const toRestorablePresentationPayload = (presentation) => ({
-    title: presentation?.title || 'Recovered Presentation',
+    title: presentation?.title || 'Gjenopprettet presentasjon', // Recovered Presentation
     slides: (presentation?.slides || []).map((slide, index) => ({
-      title: slide?.title || `Slide ${index + 1}`,
+      title: slide?.title || `Lysbilde ${index + 1}`, // Slide
       content: slide?.content || '',
       backgroundColor: slide?.backgroundColor || '#ffffff',
       fabricData: slide?.fabricData || null,
@@ -139,7 +139,7 @@ function App() {
       setApiStatus(data.status)
     } catch (err) {
       setApiStatus('error')
-      console.error('API health check failed:', err)
+      console.error('API helsesjekk feilet:', err) // API health check failed
     }
   }
 
@@ -150,19 +150,19 @@ function App() {
       setPresentations(data.presentations || [])
       setPresentationsError(null)
     } catch (err) {
-      setPresentationsError('Failed to load presentations')
+      setPresentationsError('Kunne ikke laste presentasjoner') // Failed to load presentations
       setPresentations([])
-      console.error('Presentations fetch failed:', err)
+      console.error('Kunne ikke laste presentasjoner:', err)
     } finally {
       setPresentationsLoading(false)
     }
   }
 
-  const createBlankPresentationPayload = (title = 'Untitled Presentation') => ({
+  const createBlankPresentationPayload = (title = 'Uten navn') => ({ // Untitled Presentation
     title,
     slides: [
       {
-        title: 'Slide 1',
+        title: 'Lysbilde 1', // Slide 1
         content: '',
         backgroundColor: '#ffffff',
         fabricData: null,
@@ -173,7 +173,7 @@ function App() {
   const handleCreatePresentation = async () => {
     setIsCreatingPresentation(true)
     try {
-      const defaultTitle = `Presentation ${presentations.length + 1}`
+      const defaultTitle = `Presentasjon ${presentations.length + 1}` // Presentation
       const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
       setActivePresentation(data.presentation)
       setIsNewPresentationSession(true)
@@ -196,8 +196,8 @@ function App() {
       setHasSavedCurrentSession(false)
       setCurrentPage('editor')
     } catch (err) {
-      setPresentationsError('Failed to open presentation')
-      console.error('Open presentation failed:', err)
+      setPresentationsError('Kunne ikke åpne presentasjon') // Failed to open presentation
+      console.error('Åpning av presentasjon feilet:', err)
     }
   }
 
@@ -244,7 +244,7 @@ function App() {
       setTrashedPresentations((prev) => [trashedItem, ...prev])
       setDeleteUndoToast({
         trashId,
-        title: restorablePresentation?.title || 'Presentation',
+        title: restorablePresentation?.title || 'Presentasjon', // Presentation
       })
 
       clearUndoToastTimer()
@@ -267,8 +267,8 @@ function App() {
         delete next[presentationId]
         return next
       })
-      setPresentationsError('Failed to delete presentation')
-      console.error('Delete presentation failed:', err)
+      setPresentationsError('Kunne ikke slette presentasjon') // Failed to delete presentation
+      console.error('Sletting av presentasjon feilet:', err)
     }
   }
 
@@ -290,8 +290,8 @@ function App() {
       await loadPresentations()
       setPresentationsError(null)
     } catch (err) {
-      setPresentationsError('Failed to restore presentation')
-      console.error('Restore presentation failed:', err)
+      setPresentationsError('Kunne ikke gjenopprette presentasjon') // Failed to restore presentation
+      console.error('Gjenoppretting av presentasjon feilet:', err)
     }
   }
 
@@ -346,7 +346,7 @@ function App() {
       saveSessionState('lobby', presentationId, data.join_code, false)
       setCurrentPage('lobby')
     } catch (err) {
-      console.error('Failed to start live session', err)
+      console.error('Kunne ikke starte live-økt', err) // Failed to start live session
     }
   }
 
@@ -400,8 +400,8 @@ function App() {
       setIsExitEditorDialogOpen(false)
       setCurrentPage('home')
     } catch (err) {
-      setPresentationsError('Failed to discard presentation')
-      console.error('Discard presentation failed:', err)
+      setPresentationsError('Kunne ikke forkaste presentasjonen') // Failed to discard presentation
+      console.error('Kunne ikke forkaste presentasjonen:', err)
     } finally {
       setIsDiscardingPresentation(false)
     }
@@ -418,7 +418,7 @@ function App() {
   }
 
   if (isAuthChecking) {
-    return <div className="App">Loading...</div>
+    return <div className="App">Laster...</div> // Loading...
   }
 
   if (!user && !guestMode) {
@@ -501,7 +501,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          → Polls
+          → Avstemninger
         </button>
         <button 
           onClick={handleLogout}
@@ -516,6 +516,7 @@ function App() {
           }}
         >
           Logg ut
+          Logg ut
         </button>
       </nav>
 
@@ -525,7 +526,7 @@ function App() {
             <h1>ProSlides</h1>
             <p>Lag eller rediger presentasjonene dine</p>
             <p style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-              Logged in as: {user?.email}
+              Logget inn som: {user?.email}
             </p>
           </header>
 
@@ -570,23 +571,23 @@ function App() {
                           {presentation.first_slide?.previewImage ? (
                             <img
                               src={presentation.first_slide.previewImage}
-                              alt={`${presentation.title} first slide preview`}
+                              alt={`${presentation.title} første lysbilde forhåndsvisning`}
                               className="recent-slide-image"
                             />
                           ) : (
                             <>
                               <div className="recent-slide-title">
-                                {presentation.first_slide?.title || 'Slide 1'}
+                                {presentation.first_slide?.title || 'Lysbilde 1'}
                               </div>
                               <div className="recent-slide-content">
-                                {presentation.first_slide?.content || 'No content yet'}
+                                {presentation.first_slide?.content || 'Inget innhold ennå'}
                               </div>
                             </>
                           )}
                         </div>
                         <h3>{presentation.title}</h3>
                         <p className="recent-meta">
-                          {presentation.slide_count} slide(s) • {new Date(presentation.created_at).toLocaleString()}
+                          {presentation.slide_count} lysbilde(r) • {new Date(presentation.created_at).toLocaleString()}
                         </p>
                       </div>
                       <div className="recent-actions">
@@ -595,7 +596,7 @@ function App() {
                           onClick={() => handleOpenPresentation(presentation.id)}
                           disabled={deletingPresentationIds[presentation.id]}
                         >
-                          Edit
+                          Rediger
                         </button>
                         <button
                           className="recent-action-btn"
@@ -610,7 +611,7 @@ function App() {
                           onClick={() => handleDeletePresentation(presentation.id)}
                           disabled={deletingPresentationIds[presentation.id]}
                         >
-                          Delete
+                          Slett
                         </button>
                       </div>
                     </div>
@@ -627,9 +628,9 @@ function App() {
                     {trashedPresentations.map((trashedItem) => (
                       <div key={trashedItem.id} className="trash-item">
                         <div>
-                          <strong>{trashedItem.presentation?.title || 'Untitled Presentation'}</strong>
+                          <strong>{trashedItem.presentation?.title || 'Uten navn'}</strong>
                           <p className="trash-meta">
-                            Deleted {new Date(trashedItem.deletedAt).toLocaleTimeString()}
+                            Slettet {new Date(trashedItem.deletedAt).toLocaleTimeString()}
                           </p>
                         </div>
                         <div className="trash-actions">
@@ -662,10 +663,10 @@ function App() {
                   className="recent-action-btn undo-btn"
                   onClick={() => handleRestorePresentation(deleteUndoToast.trashId)}
                 >
-                  Undo
+                  Angre
                 </button>
                 <button className="recent-action-btn dismiss-btn" onClick={dismissDeleteUndoToast}>
-                  Dismiss
+                  Lukk
                 </button>
               </div>
             </div>
@@ -694,12 +695,12 @@ function App() {
               alignItems: 'center',
               gap: '1rem'
             }}>
-              <span>Join code: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
+              <span>Lively-kode: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
               <button
                 onClick={() => { clearSessionState(); setCurrentPage('home'); setLiveJoinCode(null); setLivePresentationId(null) }}
                 style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
               >
-                End Session
+                Avslutt økt
               </button>
             </div>
           )}
@@ -722,7 +723,7 @@ function App() {
       )}
 
       {isExitEditorDialogOpen && (
-        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Leave editor">
+        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Forlat redigeringsprogrammet">
           <div className="editor-exit-dialog">
             <h3>Gå ut av editor?</h3>
             <p>Vil du lagre endringene dine før du går tilbake?</p>

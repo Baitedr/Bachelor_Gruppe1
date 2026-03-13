@@ -6,7 +6,7 @@ import PollCreator from './PollComponents/PollCreator';
 
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
-    title: 'Slide 1',
+    title: 'Lysbilde 1', // Slide 1
     content: '',
     backgroundColor: '#ffffff',
     fabricData: null,
@@ -20,7 +20,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [slides, setSlides] = useState([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
     const [presentationId, setPresentationId] = useState(null);
-    const [presentationTitle, setPresentationTitle] = useState('Untitled Presentation');
+    const [presentationTitle, setPresentationTitle] = useState('Uten navn'); // Untitled Presentation
     const [saveError, setSaveError] = useState(null);
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const [undoStack, setUndoStack] = useState([]);
@@ -84,7 +84,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     useEffect(() => {
         if (!presentation) {
             setPresentationId(null);
-            setPresentationTitle('Untitled Presentation');
+            setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
             setCurrentSlideIndex(0);
             return;
@@ -92,7 +92,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
         const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
             id: slide.id || `local-${Date.now()}-${index}`,
-            title: slide.title || `Slide ${index + 1}`,
+            title: slide.title || `Lysbilde ${index + 1}`,
             content: slide.content || '',
             backgroundColor: slide.backgroundColor || '#ffffff',
             fabricData: slide.fabricData || null,
@@ -102,7 +102,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }));
 
         setPresentationId(presentation.id || null);
-        setPresentationTitle(presentation.title || 'Untitled Presentation');
+        setPresentationTitle(presentation.title || 'Uten navn');
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
@@ -269,7 +269,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         const currentSlides = saveCurrentSlide();
         const newSlide = {
             id: `local-${Date.now()}`,
-            title: `Slide ${currentSlides.length + 1}`,
+            title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
             backgroundColor: '#ffffff',
             fabricData: null,
@@ -322,7 +322,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
-        const text = new IText('Click to edit', {
+        const text = new IText('Klikk for å redigere', { // Click to edit
             left: 100,
             top: 100,
             fontSize: 32,
@@ -340,7 +340,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
-        const text = new IText('Slide Title', {
+        const text = new IText('Tittel', { // Slide Title
             left: 50,
             top: 50,
             fontSize: 48,
@@ -486,7 +486,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             const savedPresentation = await onSavePresentation({
                 id: presentationId,
-                title: presentationTitle.trim() || 'Untitled Presentation',
+                title: presentationTitle.trim() || 'Uten navn',
                 slides: slidesWithPreview,
             });
 
@@ -574,180 +574,86 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     }));
 
     return (
-        <>
-            <div className="slide-editor">
-                <div className="editor-sidebar">
-                    <div className="sidebar-header">
-                        <h3>Slides</h3>
-                        <button onClick={addSlide} className="add-slide-btn">+ Add Slide</button>
-                    </div>
-                    <SlideThumbnails
-                        slides={slides}
-                        slidePreviewImages={slidePreviewImages}
-                        currentSlideIndex={currentSlideIndex}
-                        onSlideSelect={handleSlideSelect}
-                        onSlideDelete={deleteSlide}
-                        onSlideDuplicate={duplicateSlide}
-                    />
+        <div className="slide-editor">
+            <div className="editor-sidebar">
+                <div className="sidebar-header">
+                    <h3>Lysbilder</h3>
+                    <button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</button>
                 </div>
-                <div className="editor-main">
-                    <div className="editor-toolbar">
-                        <div className="toolbar-left">
-                            <input
-                                type="text"
-                                className="presentation-title-input"
-                                value={presentationTitle}
-                                onChange={(e) => setPresentationTitle(e.target.value)}
-                                placeholder="Presentation title"
-                            />
-                            <span className="slide-counter">
-                                Slide {currentSlideIndex + 1} of {slides.length}
-                            </span>
-                        </div>
-                        <div className="toolbar-actions">
-                            <button
-                                onClick={handleUndo}
-                                className="toolbar-btn history-btn"
-                                disabled={undoStack.length <= 1}
-                            >
-                                ↶ Undo
-                            </button>
-                            <button
-                                onClick={handleRedo}
-                                className="toolbar-btn history-btn"
-                                disabled={!redoStack.length}
-                            >
-                                ↷ Redo
-                            </button>
-                            <button
-                                onClick={handleSavePresentation}
-                                className="toolbar-btn save-btn"
-                                disabled={isSaving}
-                            >
-                                {isSaving ? 'Saving...' : '💾 Save'}
-                            </button>
-                            <button onClick={addTitle} className="toolbar-btn">📝 Title</button>
-                            <button onClick={addText} className="toolbar-btn">Aa Text</button>
-                            <button onClick={addImage} className="toolbar-btn">🖼️ Image</button>
-                            <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rectangle</button>
-                            <button onClick={() => addShape('circle')} className="toolbar-btn">● Circle</button>
-                            <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Delete</button>
-                            <label className="toolbar-btn color-label">
-                                🎨 Background
-                                <input
-                                    type="color"
-                                    value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
-                                    onChange={(e) => changeBackgroundColor(e.target.value)}
-                                />
-                            </label>
-                            <button onClick={openCreatePoll} className="toolbar-btn">Poll</button>
-                        </div>
+                <SlideThumbnails
+                    slides={slides}
+                    slidePreviewImages={slidePreviewImages}
+                    currentSlideIndex={currentSlideIndex}
+                    onSlideSelect={handleSlideSelect}
+                    onSlideDelete={deleteSlide}
+                    onSlideDuplicate={duplicateSlide}
+                />
+            </div>
+            <div className="editor-main">
+                <div className="editor-toolbar">
+                    <div className="toolbar-left">
+                        <input
+                            type="text"
+                            className="presentation-title-input"
+                            value={presentationTitle}
+                            onChange={(e) => setPresentationTitle(e.target.value)}
+                            placeholder="Presentasjonstittel"
+                        />
+                        <span className="slide-counter">
+                            Lysbilde {currentSlideIndex + 1} av {slides.length}
+                        </span>
                     </div>
-                    {saveError && <div className="save-status error">{saveError}</div>}
-                    {lastSavedAt && !saveError && (
-                        <div className="save-status success">
-                            Last saved {lastSavedAt.toLocaleTimeString()}
-                        </div>
-                    )}
-                    <div className="canvas-container">
-                        <div className="slide-boundary">
-                            <canvas ref={canvasRef} />
-                        </div>
-                    </div>
-                </div>
-                <div className="slide-polls-panel">
-                    <div className="slide-polls-header">
-                        <div>
-                            <h4>Slide Polls</h4>
-                            <p>{(slides[currentSlideIndex]?.polls || []).length} poll(s) on this slide</p>
-                        </div>
-                        <button onClick={openCreatePoll} className="slide-polls-add-btn">
-                            + Add Poll
+                    <div className="toolbar-actions">
+                        <button
+                            onClick={handleUndo}
+                            className="toolbar-btn history-btn"
+                            disabled={undoStack.length <= 1}
+                        >
+                            ↶ Angre
                         </button>
+                        <button
+                            onClick={handleRedo}
+                            className="toolbar-btn history-btn"
+                            disabled={!redoStack.length}
+                        >
+                            ↷ Gjør om
+                        </button>
+                        <button
+                            onClick={handleSavePresentation}
+                            className="toolbar-btn save-btn"
+                            disabled={isSaving}
+                        >
+                            {isSaving ? 'Lagrer...' : '💾 Lagre'}
+                        </button>
+                        <button onClick={addTitle} className="toolbar-btn">📝 Tittel</button>
+                        <button onClick={addText} className="toolbar-btn">Aa Tekst</button>
+                        <button onClick={addImage} className="toolbar-btn">🖼️ Bilde</button>
+                        <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rektangel</button>
+                        <button onClick={() => addShape('circle')} className="toolbar-btn">● Sirkel</button>
+                        <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Slett</button>
+                        <label className="toolbar-btn color-label">
+                            🎨 Bakgrunn
+                            <input
+                                type="color"
+                                value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
+                                onChange={(e) => changeBackgroundColor(e.target.value)}
+                            />
+                        </label>
                     </div>
-
-                    {(slides[currentSlideIndex]?.polls || []).length === 0 ? (
-                        <div className="slide-polls-empty-state">
-                            <strong>No polls yet</strong>
-                            <span>Add a poll to ask the audience a question during this slide.</span>
-                        </div>
-                    ) : (
-                        <div className="slide-polls-list">
-                            {(slides[currentSlideIndex]?.polls || []).map((poll, index) => {
-                                const totalVotes = getPollTotalVotes(poll);
-
-                                return (
-                                    <div key={poll.id} className="slide-poll-item">
-                                        <div className="slide-poll-copy">
-                                            <div className="slide-poll-topline">
-                                                <strong>{poll.question}</strong>
-                                                <span className="slide-poll-total">{totalVotes} votes</span>
-                                            </div>
-
-                                            <div className="slide-poll-results">
-                                                {(poll.options || []).map((option) => {
-                                                    const percentage = getPollOptionPercentage(option.votes, totalVotes);
-
-                                                    return (
-                                                        <div key={option.id} className="slide-poll-result-row">
-                                                            <div className="slide-poll-result-copy">
-                                                                <span className="slide-poll-option-text">{option.text}</span>
-                                                                <span className="slide-poll-option-stats">
-                                                                    {option.votes || 0} ({percentage}%)
-                                                                </span>
-                                                            </div>
-                                                            <div className="slide-poll-result-bar">
-                                                                <div
-                                                                    className="slide-poll-result-fill"
-                                                                    style={{ width: `${percentage}%` }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {getPollHistory(poll)}
-                                        </div>
-
-                                        <div className="slide-poll-actions">
-                                            <button
-                                                onClick={() => openEditPoll(index)}
-                                                className="slide-poll-action-btn"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeletePoll(index)}
-                                                className="slide-poll-action-btn danger"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                </div>
+                {saveError && <div className="save-status error">{saveError}</div>}
+                {lastSavedAt && !saveError && (
+                    <div className="save-status success">
+                        Sist lagret {lastSavedAt.toLocaleTimeString()}
+                    </div>
+                )}
+                <div className="canvas-container">
+                    <div className="slide-boundary">
+                        <canvas ref={canvasRef} />
+                    </div>
                 </div>
             </div>
-
-            {isPollCreatorOpen && (
-                <div className="poll-modal-overlay">
-                    <div className="poll-modal-card">
-                        <PollCreator
-                            initialData={
-                                editingPollIndex !== null
-                                    ? slides[currentSlideIndex]?.polls?.[editingPollIndex] || null
-                                    : null
-                            }
-                            onSave={handleSavePoll}
-                            onCancel={closePollCreator}
-                        />
-                    </div>
-                </div>
-            )}
-        </>
+        </div>
     );
 });
 

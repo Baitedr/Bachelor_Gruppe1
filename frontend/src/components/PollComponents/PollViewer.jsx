@@ -34,7 +34,7 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
 
   const handleVote = (option, index) => {
     if (hasVoted) {
-      alert('You have already voted on this poll');
+      alert('Du har allerede stemt på denne avstemningen'); // You have already voted on this poll
       return;
     }
 
@@ -50,7 +50,7 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   };
 
   if (!pollData) {
-    return <div className="poll-viewer">No poll data available</div>;
+    return <div className="poll-viewer">Ingen avstemningsdata tilgjengelig</div>; // No poll data available
   }
 
   return (

@@ -29,13 +29,13 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
     e.preventDefault();
     
     if (!pollQuestion.trim()) {
-      alert('Please enter a poll question');
+      alert('Vennligst skriv inn et spørsmål'); // Please enter a poll question
       return;
     }
 
     const validOptions = pollOptions.filter(opt => opt.trim() !== '');
     if (validOptions.length < 2) {
-      alert('Please provide at least 2 options');
+      alert('Vennligst oppgi minst 2 alternativer'); // Please provide at least 2 options
       return;
     }
 
@@ -59,28 +59,28 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
 
   return (
     <div className="poll-creator">
-      <h2>{initialData ? 'Edit Poll' : 'Create Poll'}</h2>
+      <h2>Opprett avstemning</h2>
       <form onSubmit={handleSave}>
         <div className="form-group">
-          <label>Poll Question</label>
+          <label>Spørsmål</label>
           <input
             type="text"
             value={pollQuestion}
             onChange={(e) => setPollQuestion(e.target.value)}
-            placeholder="Enter your poll question"
+            placeholder="Skriv inn spørsmålet ditt"
             maxLength={200}
           />
         </div>
 
         <div className="form-group">
-          <label>Poll Options</label>
+          <label>Alternativer</label>
           {pollOptions.map((option, index) => (
             <div key={index} className="option-input-group">
               <input
                 type="text"
                 value={option}
                 onChange={(e) => handleOptionChange(index, e.target.value)}
-                placeholder={`Option ${index + 1}`}
+                placeholder={`Alternativ ${index + 1}`}
                 maxLength={100}
               />
               {pollOptions.length > 2 && (
@@ -103,7 +103,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
               className="add-option-btn"
               onClick={handleAddOption}
             >
-              + Add Option
+              + Legg til alternativ
             </button>
           )}
           <button 
@@ -111,7 +111,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
             className="clear-btn"
             onClick={handleClear}
           >
-            Clear
+            Tøm
           </button>
           {onCancel && (
             <button 
@@ -119,11 +119,11 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
               className="cancel-btn"
               onClick={onCancel}
             >
-              Cancel
+              Avbryt
             </button>
           )}
           <button type="submit" className="save-poll-btn">
-            Save Poll
+            Lagre
           </button>
         </div>
       </form>

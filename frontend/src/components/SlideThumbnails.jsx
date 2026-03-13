@@ -2,7 +2,7 @@ import React from 'react'
 import '../CSScomponents/SlideThumbnails.css'
 
 const getSlidePreviewContent = (slide) => {
-  if (!slide) return 'No content yet'
+  if (!slide) return 'Inget innhold ennå' // No content yet
 
   if (slide.content && slide.content.trim()) {
     return slide.content
@@ -10,7 +10,7 @@ const getSlidePreviewContent = (slide) => {
 
   const objects = slide.fabricData?.objects
   if (!Array.isArray(objects) || objects.length === 0) {
-    return 'No content yet'
+    return 'Inget innhold ennå' // No content yet
   }
 
   const textValues = objects
@@ -24,7 +24,7 @@ const getSlidePreviewContent = (slide) => {
     return textValues.join(' · ')
   }
 
-  return `${objects.length} object${objects.length > 1 ? 's' : ''}`
+  return `${objects.length} objekt${objects.length > 1 ? 'er' : ''}`
 }
 
 function SlideThumbnails({ 
@@ -50,7 +50,7 @@ function SlideThumbnails({
             {slidePreviewImages[slide.id] ? (
               <img
                 src={slidePreviewImages[slide.id]}
-                alt={`${slide.title} preview`}
+                alt={`${slide.title} forhåndsvisning`} // preview
                 className="thumbnail-preview-image"
               />
             ) : (

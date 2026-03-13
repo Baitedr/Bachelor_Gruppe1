@@ -24,7 +24,7 @@ const LivePresentation = ({ presentationId, isPresenter }) => {
             const response = await api.joinPresentation(presentationId)
             setPresentation(response.presentation)
         } catch (error) {
-            console.error('error loading presentation', error)
+            console.error('feil ved innlasting av presentasjon', error) // error loading presentation
         } finally {
             setLoading(false)
         }
@@ -65,7 +65,7 @@ const LivePresentation = ({ presentationId, isPresenter }) => {
                 marginBottom: '1rem',
             }}>
             
-            <h3>Slide {currentSlide + 1} of {presentation.slides.length}</h3>
+            <h3>Lysbilde {currentSlide + 1} av {presentation.slides.length}</h3>
             {currentSlideData?.slide_elements?.map(element => (
                 <div key={element.id}>{element.content?.text}</div>
             ))}
