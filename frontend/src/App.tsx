@@ -121,25 +121,6 @@ function App() {
   }
 
   useEffect(() => {
-    const checkMobile = () => {
-      const isMobile = isMobileDevice()
-      if (isMobile) {
-        setCurrentPage('phoneinteraction')
-        return
-      }
-
-      setCurrentPage((previousPage) => {
-        if (previousPage !== 'phoneinteraction') return previousPage
-        return user ? 'home' : 'login'
-      })
-    }
-
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [user])
-
-  useEffect(() => {
     // Sjekker om det finnes en aktiv økt eller token ved oppstart
     const restoreSession = async () => {
       const savedRaw = sessionStorage.getItem('proslides_session')
@@ -166,7 +147,7 @@ function App() {
           setLivePresentationId(saved.presentationId)
           setLiveJoinCode(saved.joinCode ?? null)
           setCurrentPage(saved.page)
-        } else if (!isMobileDevice()) {
+        } else {
           setCurrentPage('home')
         }
       } catch {
@@ -383,7 +364,7 @@ function App() {
 
   const handleLoginSuccess = (userData: UserRecord) => {
     setUser(userData)
-    setCurrentPage(isMobileDevice() ? 'phoneinteraction' : 'home')
+    setCurrentPage('home')
   }
 
   const saveSessionState = (
@@ -434,21 +415,14 @@ function App() {
     setCurrentPage('login')
   }
 
-  const handleEditorNav = async () => {
+  const handleGoHome = () => {
     if (currentPage === 'editor') {
       setIsExitEditorDialogOpen(true)
       return
     }
-
-    if (currentPage === 'home') {
-      if (activePresentation?.id) {
-        setCurrentPage('editor')
-      } else {
-        await handleCreatePresentation()
-      }
-      return
-    }
-
+    clearSessionState()
+    setLiveJoinCode(null)
+    setLivePresentationId(null)
     setCurrentPage('home')
   }
 
@@ -465,6 +439,7 @@ function App() {
       }
 
       setIsExitEditorDialogOpen(false)
+      clearSessionState()
       setCurrentPage('home')
     } catch {
       setPresentationsError('Kunne ikke forkaste presentasjonen')
@@ -479,6 +454,7 @@ function App() {
     const didSave = await presentationEditorRef.current?.savePresentation?.()
     if (didSave) {
       setIsExitEditorDialogOpen(false)
+      clearSessionState()
       setCurrentPage('home')
     }
   }
@@ -552,27 +528,23 @@ function App() {
     <div className='min-h-screen bg-background text-foreground'>
       <header className='sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur'>
         <div className='mx-auto flex w-full flex-wrap items-center gap-2 px-4 py-3'>
-          <h1 className='mr-2 text-lg font-semibold'>ProSlides</h1>
+          <h1 
+            className='mr-2 text-lg font-semibold cursor-pointer transition-colors hover:text-primary' 
+            onClick={handleGoHome}
+          >
+            ProSlides
+          </h1>
           <Badge variant={apiStatus === 'error' ? 'destructive' : 'secondary'}>
             API {apiStatus === 'error' ? 'frakoblet' : 'tilkoblet'}
           </Badge>
           <span className='text-sm text-muted-foreground'>Logget inn som {user?.email}</span>
 
           <div className='ml-auto flex flex-wrap items-center gap-2'>
-            <Button
-              onClick={handleEditorNav}
-              variant={currentPage === 'editor' ? 'secondary' : 'outline'}
-              size='sm'
-            >
-              {currentPage === 'home' ? 'Editor' : 'Hjem'}
-            </Button>
-            <Button
-              onClick={() => setCurrentPage('polls')}
-              variant={currentPage === 'polls' ? 'secondary' : 'outline'}
-              size='sm'
-            >
-              Avstemninger
-            </Button>
+            {currentPage !== 'home' && (
+              <Button onClick={handleGoHome} variant='outline' size='sm'>
+                Hjem
+              </Button>
+            )}
             <Button onClick={handleLogout} variant='destructive' size='sm'>
               Logg ut
             </Button>
