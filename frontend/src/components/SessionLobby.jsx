@@ -4,8 +4,8 @@ import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 
-const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted }) => {
-  const { participantCount, sessionStarted, startSession } = usePresentation(
+const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted, onSessionEnd }) => {
+  const { participantCount, sessionStarted, startSession, sessionEnded } = usePresentation(
     presentationId,
     localStorage.getItem('auth_token')
   )
@@ -15,6 +15,12 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted 
       onSessionStarted()
     }
   }, [sessionStarted, onSessionStarted])
+
+  useEffect(() => {
+    if (sessionEnded && onSessionEnd) {
+      onSessionEnd()
+    }
+  }, [sessionEnded, onSessionEnd])
 
   return (
     <Card className='mx-auto w-full max-w-2xl'>

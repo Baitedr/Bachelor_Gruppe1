@@ -1,11 +1,26 @@
+# General
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+.env
+.DS_Store
+*.log
+
 # Backend
 backend/log/*
 backend/tmp/*
 backend/db/*.sqlite3
 backend/db/*.sqlite3-*
 backend/vendor/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
+
+Bachelor_Gruppe1/node_modules/
+Bachelor_Gruppe1/dist/

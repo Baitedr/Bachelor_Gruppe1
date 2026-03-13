@@ -5,6 +5,7 @@ export const usePresentation = (presentationid, token) => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [activePoll, setActivePoll] = useState(null);
     const [pollResults, setPollResults] = useState({});
+    const [sessionEnded, setSessionEnded] = useState(false);
     const [participantCount, setParticipantCount] = useState(0);
     const [sessionStarted, setSessionStarted] = useState(false);
     const cableRef = useRef(null);
@@ -44,6 +45,9 @@ export const usePresentation = (presentationid, token) => {
                     break;
                 case 'session_started':
                     setSessionStarted(true);
+                    break;
+                case 'session_ended':
+                    setSessionEnded(true);
                     break;
                     }
                 }
@@ -94,6 +98,7 @@ export const usePresentation = (presentationid, token) => {
         submitPollAnswer,
         participantCount,
         sessionStarted,
+        sessionEnded,
         startSession
     }
 }

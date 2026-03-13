@@ -395,11 +395,11 @@ function App() {
   }
 
   const handleGuestJoin = (presentationId: string) => {
-    saveSessionState('lobby', presentationId, null, true)
+    saveSessionState('live', presentationId, null, true)
     setLivePresentationId(presentationId)
     setLiveJoinCode(null)
     setGuestMode(true)
-    setCurrentPage('lobby')
+    setCurrentPage('live')
   }
 
   const handleLogout = async () => {
@@ -515,10 +515,15 @@ function App() {
                   saveSessionState('live', livePresentationId, null, true)
                   setCurrentPage('live')
                 }}
+                onSessionEnd={leaveGuestSession}
               />
             </div>
           ) : (
-            <LivePresentation presentationId={livePresentationId} isPresenter={false} />
+            <LivePresentation 
+              presentationId={livePresentationId} 
+              isPresenter={false} 
+              onSessionEnd={leaveGuestSession}
+            />
           )}
         </main>
       </div>
@@ -720,6 +725,7 @@ function App() {
                 saveSessionState('live', livePresentationId, liveJoinCode, false)
                 setCurrentPage('live')
               }}
+              onSessionEnd={handleGoHome}
             />
           </div>
         )}
@@ -739,7 +745,14 @@ function App() {
                     className='ml-auto'
                     size='sm'
                     variant='destructive'
-                    onClick={() => {
+                    onClick={async () => {
+                      if (livePresentationId) {
+                        try {
+                          await api.endSession(livePresentationId)
+                        } catch (e) {
+                          console.error('Failed to end session on server:', e)
+                        }
+                      }
                       clearSessionState()
                       setCurrentPage('home')
                       setLiveJoinCode(null)
@@ -751,7 +764,11 @@ function App() {
                 </CardContent>
               </Card>
             )}
-            <LivePresentation presentationId={livePresentationId} isPresenter={Boolean(liveJoinCode)} />
+            <LivePresentation 
+              presentationId={livePresentationId} 
+              isPresenter={Boolean(liveJoinCode)} 
+              onSessionEnd={handleGoHome}
+            />
           </div>
         )}
 

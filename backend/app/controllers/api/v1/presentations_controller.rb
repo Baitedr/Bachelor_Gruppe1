@@ -46,6 +46,7 @@ module Api
 
       def start
         @presentation.update!(is_live: true)
+        @presentation.presentation_sessions.where(ended_at: nil).update_all(ended_at: Time.current)
         session = @presentation.presentation_sessions.create!(started_at: Time.current)
         render json: {
           presentation: presentation_payload(@presentation.reload),
@@ -57,6 +58,7 @@ module Api
         @presentation.update!(is_live: false)
         active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
         active_session&.update!(ended_at: Time.current)
+        PresentationChannel.broadcast_to(@presentation, { type: 'session_ended' })
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
 

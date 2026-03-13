@@ -3,8 +3,9 @@ import { usePresentation } from '../hooks/usePresentation'
 import api from '../services/api'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import LivePresentationCanvas from './LivePresentationCanvas'
 
-const LivePresentation = ({ presentationId, isPresenter }) => {
+const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   const [presentation, setPresentation] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -12,10 +13,18 @@ const LivePresentation = ({ presentationId, isPresenter }) => {
     currentSlide,
     activePoll,
     pollResults,
+    participantCount,
     navigateSlide,
     activatePoll,
     submitPollAnswer,
+    sessionEnded,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
+
+  useEffect(() => {
+    if (sessionEnded && onSessionEnd) {
+      onSessionEnd()
+    }
+  }, [sessionEnded, onSessionEnd])
 
   useEffect(() => {
     const loadPresentation = async () => {
@@ -52,30 +61,50 @@ const LivePresentation = ({ presentationId, isPresenter }) => {
     return <div className='text-sm text-muted-foreground'>Presentasjon ikke funnet.</div>
   }
 
-  const currentSlideData = presentation.slides[currentSlide]
+  const rawSlideData = presentation.slides[currentSlide]
+  
+  // Sikrer at vi har data på rotnivå uavhengig av om backenden sender .background eller flatt
+  const currentSlideData = rawSlideData?.background 
+    ? { ...rawSlideData, ...rawSlideData.background } 
+    : rawSlideData;
 
   return (
     <div className='space-y-4'>
       <Card>
-        <CardHeader className='pb-4'>
-          <CardTitle className='text-xl'>{presentation.title}</CardTitle>
-          <p className='text-sm text-muted-foreground'>
-            Lysbilde {currentSlide + 1} av {presentation.slides.length}
-          </p>
+        <CardHeader className='pb-4 flex flex-row items-center justify-between'>
+          <div>
+            <CardTitle className='text-xl'>{presentation.title}</CardTitle>
+            <p className='text-sm text-muted-foreground'>
+              Lysbilde {currentSlide + 1} av {presentation.slides.length}
+            </p>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className='text-sm font-medium'>Deltakere:</span>
+            <span className='px-2 py-1 bg-secondary text-secondary-foreground rounded-md font-bold'>{participantCount}</span>
+          </div>
         </CardHeader>
-
         <CardContent>
-          <div className='min-h-[420px] rounded-xl border border-border bg-card p-6'>
-            {currentSlideData?.slide_elements?.length ? (
-              <div className='space-y-3'>
-                {currentSlideData.slide_elements.map((element) => (
-                  <p key={element.id} className='text-base'>
-                    {element.content?.text}
-                  </p>
-                ))}
-              </div>
+          <div className='min-h-[420px] rounded-xl border border-border p-6 flex flex-col justify-center items-center' style={{ backgroundColor: currentSlideData?.backgroundColor || 'hsl(var(--card))' }}>
+            {currentSlideData ? (
+              currentSlideData.fabricData ? (
+                <LivePresentationCanvas slideData={currentSlideData} />
+              ) : (
+                <div className="w-full flex-grow text-center flex flex-col justify-center items-center">
+                  {currentSlideData.title && (
+                    <h2 className='text-3xl font-bold mb-6 text-foreground'>{currentSlideData.title}</h2>
+                  )}
+                  {currentSlideData.content && (
+                    <div className='text-xl whitespace-pre-wrap text-foreground'>
+                      {currentSlideData.content}
+                    </div>
+                  )}
+                  {!currentSlideData.title && !currentSlideData.content && (
+                    <p className='text-sm text-muted-foreground'>Dette lysbildet er tomt.</p>
+                  )}
+                </div>
+              )
             ) : (
-              <p className='text-sm text-muted-foreground'>Ingen elementer på dette lysbildet ennå.</p>
+              <p className='text-sm text-muted-foreground'>Ingen data for dette lysbildet.</p>
             )}
           </div>
         </CardContent>

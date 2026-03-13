@@ -12,12 +12,10 @@ module ApplicationCable
         token = request.params[:token]
 
         if token.present?
-            begin 
-                decoded = JWT.decode(token, Rails.application.credentials.secret_key_base, true, { algorithm: 'HS256' })
-                user = User.find_by(id: decoded[0]['user_id'])
+            decoded = JsonWebToken.decode(token)
+            if decoded && decoded[:user_id]
+                user = User.find_by(id: decoded[:user_id])
                 return user if user
-            rescue JWT::DecodeError, JWT::ExpiredSignature
-                reject_unauthorized_connection
             end
         end
 
