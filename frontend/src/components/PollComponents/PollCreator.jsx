@@ -3,6 +3,7 @@ import '../../CSScomponents//PollCSScomponents/PollCreator.css';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { X, Plus, Trash2, Save, XCircle } from 'lucide-react';
 
 const PollCreator = ({ initialData = null, onSave, onCancel }) => {
   const [pollQuestion, setPollQuestion] = useState(initialData?.question || '');
@@ -89,44 +90,48 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
               {pollOptions.length > 2 && (
                 <Button
                   type="button"
-                  className="remove-option-btn"
+                  variant="ghost"
+                  className="text-destructive bg-destructive/10 px-3 hover:text-foreground hover:bg-accent flex items-center justify-center transition-colors"
                   onClick={() => handleRemoveOption(index)}
                 >
-                  ✕
+                  <X className="h-4 w-4" />
                 </Button>
               )}
             </div>
           ))}
         </div>
 
-        <div className="form-actions">
+        <div className="flex gap-2">
           {pollOptions.length < 10 && (
-            <Button 
-              type="button" 
-              className="add-option-btn"
+            <Button
+              type="button"
+              variant="outline"
               onClick={handleAddOption}
+              className="flex items-center gap-1.5"
             >
-              + Legg til alternativ
+              <Plus className="h-4 w-4" /> Legg til alternativ
             </Button>
           )}
-          <Button 
-            type="button" 
-            className="clear-btn"
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-muted-foreground ml-auto hover:text-foreground flex items-center gap-1.5"
             onClick={handleClear}
           >
-            Tøm
+            <Trash2 className="h-4 w-4" /> Tøm
           </Button>
           {onCancel && (
-            <Button 
-              type="button" 
-              className="cancel-btn"
+            <Button
+              type="button"
+              variant="outline"
               onClick={onCancel}
+              className="flex items-center gap-1.5"
             >
-              Avbryt
+              <XCircle className="h-4 w-4" /> Avbryt
             </Button>
           )}
-          <Button type="submit" className="save-poll-btn">
-            Lagre
+          <Button type="submit" variant="default" className="flex items-center gap-1.5">
+            <Save className="h-4 w-4" /> Lagre
           </Button>
         </div>
       </form>

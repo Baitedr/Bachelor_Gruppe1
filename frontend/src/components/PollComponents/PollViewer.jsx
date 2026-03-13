@@ -59,11 +59,12 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
       <h2 className="poll-question">{pollData.question}</h2>
 
       {!hasVoted ? (
-        <div className="poll-options">
+        <div className="grid gap-2 mt-4">
           {pollData.options.map((option, index) => (
             <Button
               key={option.id || index}
-              className="poll-option-btn"
+              variant="outline"
+              className="w-full justify-start text-left h-auto py-3 px-4"
               onClick={() => handleVote(option, index)}
             >
               {option.text}

@@ -1,6 +1,7 @@
 import React from 'react'
 import '../CSScomponents/SlideThumbnails.css'
 import { Button } from './ui/button'
+import { Copy, Trash2 } from 'lucide-react'
 
 const getSlidePreviewContent = (slide) => {
   if (!slide) return 'Inget innhold ennå' // No content yet
@@ -65,24 +66,28 @@ function SlideThumbnails({
             <span className="thumbnail-number">{index + 1}</span>
             <div className="thumbnail-actions">
               <Button
-                className="thumbnail-btn duplicate-btn"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent/50 p-0 mr-1 flex items-center justify-center transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   onSlideDuplicate(index)
                 }}
                 title="Dupliser slide"
               >
-                📋
+                <Copy className="h-3.5 w-3.5" />
               </Button>
               <Button
-                className="thumbnail-btn delete-btn"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 text-destructive bg-destructive/10 hover:text-foreground hover:bg-accent/50 p-0 flex items-center justify-center transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   onSlideDelete(index)
                 }}
                 title="Slett slide"
               >
-                🗑️
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>

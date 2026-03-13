@@ -6,6 +6,7 @@ import PollCreator from './PollComponents/PollCreator';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette } from 'lucide-react';
 
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
@@ -653,7 +654,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             <div className="editor-sidebar">
                 <div className="sidebar-header">
                     <h3>Lysbilder</h3>
-                    <Button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</Button>
+                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Legg til</Button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -681,33 +682,39 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                     <div className="toolbar-actions">
                         <Button
                             onClick={handleUndo}
-                            className="toolbar-btn history-btn"
+                            variant="secondary"
+                            size="sm"
+                            className="flex items-center gap-1.5"
                             disabled={undoStack.length <= 1}
                         >
-                            ↶ Angre
+                            <Undo2 className="h-3.5 w-3.5" /> Angre
                         </Button>
                         <Button
                             onClick={handleRedo}
-                            className="toolbar-btn history-btn"
+                            variant="secondary"
+                            size="sm"
+                            className="flex items-center gap-1.5"
                             disabled={!redoStack.length}
                         >
-                            ↷ Gjør om
+                            <Redo2 className="h-3.5 w-3.5" /> Gjør om
                         </Button>
                         <Button
                             onClick={handleSavePresentation}
-                            className="toolbar-btn save-btn"
+                              variant="outline"
+                              size="sm"
+                              className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
                             disabled={isSaving}
                         >
-                            {isSaving ? 'Lagrer...' : '💾 Lagre'}
+                            <Save className="h-3.5 w-3.5" /> {isSaving ? 'Lagrer...' : 'Lagre'}
                         </Button>
-                        <Button onClick={addTitle} className="toolbar-btn">📝 Tittel</Button>
-                        <Button onClick={addText} className="toolbar-btn">Aa Tekst</Button>
-                        <Button onClick={addImage} className="toolbar-btn">🖼️ Bilde</Button>
-                        <Button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rektangel</Button>
-                        <Button onClick={() => addShape('circle')} className="toolbar-btn">● Sirkel</Button>
-                        <Button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Slett</Button>
-                        <Label className="toolbar-btn color-label">
-                            🎨 Bakgrunn
+                        <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
+                        <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
+                        <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
+                        <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
+                        <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
+                        <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
+                        <Label className="flex items-center gap-2 px-3 py-1.5 border border-input rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
+                            <Palette className="h-3.5 w-3.5" /> Bakgrunn
                             <Input
                                 type="color"
                                 value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}

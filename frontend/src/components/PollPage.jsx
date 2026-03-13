@@ -4,6 +4,7 @@ import PollViewer from './PollComponents/PollViewer'
 import api from '../services/api'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { PlusCircle, List, ArrowLeft, Trash2 } from 'lucide-react'
 
 const PollPage = ({ onNavigate, user }) => {
   const [activeTab, setActiveTab] = useState('create')
@@ -74,16 +75,17 @@ const PollPage = ({ onNavigate, user }) => {
         <div className='flex flex-wrap gap-2'>
           <Button
             variant={activeTab === 'create' ? 'default' : 'outline'}
+            className="flex items-center gap-1.5"
             onClick={() => setActiveTab('create')}
           >
-            Opprett avstemning
+            <PlusCircle className="h-4 w-4" /> Opprett avstemning
           </Button>
-          <Button variant={activeTab === 'view' ? 'default' : 'outline'} onClick={() => setActiveTab('view')}>
-            Vis avstemninger ({polls.length})
+          <Button variant={activeTab === 'view' ? 'default' : 'outline'} className="flex items-center gap-1.5" onClick={() => setActiveTab('view')}>
+            <List className="h-4 w-4" /> Vis avstemninger ({polls.length})
           </Button>
           {onNavigate && (
-            <Button className='ml-auto' variant='ghost' onClick={() => onNavigate('home')}>
-              Tilbake
+            <Button className='ml-auto flex items-center gap-1.5' variant='ghost' onClick={() => onNavigate('home')}>
+              <ArrowLeft className="h-4 w-4" /> Tilbake
             </Button>
           )}
         </div>
@@ -110,8 +112,8 @@ const PollPage = ({ onNavigate, user }) => {
               <Card key={poll.id} className='mx-auto w-full max-w-3xl border-border/70'>
                 <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-2'>
                   <CardTitle className='text-base'>{poll.question}</CardTitle>
-                  <Button size='sm' variant='destructive' onClick={() => handleDeletePoll(poll.id)}>
-                    Slett
+                    <Button size='sm' variant='outline' className='flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors' onClick={() => handleDeletePoll(poll.id)}>
+                      <Trash2 className="h-3.5 w-3.5" /> Slett
                   </Button>
                 </CardHeader>
                 <CardContent>

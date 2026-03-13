@@ -3,6 +3,7 @@ import api from '../services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { LogIn, UserPlus, Users } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -112,7 +113,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-2 mt-2">
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full flex items-center gap-2" disabled={isLoading}>
+                {isLogin && !isLoading && <LogIn className="h-4 w-4" />}
+                {!isLogin && !isLoading && <UserPlus className="h-4 w-4" />}
                 {isLoading ? 'Vennligst vent...' : (isLogin ? 'Logg inn' : 'Registrer deg')}
               </Button>
               <Button 
@@ -148,7 +151,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" variant="outline" disabled={isLoading}>
+                <Button type="submit" className="w-full flex items-center gap-2" variant="outline" disabled={isLoading}>
+                  {!isLoading && <Users className="h-4 w-4" />}
                   {isLoading ? 'Blir med...' : 'Bli med i økten'}
                 </Button>
               </CardFooter>

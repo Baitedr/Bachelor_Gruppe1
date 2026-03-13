@@ -7,6 +7,7 @@ import PresentationEditor from './components/PresentationEditor'
 import SessionLobby from './components/SessionLobby'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { MonitorPlay, Pencil, Trash2, LogOut, RotateCcw, Home, Plus, Save, X } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -542,10 +543,12 @@ function App() {
           <div className='ml-auto flex flex-wrap items-center gap-2'>
             {currentPage !== 'home' && (
               <Button onClick={handleGoHome} variant='outline' size='sm'>
+                <Home className="mr-2 h-4 w-4" />
                 Hjem
               </Button>
             )}
-            <Button onClick={handleLogout} variant='destructive' size='sm'>
+            <Button onClick={handleLogout} variant='outline' size='sm' className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'>
+              <LogOut className="mr-2 h-4 w-4" />
               Logg ut
             </Button>
           </div>
@@ -560,8 +563,18 @@ function App() {
                 <CardTitle>Dine presentasjoner</CardTitle>
                 <CardDescription>Opprett, rediger eller start en live-økt.</CardDescription>
               </div>
-              <Button onClick={handleCreatePresentation} disabled={isCreatingPresentation}>
-                {isCreatingPresentation ? 'Setter sammen...' : 'Ny presentasjon'}
+              <Button 
+                onClick={handleCreatePresentation} 
+                disabled={isCreatingPresentation}
+                variant="outline"
+                className="bg-primary/10 text-primary border-primary/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
+                >
+                  {isCreatingPresentation ? 'Setter sammen...' : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Ny presentasjon
+                    </>
+                  )}
               </Button>
             </CardHeader>
 
@@ -614,24 +627,31 @@ function App() {
                           <Button
                             size='sm'
                             variant='outline'
+                            className='flex items-center justify-center gap-1.5 hover:bg-accent hover:text-accent-foreground'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleOpenPresentation(presentation.id)}
                           >
+                            <Pencil className="h-3.5 w-3.5" />
                             Rediger
                           </Button>
                           <Button
                             size='sm'
+                            variant='outline'
+                            className='flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleStartLive(presentation.id)}
                           >
+                            <MonitorPlay className="h-3.5 w-3.5" />
                             Start live
                           </Button>
                           <Button
                             size='sm'
-                            variant='destructive'
+                            variant='outline'
+                            className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleDeletePresentation(presentation.id)}
                           >
+                            <Trash2 className="h-3.5 w-3.5" />
                             Slett
                           </Button>
                         </div>
@@ -662,15 +682,19 @@ function App() {
                             <Button
                               size='sm'
                               variant='outline'
+                              className='flex items-center gap-1.5'
                               onClick={() => handleRestorePresentation(trashedItem.id)}
                             >
+                              <RotateCcw className="h-3.5 w-3.5" />
                               Gjenopprett
                             </Button>
                             <Button
                               size='sm'
                               variant='destructive'
+                              className='flex items-center gap-1.5'
                               onClick={() => handleDeletePermanently(trashedItem.id)}
                             >
+                              <Trash2 className="h-3.5 w-3.5" />
                               Slett for alltid
                             </Button>
                           </div>
@@ -766,13 +790,21 @@ function App() {
             </CardHeader>
             <CardContent className='flex justify-end gap-2'>
               <Button
-                variant='destructive'
+                variant='outline'
                 onClick={handleDiscardAndGoHome}
                 disabled={isSavingPresentation || isDiscardingPresentation}
+                className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
               >
+                <X className="h-4 w-4" />
                 {isDiscardingPresentation ? 'Forkaster...' : 'Forkast'}
               </Button>
-              <Button onClick={handleSaveAndGoHome} disabled={isSavingPresentation}>
+              <Button
+                variant='outline'
+                onClick={handleSaveAndGoHome}
+                disabled={isSavingPresentation}
+                className='flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+              >
+                <Save className="h-4 w-4" />
                 {isSavingPresentation ? 'Lagrer...' : 'Lagre'}
               </Button>
             </CardContent>
@@ -790,10 +822,15 @@ function App() {
               </CardDescription>
             </CardHeader>
             <CardContent className='flex justify-end gap-2'>
-              <Button variant='ghost' onClick={() => setPermanentDeleteDialog(null)}>
+              <Button variant='outline' onClick={() => setPermanentDeleteDialog(null)}>
                 Avbryt
               </Button>
-              <Button variant='destructive' onClick={confirmDeletePermanently}>
+              <Button 
+                variant='outline' 
+                onClick={confirmDeletePermanently}
+                className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+              >
+                <Trash2 className="h-4 w-4" />
                 Ja, slett
               </Button>
             </CardContent>
