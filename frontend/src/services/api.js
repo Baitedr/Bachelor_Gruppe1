@@ -5,13 +5,13 @@ const TOKEN_KEY = 'auth_token'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000, // Extended from 10s to 15s to account for cold DB connections (~1.8s)
+  timeout: 15000, // Utvidet fra 10s til 15s for å ta høyde for kalde DB-tilkoblinger (~1.8s)
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Retry logic for auth endpoints under load
+// Prøv på nytt-logikk for autentiseringsendepunkter under belastning
 const axiosRetry = async (axiosFunc, maxRetries = 2) => {
   let lastError
   for (let i = 0; i <= maxRetries; i++) {
@@ -19,7 +19,7 @@ const axiosRetry = async (axiosFunc, maxRetries = 2) => {
       return await axiosFunc()
     } catch (error) {
       lastError = error
-      // Retry only on timeout, connection errors, or 5xx status codes
+      // Prøv på nytt bare ved tidsavbrudd, tilkoblingsfeil eller 5xx-statuskoder
       const isRetryable =
         error.code === 'ECONNABORTED' ||
         error.code === 'ENOTFOUND' ||
@@ -190,7 +190,7 @@ const api = {
       () => apiClient.post('/sessions/guest_join', { code }),
       1
     )
-    // Store the guest token so WebSocket + joinPresentation calls work
+    // Lagre gjestetoken slik at WebSocket + joinPresentation-kall fungerer
     setToken(response.data?.token)
     return response.data
   },

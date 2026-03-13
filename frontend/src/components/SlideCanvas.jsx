@@ -61,7 +61,7 @@ function SlideCanvas({ slide, onUpdate }) {
 
       <div className="slide-properties">
         <label>
-          Background Color:
+          Bakgrunnsfarge:
           <input
             type="color"
             value={slide.backgroundColor}

@@ -41,9 +41,9 @@ function App() {
   }
 
   const toRestorablePresentationPayload = (presentation) => ({
-    title: presentation?.title || 'Recovered Presentation',
+    title: presentation?.title || 'Gjenopprettet presentasjon', // Recovered Presentation
     slides: (presentation?.slides || []).map((slide, index) => ({
-      title: slide?.title || `Slide ${index + 1}`,
+      title: slide?.title || `Lysbilde ${index + 1}`, // Slide
       content: slide?.content || '',
       backgroundColor: slide?.backgroundColor || '#ffffff',
       fabricData: slide?.fabricData || null,
@@ -121,7 +121,7 @@ function App() {
       setApiStatus(data.status)
     } catch (err) {
       setApiStatus('error')
-      console.error('API health check failed:', err)
+      console.error('API helsesjekk feilet:', err) // API health check failed
     }
   }
 
@@ -132,19 +132,19 @@ function App() {
       setPresentations(data.presentations || [])
       setPresentationsError(null)
     } catch (err) {
-      setPresentationsError('Failed to load presentations')
+      setPresentationsError('Kunne ikke laste presentasjoner') // Failed to load presentations
       setPresentations([])
-      console.error('Presentations fetch failed:', err)
+      console.error('Kunne ikke laste presentasjoner:', err)
     } finally {
       setPresentationsLoading(false)
     }
   }
 
-  const createBlankPresentationPayload = (title = 'Untitled Presentation') => ({
+  const createBlankPresentationPayload = (title = 'Uten navn') => ({ // Untitled Presentation
     title,
     slides: [
       {
-        title: 'Slide 1',
+        title: 'Lysbilde 1', // Slide 1
         content: '',
         backgroundColor: '#ffffff',
         fabricData: null,
@@ -154,7 +154,7 @@ function App() {
 
   const handleCreatePresentation = async () => {
     try {
-      const defaultTitle = `Presentation ${presentations.length + 1}`
+      const defaultTitle = `Presentasjon ${presentations.length + 1}` // Presentation
       const data = await api.createPresentation(createBlankPresentationPayload(defaultTitle))
       setActivePresentation(data.presentation)
       setIsNewPresentationSession(true)
@@ -162,8 +162,8 @@ function App() {
       setCurrentPage('editor')
       await loadPresentations()
     } catch (err) {
-      setPresentationsError('Failed to create presentation')
-      console.error('Create presentation failed:', err)
+      setPresentationsError('Kunne ikke opprette presentasjon') // Failed to create presentation
+      console.error('Opprettelse av presentasjon feilet:', err)
     }
   }
 
@@ -175,8 +175,8 @@ function App() {
       setHasSavedCurrentSession(false)
       setCurrentPage('editor')
     } catch (err) {
-      setPresentationsError('Failed to open presentation')
-      console.error('Open presentation failed:', err)
+      setPresentationsError('Kunne ikke åpne presentasjon') // Failed to open presentation
+      console.error('Åpning av presentasjon feilet:', err)
     }
   }
 
@@ -223,7 +223,7 @@ function App() {
       setTrashedPresentations((prev) => [trashedItem, ...prev])
       setDeleteUndoToast({
         trashId,
-        title: restorablePresentation?.title || 'Presentation',
+        title: restorablePresentation?.title || 'Presentasjon', // Presentation
       })
 
       clearUndoToastTimer()
@@ -246,8 +246,8 @@ function App() {
         delete next[presentationId]
         return next
       })
-      setPresentationsError('Failed to delete presentation')
-      console.error('Delete presentation failed:', err)
+      setPresentationsError('Kunne ikke slette presentasjon') // Failed to delete presentation
+      console.error('Sletting av presentasjon feilet:', err)
     }
   }
 
@@ -269,8 +269,8 @@ function App() {
       await loadPresentations()
       setPresentationsError(null)
     } catch (err) {
-      setPresentationsError('Failed to restore presentation')
-      console.error('Restore presentation failed:', err)
+      setPresentationsError('Kunne ikke gjenopprette presentasjon') // Failed to restore presentation
+      console.error('Gjenoppretting av presentasjon feilet:', err)
     }
   }
 
@@ -278,9 +278,9 @@ function App() {
     const trashedItem = trashedPresentations.find((item) => item.id === trashId)
     if (!trashedItem) return
 
-    const presentationTitle = trashedItem.presentation?.title || 'this presentation'
+    const presentationTitle = trashedItem.presentation?.title || 'denne presentasjonen' // this presentation
     const shouldDelete = window.confirm(
-      `Permanently delete "${presentationTitle}"? This cannot be undone.`
+      `Slett "${presentationTitle}" permanent? Dette kan ikke angres.` // Permanently delete "${presentationTitle}"? This cannot be undone.
     )
 
     if (!shouldDelete) return
@@ -310,7 +310,7 @@ function App() {
       setLiveJoinCode(data.join_code)
       setCurrentPage('lobby')
     } catch (err) {
-      console.error('Failed to start live session', err)
+      console.error('Kunne ikke starte live-økt', err) // Failed to start live session
     }
   }
 
@@ -362,8 +362,8 @@ function App() {
       setIsExitEditorDialogOpen(false)
       setCurrentPage('home')
     } catch (err) {
-      setPresentationsError('Failed to discard presentation')
-      console.error('Discard presentation failed:', err)
+      setPresentationsError('Kunne ikke forkaste presentasjonen') // Failed to discard presentation
+      console.error('Kunne ikke forkaste presentasjonen:', err)
     } finally {
       setIsDiscardingPresentation(false)
     }
@@ -380,7 +380,7 @@ function App() {
   }
 
   if (isAuthChecking) {
-    return <div className="App">Loading...</div>
+    return <div className="App">Laster...</div> // Loading...
   }
 
   // If not logged in, always show login page (mobile users log in then are redirected to phoneinteraction)
@@ -436,7 +436,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          {currentPage === 'home' ? '→ Go to Editor' : '← Back to Home'}
+          {currentPage === 'home' ? '→ Gå til redigering' : '← Tilbake til hjem'}
         </button>
         <button 
           onClick={() => setCurrentPage('polls')}
@@ -450,7 +450,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          → Polls
+          → Avstemninger
         </button>
         <button 
           onClick={handleLogout}
@@ -464,7 +464,7 @@ function App() {
             fontWeight: '600',
           }}
         >
-          Logout
+          Logg ut
         </button>
       </nav>
 
@@ -474,23 +474,23 @@ function App() {
             <h1>ProSlides</h1>
             <p>Lag eller rediger presentasjonene dine</p>
             <p style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-              Logged in as: {user?.email}
+              Logget inn som: {user?.email}
             </p>
           </header>
 
           <main>
             <section className="slides-list-section">
-              <h2>Recent presentations</h2>
+              <h2>Nylige presentasjoner</h2>
               <div className="home-actions">
-                <button onClick={handleCreatePresentation}>+ New presentation</button>
+                <button onClick={handleCreatePresentation}>+ Ny presentasjon</button>
               </div>
 
               {presentationsError && <p className="error">{presentationsError}</p>}
 
               {presentationsLoading ? (
-                <p>Loading presentations...</p>
+                <p>Laster presentasjoner...</p>
               ) : presentations.length === 0 ? (
-                <div className="empty-state">No presentations yet.</div>
+                <div className="empty-state">Ingen presentasjoner ennå.</div>
               ) : (
                 <div className="item-list">
                   {presentations.map((presentation) => (
@@ -509,23 +509,23 @@ function App() {
                           {presentation.first_slide?.previewImage ? (
                             <img
                               src={presentation.first_slide.previewImage}
-                              alt={`${presentation.title} first slide preview`}
+                              alt={`${presentation.title} første lysbilde forhåndsvisning`}
                               className="recent-slide-image"
                             />
                           ) : (
                             <>
                               <div className="recent-slide-title">
-                                {presentation.first_slide?.title || 'Slide 1'}
+                                {presentation.first_slide?.title || 'Lysbilde 1'}
                               </div>
                               <div className="recent-slide-content">
-                                {presentation.first_slide?.content || 'No content yet'}
+                                {presentation.first_slide?.content || 'Inget innhold ennå'}
                               </div>
                             </>
                           )}
                         </div>
                         <h3>{presentation.title}</h3>
                         <p className="recent-meta">
-                          {presentation.slide_count} slide(s) • {new Date(presentation.created_at).toLocaleString()}
+                          {presentation.slide_count} lysbilde(r) • {new Date(presentation.created_at).toLocaleString()}
                         </p>
                       </div>
                       <div className="recent-actions">
@@ -534,7 +534,7 @@ function App() {
                           onClick={() => handleOpenPresentation(presentation.id)}
                           disabled={deletingPresentationIds[presentation.id]}
                         >
-                          Edit
+                          Rediger
                         </button>
                         <button
                           className="recent-action-btn"
@@ -549,7 +549,7 @@ function App() {
                           onClick={() => handleDeletePresentation(presentation.id)}
                           disabled={deletingPresentationIds[presentation.id]}
                         >
-                          Delete
+                          Slett
                         </button>
                       </div>
                     </div>
@@ -558,17 +558,17 @@ function App() {
               )}
 
               <div className="trash-section">
-                <h3>Trash Bin</h3>
+                <h3>Papirkurv</h3>
                 {trashedPresentations.length === 0 ? (
-                  <p className="trash-empty">Deleted presentations appear here.</p>
+                  <p className="trash-empty">Slettede presentasjoner vises her.</p>
                 ) : (
                   <div className="trash-list">
                     {trashedPresentations.map((trashedItem) => (
                       <div key={trashedItem.id} className="trash-item">
                         <div>
-                          <strong>{trashedItem.presentation?.title || 'Untitled Presentation'}</strong>
+                          <strong>{trashedItem.presentation?.title || 'Uten navn'}</strong>
                           <p className="trash-meta">
-                            Deleted {new Date(trashedItem.deletedAt).toLocaleTimeString()}
+                            Slettet {new Date(trashedItem.deletedAt).toLocaleTimeString()}
                           </p>
                         </div>
                         <div className="trash-actions">
@@ -576,13 +576,13 @@ function App() {
                             className="recent-action-btn restore-btn"
                             onClick={() => handleRestorePresentation(trashedItem.id)}
                           >
-                            Restore
+                            Gjenopprett
                           </button>
                           <button
                             className="recent-action-btn permanent-delete-btn"
                             onClick={() => handleDeletePermanently(trashedItem.id)}
                           >
-                            Delete Forever
+                            Slett permanent
                           </button>
                         </div>
                       </div>
@@ -595,16 +595,16 @@ function App() {
 
           {deleteUndoToast && (
             <div className="delete-undo-toast" role="status" aria-live="polite">
-              <span>Deleted “{deleteUndoToast.title}”.</span>
+              <span>Slettet “{deleteUndoToast.title}”.</span>
               <div className="delete-undo-actions">
                 <button
                   className="recent-action-btn undo-btn"
                   onClick={() => handleRestorePresentation(deleteUndoToast.trashId)}
                 >
-                  Undo
+                  Angre
                 </button>
                 <button className="recent-action-btn dismiss-btn" onClick={dismissDeleteUndoToast}>
-                  Dismiss
+                  Lukk
                 </button>
               </div>
             </div>
@@ -630,12 +630,12 @@ function App() {
               alignItems: 'center',
               gap: '1rem'
             }}>
-              <span>Join code: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
+              <span>Lively-kode: <strong style={{ fontSize: '1.25rem', letterSpacing: '0.1em' }}>{liveJoinCode}</strong></span>
               <button
                 onClick={() => { setCurrentPage('home'); setLiveJoinCode(null); setLivePresentationId(null) }}
                 style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', cursor: 'pointer' }}
               >
-                End Session
+                Avslutt økt
               </button>
             </div>
           )}
@@ -659,10 +659,10 @@ function App() {
       )}
 
       {isExitEditorDialogOpen && (
-        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Leave editor">
+        <div className="editor-exit-dialog-overlay" role="dialog" aria-modal="true" aria-label="Forlat redigeringsprogrammet">
           <div className="editor-exit-dialog">
-            <h3>Leave editor?</h3>
-            <p>Do you want to save your changes before going home?</p>
+            <h3>Forlat redigeringsprogrammet?</h3>
+            <p>Vil du lagre endringene før du returnerer hjem?</p>
             <div className="editor-exit-dialog-actions">
               <button
                 type="button"
@@ -670,7 +670,7 @@ function App() {
                 onClick={handleDiscardAndGoHome}
                   disabled={isSavingPresentation || isDiscardingPresentation}
               >
-                  {isDiscardingPresentation ? 'Discarding...' : 'Discard'}
+                  {isDiscardingPresentation ? 'Forkaster...' : 'Forkast'}
               </button>
               <button
                 type="button"
@@ -678,7 +678,7 @@ function App() {
                 onClick={handleSaveAndGoHome}
                 disabled={isSavingPresentation}
               >
-                {isSavingPresentation ? 'Saving...' : 'Save'}
+                {isSavingPresentation ? 'Lagrer...' : 'Lagre'}
               </button>
             </div>
           </div>

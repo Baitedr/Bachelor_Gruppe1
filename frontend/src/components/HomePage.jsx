@@ -4,7 +4,7 @@ export default function HomePage() {
     return (
         <div classname="home-page">
             <h1>Velkommen til ProSlides </h1>
-            <p>Your content here</p>
+            <p>Ditt innhold her</p>
             </div>
     )
 }

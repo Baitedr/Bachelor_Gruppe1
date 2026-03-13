@@ -21,7 +21,7 @@ export const usePresentation = (presentationid, token) => {
                 presentation_id: presentationid },
         {
             received(data) {
-              console.log('Received', data);
+              console.log('Mottatt', data);
 
               switch(data.type) {
                 case 'slide_change':

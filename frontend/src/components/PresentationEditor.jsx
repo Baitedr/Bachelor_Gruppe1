@@ -5,7 +5,7 @@ import '../CSScomponents/PresentationEditor.css';
 
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
-    title: 'Slide 1',
+    title: 'Lysbilde 1', // Slide 1
     content: '',
     backgroundColor: '#ffffff',
     fabricData: null,
@@ -18,7 +18,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [slides, setSlides] = useState([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
     const [presentationId, setPresentationId] = useState(null);
-    const [presentationTitle, setPresentationTitle] = useState('Untitled Presentation');
+    const [presentationTitle, setPresentationTitle] = useState('Uten navn'); // Untitled Presentation
     const [saveError, setSaveError] = useState(null);
     const [lastSavedAt, setLastSavedAt] = useState(null);
     const [undoStack, setUndoStack] = useState([]);
@@ -80,7 +80,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     useEffect(() => {
         if (!presentation) {
             setPresentationId(null);
-            setPresentationTitle('Untitled Presentation');
+            setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
             setCurrentSlideIndex(0);
             return;
@@ -88,14 +88,14 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
         const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
             id: slide.id || `local-${Date.now()}-${index}`,
-            title: slide.title || `Slide ${index + 1}`,
+            title: slide.title || `Lysbilde ${index + 1}`,
             content: slide.content || '',
             backgroundColor: slide.backgroundColor || '#ffffff',
             fabricData: slide.fabricData || null,
         }));
 
         setPresentationId(presentation.id || null);
-        setPresentationTitle(presentation.title || 'Untitled Presentation');
+        setPresentationTitle(presentation.title || 'Uten navn');
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
@@ -262,7 +262,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         const currentSlides = saveCurrentSlide();
         const newSlide = {
             id: `local-${Date.now()}`,
-            title: `Slide ${currentSlides.length + 1}`,
+            title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
             backgroundColor: '#ffffff',
             fabricData: null
@@ -306,7 +306,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
-        const text = new IText('Click to edit', {
+        const text = new IText('Klikk for å redigere', { // Click to edit
             left: 100,
             top: 100,
             fontSize: 32,
@@ -324,7 +324,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
-        const text = new IText('Slide Title', {
+        const text = new IText('Tittel', { // Slide Title
             left: 50,
             top: 50,
             fontSize: 48,
@@ -470,7 +470,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             const savedPresentation = await onSavePresentation({
                 id: presentationId,
-                title: presentationTitle.trim() || 'Untitled Presentation',
+                title: presentationTitle.trim() || 'Uten navn',
                 slides: slidesWithPreview,
             });
 
@@ -494,8 +494,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         <div className="slide-editor">
             <div className="editor-sidebar">
                 <div className="sidebar-header">
-                    <h3>Slides</h3>
-                    <button onClick={addSlide} className="add-slide-btn">+ Add Slide</button>
+                    <h3>Lysbilder</h3>
+                    <button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -514,10 +514,10 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             className="presentation-title-input"
                             value={presentationTitle}
                             onChange={(e) => setPresentationTitle(e.target.value)}
-                            placeholder="Presentation title"
+                            placeholder="Presentasjonstittel"
                         />
                         <span className="slide-counter">
-                            Slide {currentSlideIndex + 1} of {slides.length}
+                            Lysbilde {currentSlideIndex + 1} av {slides.length}
                         </span>
                     </div>
                     <div className="toolbar-actions">
@@ -526,30 +526,30 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             className="toolbar-btn history-btn"
                             disabled={undoStack.length <= 1}
                         >
-                            ↶ Undo
+                            ↶ Angre
                         </button>
                         <button
                             onClick={handleRedo}
                             className="toolbar-btn history-btn"
                             disabled={!redoStack.length}
                         >
-                            ↷ Redo
+                            ↷ Gjør om
                         </button>
                         <button
                             onClick={handleSavePresentation}
                             className="toolbar-btn save-btn"
                             disabled={isSaving}
                         >
-                            {isSaving ? 'Saving...' : '💾 Save'}
+                            {isSaving ? 'Lagrer...' : '💾 Lagre'}
                         </button>
-                        <button onClick={addTitle} className="toolbar-btn">📝 Title</button>
-                        <button onClick={addText} className="toolbar-btn">Aa Text</button>
-                        <button onClick={addImage} className="toolbar-btn">🖼️ Image</button>
-                        <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rectangle</button>
-                        <button onClick={() => addShape('circle')} className="toolbar-btn">● Circle</button>
-                        <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Delete</button>
+                        <button onClick={addTitle} className="toolbar-btn">📝 Tittel</button>
+                        <button onClick={addText} className="toolbar-btn">Aa Tekst</button>
+                        <button onClick={addImage} className="toolbar-btn">🖼️ Bilde</button>
+                        <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rektangel</button>
+                        <button onClick={() => addShape('circle')} className="toolbar-btn">● Sirkel</button>
+                        <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Slett</button>
                         <label className="toolbar-btn color-label">
-                            🎨 Background
+                            🎨 Bakgrunn
                             <input
                                 type="color"
                                 value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
@@ -561,7 +561,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 {saveError && <div className="save-status error">{saveError}</div>}
                 {lastSavedAt && !saveError && (
                     <div className="save-status success">
-                        Last saved {lastSavedAt.toLocaleTimeString()}
+                        Sist lagret {lastSavedAt.toLocaleTimeString()}
                     </div>
                 )}
                 <div className="canvas-container">

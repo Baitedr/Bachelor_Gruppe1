@@ -7,7 +7,7 @@ function SlideEditor() {
     const [slides, setSlides] = useState([
         {
             id: 1,
-            title: 'Slide 1',
+            title: 'Lysbilde 1', // Slide 1
             content: 'Dette er den første slide.',
             backgroundColor: '#ffffff',
         }
@@ -17,7 +17,7 @@ function SlideEditor() {
     const addSlide = () => {
         const newSlide = { 
             id: Date.now(),
-            title: 'Ny Slide',
+            title: 'Nytt lysbilde', // Ny Slide -> Nytt lysbilde
             content: 'Klikk for å redigere innhold.',
             backgroundColor: '#ffffff',
         }
@@ -27,7 +27,7 @@ function SlideEditor() {
 
     const deleteSlide = (index) => {
         if (slides.length === 1) {
-            alert('Du må ha minst èn slide')
+            alert('Du må ha minst et lysbilde') // én slide -> et lysbilde
             return
         }
         const newSlides = slides.filter((_, i) => i !== index)
@@ -60,8 +60,8 @@ function SlideEditor() {
         <div className="slide-editor">
             <div className="editor-sidebar">
                 <div className="sidebar-header">
-                    <h3>Slides</h3>
-                    <button onClick={addSlide} className="add-slide-btn">+ Add Slide</button>
+                    <h3>Lysbilder</h3>
+                    <button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -74,7 +74,7 @@ function SlideEditor() {
             <div className="editor-main">
                 <div className="editor-toolbar">
                     <span className="slide-counter">
-                        Slide {currentSlideIndex + 1} of {slides.length}
+                        Lysbilde {currentSlideIndex + 1} av {slides.length}
                     </span>
                 </div>
                 <SlideCanvas

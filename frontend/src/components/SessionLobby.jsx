@@ -17,7 +17,7 @@ useEffect(() => {
 
 return (
     <div style={{padding: '3rem', textAlign: 'center'}}>
-        <h2>Session Lobby</h2>¨
+        <h2>Øktlobby</h2>
 
         {isPresenter && joinCode && (
             <div style={{margin: '2rem 0'}}>
