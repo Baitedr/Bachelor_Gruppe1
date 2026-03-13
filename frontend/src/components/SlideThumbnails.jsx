@@ -1,5 +1,6 @@
 import React from 'react'
 import '../CSScomponents/SlideThumbnails.css'
+import { Button } from './ui/button'
 
 const getSlidePreviewContent = (slide) => {
   if (!slide) return 'Inget innhold ennå' // No content yet
@@ -63,7 +64,7 @@ function SlideThumbnails({
           <div className="thumbnail-footer">
             <span className="thumbnail-number">{index + 1}</span>
             <div className="thumbnail-actions">
-              <button
+              <Button
                 className="thumbnail-btn duplicate-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -72,8 +73,8 @@ function SlideThumbnails({
                 title="Dupliser slide"
               >
                 📋
-              </button>
-              <button
+              </Button>
+              <Button
                 className="thumbnail-btn delete-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -82,7 +83,7 @@ function SlideThumbnails({
                 title="Slett slide"
               >
                 🗑️
-              </button>
+              </Button>
             </div>
           </div>
         </div>

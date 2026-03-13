@@ -1,130 +1,133 @@
-import React, { useState, useEffect } from 'react';
-import PollCreator from './PollComponents/PollCreator';
-import PollViewer from './PollComponents/PollViewer';
-import api from '../services/api';
-import '../CSScomponents/PollPage.css';
+import React, { useEffect, useState } from 'react'
+import PollCreator from './PollComponents/PollCreator'
+import PollViewer from './PollComponents/PollViewer'
+import api from '../services/api'
+import { Button } from './ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 
 const PollPage = ({ onNavigate, user }) => {
-  const [activeTab, setActiveTab] = useState('create');
-  const [polls, setPolls] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('create')
+  const [polls, setPolls] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  // Load polls from backend on mount
   useEffect(() => {
-    fetchPolls();
-  }, []);
+    fetchPolls()
+  }, [])
 
   const fetchPolls = async () => {
     try {
-      setIsLoading(true);
-      const data = await api.getPolls();
-      setPolls(data.polls || []);
-      setError(null);
-    } catch (err) {
-      setError('Kunne ikke laste inn avstemninger'); // Failed to load polls
+      setIsLoading(true)
+      const data = await api.getPolls()
+      setPolls(data.polls || [])
+      setError(null)
+    } catch {
+      setError('Kunne ikke laste inn avstemninger')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleSavePoll = async (pollData) => {
     try {
       const data = await api.createPoll({
         question: pollData.question,
-        options: pollData.options.map(opt => opt.text),
+        options: pollData.options.map((option) => option.text),
         poll_type: 'multiple_choice',
-      });
-      setPolls(prev => [...prev, data.poll]);
-      setActiveTab('view');
-      setError(null);
-    } catch (err) {
-      setError('Kunne ikke lagre avstemning'); // Failed to save poll
+      })
+      setPolls((previous) => [...previous, data.poll])
+      setActiveTab('view')
+      setError(null)
+    } catch {
+      setError('Kunne ikke lagre avstemning')
     }
-  };
+  }
 
   const handleVote = async (pollId, optionId) => {
     try {
-      const data = await api.votePoll(pollId, optionId);
-      // Replace poll with updated vote counts from backend
-      setPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
-      setError(null);
+      const data = await api.votePoll(pollId, optionId)
+      setPolls((previous) => previous.map((poll) => (poll.id === pollId ? data.poll : poll)))
+      setError(null)
     } catch (err) {
-      setError(err?.response?.data?.error || 'Kunne ikke stemme'); // Failed to vote
+      setError(err?.response?.data?.error || 'Kunne ikke stemme')
     }
-  };
+  }
 
   const handleDeletePoll = async (pollId) => {
     try {
-      await api.deletePoll(pollId);
-      setPolls(prev => prev.filter(p => p.id !== pollId));
-      setError(null);
-    } catch (err) {
-      setError('Kunne ikke slette avstemning'); // Failed to delete poll
+      await api.deletePoll(pollId)
+      setPolls((previous) => previous.filter((poll) => poll.id !== pollId))
+      setError(null)
+    } catch {
+      setError('Kunne ikke slette avstemning')
     }
-  };
+  }
 
   return (
-    <div className="poll-page">
-      <div className="poll-container">
-        <h1>Avstemninger</h1>
+    <Card className='mx-auto w-full max-w-4xl'>
+      <CardHeader className='space-y-4'>
+        <div>
+          <CardTitle>Avstemninger</CardTitle>
+          <CardDescription>Lag nye polls eller vis resultater fra eksisterende.</CardDescription>
+        </div>
 
+        <div className='flex flex-wrap gap-2'>
+          <Button
+            variant={activeTab === 'create' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('create')}
+          >
+            Opprett avstemning
+          </Button>
+          <Button variant={activeTab === 'view' ? 'default' : 'outline'} onClick={() => setActiveTab('view')}>
+            Vis avstemninger ({polls.length})
+          </Button>
+          {onNavigate && (
+            <Button className='ml-auto' variant='ghost' onClick={() => onNavigate('home')}>
+              Tilbake
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className='space-y-4'>
         {error && (
-          <div style={{ color: '#ef4444', marginBottom: '1rem', padding: '0.75rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
+          <div className='rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
             {error}
           </div>
         )}
 
-        <div className="poll-tabs">
-          <button
-            className={activeTab === 'create' ? 'active' : ''}
-            onClick={() => setActiveTab('create')}
-          >
-            Opprett avstemning 
-          </button>
-          <button
-            className={activeTab === 'view' ? 'active' : ''}
-            onClick={() => setActiveTab('view')}
-          >
-            Vis avstemninger ({polls.length})
-          </button>
-        </div>
-
         {activeTab === 'create' ? (
           <PollCreator onSave={handleSavePoll} />
         ) : isLoading ? (
-          <div className="no-polls"><p>Laster avstemninger...</p></div>
+          <p className='text-sm text-muted-foreground'>Laster avstemninger...</p>
+        ) : polls.length === 0 ? (
+          <div className='rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground'>
+            Ingen avstemninger opprettet ennå.
+          </div>
         ) : (
-          <div className="view-polls-section">
-            {polls.length === 0 ? (
-              <div className="no-polls">
-                <p>Ingen avstemninger opprettet ennå. Opprett din første avstemning!</p>
-              </div>
-            ) : (
-              polls.map(poll => (
-                <div key={poll.id} className="poll-card">
-                  <div className="poll-header">
-                    <h3>{poll.question}</h3>
-                    <button
-                      className="delete-poll-btn"
-                      onClick={() => handleDeletePoll(poll.id)}
-                    >
-                      Slett
-                    </button>
-                  </div>
+          <div className='space-y-4'>
+            {polls.map((poll) => (
+              <Card key={poll.id} className='mx-auto w-full max-w-3xl border-border/70'>
+                <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-base'>{poll.question}</CardTitle>
+                  <Button size='sm' variant='destructive' onClick={() => handleDeletePoll(poll.id)}>
+                    Slett
+                  </Button>
+                </CardHeader>
+                <CardContent>
                   <PollViewer
                     pollData={poll}
                     userId={user?.id}
                     onVote={(optionId) => handleVote(poll.id, optionId)}
                   />
-                </div>
-              ))
-            )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-};
+      </CardContent>
+    </Card>
+  )
+}
 
-export default PollPage;
+export default PollPage

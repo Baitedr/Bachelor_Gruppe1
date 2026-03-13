@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import '../../CSScomponents/PhoneInteraction.css';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 interface JoinStatus {
     type: 'success' | 'error' | null;
@@ -99,8 +102,8 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
                     <h2>Bli med med kode</h2>
 
                     <form className="phone-interaction-join-form" onSubmit={handleJoinInteraction}>
-                        <label htmlFor="liveInteractionCode">Live-kode</label>
-                        <input
+                        <Label htmlFor="liveInteractionCode">Live-kode</Label>
+                        <Input
                             id="liveInteractionCode"
                             type="text"
                             value={joinCode}
@@ -108,9 +111,9 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
                             placeholder="F.eks. LIVE-1234"
                             autoComplete="off"
                         />
-                        <button type="submit" disabled={isJoining}>
+                        <Button type="submit" disabled={isJoining}>
                             {isJoining ? 'Kobler til...' : 'Bli med i live interaction'}
-                        </button>
+                        </Button>
                     </form>
 
                     {joinStatus.type && (

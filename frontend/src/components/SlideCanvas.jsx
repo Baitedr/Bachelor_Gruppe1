@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 import '../CSScomponents/SlideCanvas.css'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Textarea } from './ui/textarea'
 
 function SlideCanvas({ slide, onUpdate }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -24,7 +27,7 @@ function SlideCanvas({ slide, onUpdate }) {
         style={{ backgroundColor: slide.backgroundColor }}
       >
         {isEditingTitle ? (
-          <input
+          <Input
             type="text"
             className="slide-title-input"
             value={slide.title}
@@ -42,7 +45,7 @@ function SlideCanvas({ slide, onUpdate }) {
         )}
 
         {isEditingContent ? (
-          <textarea
+          <Textarea
             className="slide-content-input"
             value={slide.content}
             onChange={handleContentChange}
@@ -60,14 +63,14 @@ function SlideCanvas({ slide, onUpdate }) {
       </div>
 
       <div className="slide-properties">
-        <label>
+        <Label>
           Bakgrunnsfarge:
-          <input
+          <Input
             type="color"
             value={slide.backgroundColor}
             onChange={handleBackgroundColorChange}
           />
-        </label>
+        </Label>
       </div>
     </div>
   )

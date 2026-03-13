@@ -1,10 +1,10 @@
 .poll-creator {
   animation: fadeIn 0.3s;
-  color: white;
+  color: var(--foreground);
 }
 
 .poll-creator h2 {
-  color: white;
+  color: var(--foreground);
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
 }
@@ -17,28 +17,7 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.form-group input {
-  width: 100%;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background-color: rgba(255, 255, 255, 0.96);
-  color: #111827;
-  border-radius: 0;
-  font-size: 1rem;
-  transition: all 0.2s;
-}
-
-.form-group input::placeholder {
-  color: #6b7280;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #ffffff;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+  color: var(--foreground);
 }
 
 .option-input-group {
@@ -53,10 +32,10 @@
 
 .remove-option-btn {
   padding: 0.75rem 1rem;
-  background: rgba(239, 68, 68, 0.16);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 0;
+  background: color-mix(in oklch, var(--destructive) 20%, transparent);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
   cursor: pointer;
   transition: all 0.2s;
   font-weight: 600;
@@ -77,10 +56,10 @@
 .clear-btn,
 .cancel-btn {
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 0;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -89,15 +68,15 @@
 .add-option-btn:hover,
 .clear-btn:hover,
 .cancel-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--accent);
 }
 
 .save-poll-btn {
   padding: 0.75rem 2rem;
-  background: #ffffff;
-  color: #4f46e5;
+  background: var(--primary);
+  color: var(--primary-foreground);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-md, 6px);
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;

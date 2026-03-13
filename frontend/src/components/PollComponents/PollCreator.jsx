@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import '../../CSScomponents//PollCSScomponents/PollCreator.css';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 const PollCreator = ({ initialData = null, onSave, onCancel }) => {
   const [pollQuestion, setPollQuestion] = useState(initialData?.question || '');
@@ -62,8 +65,8 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
       <h2>Opprett avstemning</h2>
       <form onSubmit={handleSave}>
         <div className="form-group">
-          <label>Spørsmål</label>
-          <input
+          <Label>Spørsmål</Label>
+          <Input
             type="text"
             value={pollQuestion}
             onChange={(e) => setPollQuestion(e.target.value)}
@@ -73,10 +76,10 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
         </div>
 
         <div className="form-group">
-          <label>Alternativer</label>
+          <Label>Alternativer</Label>
           {pollOptions.map((option, index) => (
             <div key={index} className="option-input-group">
-              <input
+              <Input
                 type="text"
                 value={option}
                 onChange={(e) => handleOptionChange(index, e.target.value)}
@@ -84,13 +87,13 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
                 maxLength={100}
               />
               {pollOptions.length > 2 && (
-                <button
+                <Button
                   type="button"
                   className="remove-option-btn"
                   onClick={() => handleRemoveOption(index)}
                 >
                   ✕
-                </button>
+                </Button>
               )}
             </div>
           ))}
@@ -98,33 +101,33 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
 
         <div className="form-actions">
           {pollOptions.length < 10 && (
-            <button 
+            <Button 
               type="button" 
               className="add-option-btn"
               onClick={handleAddOption}
             >
               + Legg til alternativ
-            </button>
+            </Button>
           )}
-          <button 
+          <Button 
             type="button" 
             className="clear-btn"
             onClick={handleClear}
           >
             Tøm
-          </button>
+          </Button>
           {onCancel && (
-            <button 
+            <Button 
               type="button" 
               className="cancel-btn"
               onClick={onCancel}
             >
               Avbryt
-            </button>
+            </Button>
           )}
-          <button type="submit" className="save-poll-btn">
+          <Button type="submit" className="save-poll-btn">
             Lagre
-          </button>
+          </Button>
         </div>
       </form>
     </div>

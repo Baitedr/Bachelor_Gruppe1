@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PollResults from './PollResults';
 import '../../CSScomponents/PollCSScomponents/PollViewer.css';
+import { Button } from '../ui/button';
 
 const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
   const [hasVoted, setHasVoted] = useState(showResults);
@@ -60,13 +61,13 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
       {!hasVoted ? (
         <div className="poll-options">
           {pollData.options.map((option, index) => (
-            <button
+            <Button
               key={option.id || index}
               className="poll-option-btn"
               onClick={() => handleVote(option, index)}
             >
               {option.text}
-            </button>
+            </Button>
           ))}
         </div>
       ) : (

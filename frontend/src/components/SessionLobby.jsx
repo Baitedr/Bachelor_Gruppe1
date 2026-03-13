@@ -1,50 +1,57 @@
-import React from 'react';
-import { useEffect } from 'react';
-import { usePresentation } from '../hooks/usePresentation';
+import React, { useEffect } from 'react'
+import { usePresentation } from '../hooks/usePresentation'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 
 const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted }) => {
-const {
-    participantCount,
-    sessionStarted,
-    startSession,
-} = usePresentation(presentationId, localStorage.getItem('auth_token'));
+  const { participantCount, sessionStarted, startSession } = usePresentation(
+    presentationId,
+    localStorage.getItem('auth_token')
+  )
 
-useEffect(() => {
+  useEffect(() => {
     if (sessionStarted) {
-        onSessionStarted();
+      onSessionStarted()
     }
-}, [sessionStarted])
+  }, [sessionStarted, onSessionStarted])
 
-return (
-    <div style={{padding: '3rem', textAlign: 'center'}}>
-        <h2>Øktlobby</h2>
+  return (
+    <Card className='mx-auto w-full max-w-2xl'>
+      <CardHeader className='text-center'>
+        <CardTitle>Øktlobby</CardTitle>
+        <CardDescription>
+          {isPresenter
+            ? 'Vent på at deltakerne blir med, og start deretter presentasjonen.'
+            : 'Venter på at presentatør skal starte økten.'}
+        </CardDescription>
+      </CardHeader>
 
+      <CardContent className='space-y-6 text-center'>
         {isPresenter && joinCode && (
-            <div style={{margin: '2rem 0'}}>
-                <p>del denne koden med publikum:</p>
-                <div style={{ fontSize: '2.5rem', fontWeight: 'bold', letterSpacing: '0.25rem'}}>
-                    {joinCode}
-                </div>
+          <div className='mx-auto w-full max-w-md space-y-3'>
+            <Badge variant='secondary'>Del denne live-koden</Badge>
+            <div className='rounded-xl border border-border bg-muted/40 px-6 py-4'>
+              <p className='font-mono text-3xl font-bold tracking-[0.2em] sm:text-4xl'>{joinCode}</p>
             </div>
+          </div>
         )}
 
-        <div style={{margin: '2rem 0'}}>
-            <p style={{fontSize: '1.25rem'}}>Deltakere i lobbyen: <strong> {participantCount} </strong></p>
+        <div className='mx-auto w-full max-w-sm rounded-xl border border-border bg-muted/30 px-4 py-3'>
+          <p className='text-sm text-muted-foreground'>Deltakere i lobbyen</p>
+          <p className='text-3xl font-semibold'>{participantCount}</p>
         </div>
 
         {isPresenter ? (
-            <button 
-                onClick={startSession}
-                disabled={participantCount === 0}
-                style={{ padding: '0.75rem 2rem', fontSize: '1rem', cursor: 'pointer'}}
-            >
-                Start Presentasjon
-            </button>
+          <Button onClick={startSession} disabled={participantCount === 0} size='lg'>
+            Start presentasjon
+          </Button>
         ) : (
-            <p>Venter på at presentatør skal starte...</p>
+          <p className='text-sm text-muted-foreground'>Venter på at presentatør skal starte...</p>
         )}
-    </div>
-);
-};
+      </CardContent>
+    </Card>
+  )
+}
 
-export default SessionLobby;
+export default SessionLobby

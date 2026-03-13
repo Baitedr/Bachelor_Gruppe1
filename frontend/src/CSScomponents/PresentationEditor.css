@@ -1,46 +1,47 @@
 .slide-editor {
     display: flex;
     height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--background);
     align-items: stretch;
 }
 
 .editor-sidebar {
     width: 290px;
     flex: 0 0 290px;
-    background-color: rgba(255, 255, 255, 0.95);
+    background-color: var(--card);
     display: flex;
     flex-direction: column;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.35);
     height: 100vh;
     overflow-y: auto;
+    border-right: 1px solid var(--border);
 }
 
 .sidebar-header {
     padding: 1.5rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 1px solid var(--border);
 }
 
 .sidebar-header h3 {
     margin: 0 0 1rem 0;
-    color: #1f2937;
+    color: var(--foreground);
     font-size: 1.25rem;
 }   
 
 .add-slide-btn {
     width: 100%;
     padding: 0.75rem;
-    background-color: #667eea;
-    color: white;
+    background-color: var(--primary);
+    color: var(--primary-foreground);
     border: none;
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: opacity 0.2s;
 }
 
 .add-slide-btn:hover {
-    background-color: #5568d3;
+    opacity: 0.9;
 }
 
 .editor-main {
@@ -55,10 +56,11 @@
 }
 
 .editor-toolbar {
-    background-color: rgba(255, 255, 255, 0.95);
+    background-color: var(--card);
+    border: 1px solid var(--border);
     padding: 1rem 1.5rem;
     border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -81,23 +83,24 @@
     max-width: none;
     width: auto;
     padding: 0.55rem 0.8rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 1rem;
-    color: #111827;
+    color: var(--foreground);
+    background: var(--input);
 }
 
 .presentation-title-input:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--primary) 25%, transparent);
 }
 
 .slide-counter {
     display: inline-flex;
     align-items: center;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--foreground);
     font-size: 1.1rem;
     white-space: nowrap;
     line-height: 1;
@@ -116,9 +119,9 @@
     min-height: 40px;
     min-width: 104px;
     padding: 0.6rem 0.9rem;
-    background-color: #667eea;
-    color: white;
-    border: none;
+    background-color: var(--secondary);
+    color: var(--secondary-foreground);
+    border: 1px solid var(--border);
     border-radius: 6px;
     font-weight: 600;
     cursor: pointer;
@@ -127,30 +130,34 @@
 }
 
 .toolbar-btn:disabled {
-    opacity: 0.75;
+    opacity: 0.55;
     cursor: not-allowed;
     transform: none;
 }
 
 .toolbar-btn:hover {
-    background-color: #5568d3;
-    transform: translateY(-2px);
+    background-color: var(--accent);
+    transform: translateY(-1px);
 }
 
 .delete-btn {
-    background-color: #ef4444;
+    background-color: var(--destructive);
+    color: white;
+    border-color: transparent;
 }
 
 .delete-btn:hover {
-    background-color: #dc2626;
+    opacity: 0.9;
 }
 
 .save-btn {
-    background-color: #10b981;
+    background-color: oklch(0.55 0.18 158);
+    color: white;
+    border-color: transparent;
 }
 
 .save-btn:hover {
-    background-color: #059669;
+    opacity: 0.9;
 }
 
 .color-label {
@@ -195,13 +202,13 @@
 }
 
 .save-status.success {
-    background-color: rgba(16, 185, 129, 0.15);
-    color: #065f46;
+    background-color: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
 }
 
 .save-status.error {
-    background-color: rgba(239, 68, 68, 0.12);
-    color: #7f1d1d;
+    background-color: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
 }
 
 .slide-polls-panel {
@@ -210,42 +217,43 @@
     height: 100vh;
     overflow-y: auto;
     box-sizing: border-box;
-    background: #ffffff;
+    background: var(--card);
     padding: 1.25rem;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
-    border-left: 1px solid rgba(226, 232, 240, 0.9);
-    color: #111827;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.35);
+    border-left: 1px solid var(--border);
+    color: var(--foreground);
 }
 
 .slide-polls-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;    /* aligns to the left */
+    align-items: flex-start;
     gap: 0.75rem;
     position: sticky;
     top: 0;
-    background: #ffffff;
+    background: var(--card);
     padding-bottom: 0.75rem;
     margin-bottom: 0.75rem;
     z-index: 1;
+    border-bottom: 1px solid var(--border);
 }
 
 .slide-polls-header h4 {
     margin: 0;
-    color: #111827;
+    color: var(--foreground);
     font-size: 1.05rem;
 }
 
 .slide-polls-header p {
     margin: 0.25rem 0 0;
-    color: #6b7280;
+    color: var(--muted-foreground);
     font-size: 0.9rem;
 }
 
 .slide-polls-add-btn {
     padding: 0.7rem 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--primary);
+    color: var(--primary-foreground);
     border: none;
     border-radius: 8px;
     font-weight: 700;
@@ -256,15 +264,15 @@
 }
 
 .slide-polls-add-btn:hover {
-    opacity: 0.95;
+    opacity: 0.9;
 }
 
 .slide-polls-empty-state {
-    border: 1px dashed #cbd5e1;
+    border: 1px dashed var(--border);
     border-radius: 10px;
     padding: 1rem;
-    background: #f8fafc;
-    color: #475569;
+    background: var(--muted);
+    color: var(--muted-foreground);
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
@@ -280,10 +288,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1rem;
-    background: #f8fafc;
+    background: var(--accent);
 }
 
 .slide-poll-copy {
@@ -301,7 +309,7 @@
 }
 
 .slide-poll-copy strong {
-    color: #111827;
+    color: var(--foreground);
     font-size: 0.98rem;
     line-height: 1.35;
     word-break: break-word;
@@ -309,10 +317,10 @@
 
 .slide-poll-total {
     flex-shrink: 0;
-    color: #6b7280;
+    color: var(--muted-foreground);
     font-size: 0.82rem;
     font-weight: 600;
-    background: #e2e8f0;
+    background: var(--muted);
     padding: 0.2rem 0.5rem;
     border-radius: 999px;
 }
@@ -337,7 +345,7 @@
 }
 
 .slide-poll-option-text {
-    color: #334155;
+    color: var(--foreground);
     font-size: 0.9rem;
     line-height: 1.35;
     word-break: break-word;
@@ -345,7 +353,7 @@
 
 .slide-poll-option-stats {
     flex-shrink: 0;
-    color: #64748b;
+    color: var(--muted-foreground);
     font-size: 0.82rem;
     font-weight: 600;
 }
@@ -353,14 +361,14 @@
 .slide-poll-result-bar {
     width: 100%;
     height: 8px;
-    background: #e2e8f0;
+    background: var(--muted);
     border-radius: 999px;
     overflow: hidden;
 }
 
 .slide-poll-result-fill {
     height: 100%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--primary);
     border-radius: 999px;
     transition: width 0.25s ease;
 }
@@ -374,8 +382,8 @@
     flex: 1;
     min-width: 0;
     padding: 0.7rem 0.85rem;
-    background: #667eea;
-    color: white;
+    background: var(--primary);
+    color: var(--primary-foreground);
     border: none;
     border-radius: 8px;
     font-weight: 600;
@@ -384,15 +392,16 @@
 }
 
 .slide-poll-action-btn:hover {
-    background: #5568d3;
+    opacity: 0.9;
 }
 
 .slide-poll-action-btn.danger {
-    background: #ef4444;
+    background: var(--destructive);
+    color: white;
 }
 
 .slide-poll-action-btn.danger:hover {
-    background: #dc2626;
+    opacity: 0.9;
 }
 
 .poll-modal-overlay {
@@ -411,21 +420,21 @@
     width: min(720px, 96vw);
     max-height: 90vh;
     overflow: auto;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 16px;
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
     padding: 1.25rem;
 }
 
 .slide-poll-history {
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid var(--border);
     padding-top: 0.75rem;
 }
 
 .slide-poll-history summary {
     cursor: pointer;
-    color: #475569;
+    color: var(--muted-foreground);
     font-size: 0.85rem;
     font-weight: 600;
 }
@@ -438,8 +447,8 @@
 }
 
 .slide-poll-history-item {
-    border: 1px solid #e2e8f0;
-    background: #ffffff;
+    border: 1px solid var(--border);
+    background: var(--card);
     padding: 0.75rem;
     border-radius: 8px;
 }
@@ -447,7 +456,7 @@
 .slide-poll-history-title {
     font-size: 0.82rem;
     font-weight: 600;
-    color: #475569;
+    color: var(--muted-foreground);
     margin-bottom: 0.5rem;
 }
 
@@ -462,5 +471,5 @@
     justify-content: space-between;
     gap: 0.75rem;
     font-size: 0.85rem;
-    color: #334155;
+    color: var(--foreground);
 }

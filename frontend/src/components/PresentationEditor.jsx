@@ -3,6 +3,9 @@ import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import SlideThumbnails from './SlideThumbnails';
 import '../CSScomponents/PresentationEditor.css';
 import PollCreator from './PollComponents/PollCreator';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
@@ -16,6 +19,7 @@ const defaultSlide = () => ({
 const PresentationEditor = forwardRef(function PresentationEditor({ presentation, onSavePresentation, isSaving = false }, ref) {
     const canvasRef = useRef(null);
     const fabricCanvasRef = useRef(null);
+    const imageUploadInputRef = useRef(null);
     const isApplyingCanvasStateRef = useRef(false);
     const [slides, setSlides] = useState([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -356,27 +360,29 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         text.selectAll();
     };
 
-    const addImage = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    FabricImage.fromURL(event.target.result).then((img) => {
-                        img.scaleToWidth(400);
-                        img.set({ left: 50, top: 50 });
-                        fabricCanvasRef.current.add(img);
-                        fabricCanvasRef.current.renderAll();
-                    });
-                };
-                reader.readAsDataURL(file);
-            }
+    const handleImageFileChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file || !fabricCanvasRef.current) return;
+
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            const imageSource = loadEvent.target?.result;
+            if (!imageSource) return;
+
+            FabricImage.fromURL(imageSource).then((img) => {
+                img.scaleToWidth(400);
+                img.set({ left: 50, top: 50 });
+                fabricCanvasRef.current.add(img);
+                fabricCanvasRef.current.renderAll();
+            });
         };
-        input.click();
+
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    };
+
+    const addImage = () => {
+        imageUploadInputRef.current?.click();
     };
 
     const addShape = (shapeType) => {
@@ -575,10 +581,17 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     return (
         <div className="slide-editor">
+            <Input
+                ref={imageUploadInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageFileChange}
+            />
             <div className="editor-sidebar">
                 <div className="sidebar-header">
                     <h3>Lysbilder</h3>
-                    <button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</button>
+                    <Button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</Button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -592,7 +605,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             <div className="editor-main">
                 <div className="editor-toolbar">
                     <div className="toolbar-left">
-                        <input
+                        <Input
                             type="text"
                             className="presentation-title-input"
                             value={presentationTitle}
@@ -604,41 +617,41 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         </span>
                     </div>
                     <div className="toolbar-actions">
-                        <button
+                        <Button
                             onClick={handleUndo}
                             className="toolbar-btn history-btn"
                             disabled={undoStack.length <= 1}
                         >
                             ↶ Angre
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={handleRedo}
                             className="toolbar-btn history-btn"
                             disabled={!redoStack.length}
                         >
                             ↷ Gjør om
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={handleSavePresentation}
                             className="toolbar-btn save-btn"
                             disabled={isSaving}
                         >
                             {isSaving ? 'Lagrer...' : '💾 Lagre'}
-                        </button>
-                        <button onClick={addTitle} className="toolbar-btn">📝 Tittel</button>
-                        <button onClick={addText} className="toolbar-btn">Aa Tekst</button>
-                        <button onClick={addImage} className="toolbar-btn">🖼️ Bilde</button>
-                        <button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rektangel</button>
-                        <button onClick={() => addShape('circle')} className="toolbar-btn">● Sirkel</button>
-                        <button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Slett</button>
-                        <label className="toolbar-btn color-label">
+                        </Button>
+                        <Button onClick={addTitle} className="toolbar-btn">📝 Tittel</Button>
+                        <Button onClick={addText} className="toolbar-btn">Aa Tekst</Button>
+                        <Button onClick={addImage} className="toolbar-btn">🖼️ Bilde</Button>
+                        <Button onClick={() => addShape('rectangle')} className="toolbar-btn">▭ Rektangel</Button>
+                        <Button onClick={() => addShape('circle')} className="toolbar-btn">● Sirkel</Button>
+                        <Button onClick={deleteSelected} className="toolbar-btn delete-btn">🗑️ Slett</Button>
+                        <Label className="toolbar-btn color-label">
                             🎨 Bakgrunn
-                            <input
+                            <Input
                                 type="color"
                                 value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
                                 onChange={(e) => changeBackgroundColor(e.target.value)}
                             />
-                        </label>
+                        </Label>
                     </div>
                 </div>
                 {saveError && <div className="save-status error">{saveError}</div>}

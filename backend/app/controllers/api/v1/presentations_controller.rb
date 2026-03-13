@@ -109,6 +109,31 @@ module Api
         end
       end
 
+      def create_slide_polls!(slide, slide_data)
+        source = slide_data.is_a?(ActionController::Parameters) ? slide_data.to_unsafe_h : slide_data
+        polls = source['polls'] || source[:polls]
+        return unless polls.is_a?(Array) && polls.any?
+
+        polls.each do |poll_data|
+          poll_source = poll_data.is_a?(ActionController::Parameters) ? poll_data.to_unsafe_h : poll_data
+          question = poll_source['question'] || poll_source[:question]
+          next if question.blank?
+
+          poll = slide.polls.create!(
+            question: question,
+            poll_type: poll_source['pollType'] || poll_source[:pollType] || 'multiple_choice',
+            owner_id: current_user.id
+          )
+
+          options = poll_source['options'] || poll_source[:options] || []
+          options.each do |option_data|
+            option_source = option_data.is_a?(ActionController::Parameters) ? option_data.to_unsafe_h : option_data
+            text = option_source.is_a?(String) ? option_source : (option_source['text'] || option_source[:text])
+            poll.poll_options.create!(text: text) if text.present?
+          end
+        end
+      end
+
       def default_slide_payload
         {
           'title' => 'Slide 1',

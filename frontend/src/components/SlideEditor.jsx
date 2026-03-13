@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import SlideCanvas from './SlideCanvas'
 import SlideThumbnails from './SlideThumbnails'
 import '../CSScomponents/SlideEditor.css'
+import { Button } from './ui/button'
 
 function SlideEditor() {
     const [slides, setSlides] = useState([
@@ -61,7 +62,7 @@ function SlideEditor() {
             <div className="editor-sidebar">
                 <div className="sidebar-header">
                     <h3>Lysbilder</h3>
-                    <button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</button>
+                    <Button onClick={addSlide} className="add-slide-btn">+ Legg til lysbilde</Button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
