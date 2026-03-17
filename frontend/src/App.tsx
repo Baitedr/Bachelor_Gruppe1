@@ -568,6 +568,10 @@ function App() {
                 Hjem
               </Button>
             )}
+            <Button onClick={() => setCurrentPage('phoneinteraction')} variant='outline' size='sm' className='flex items-center justify-center gap-1.5 bg-primary/10 text-primary border-primary/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'>
+              <MonitorPlay className="mr-2 h-4 w-4" />
+              Bli med live
+            </Button>
             <Button onClick={handleLogout} variant='outline' size='sm' className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'>
               <LogOut className="mr-2 h-4 w-4" />
               Logg ut
