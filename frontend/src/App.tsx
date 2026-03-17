@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import api from './services/api'
+import { createDefaultSlideFabricData } from './lib/fabricDefaults'
 
 type Page =
   | 'login'
@@ -210,7 +211,7 @@ function App() {
         title: 'Lysbilde 1',
         content: '',
         backgroundColor: '#ffffff',
-        fabricData: null,
+        fabricData: createDefaultSlideFabricData(),
       },
     ],
   })

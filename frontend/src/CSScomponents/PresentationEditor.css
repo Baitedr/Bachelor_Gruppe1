@@ -52,7 +52,7 @@
     justify-content: center;       /* ADD THIS - centers vertically */
     padding: 1rem;
     gap: 1.5rem;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .editor-toolbar {

@@ -7,13 +7,14 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette, X } from 'lucide-react';
+import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 
-const defaultSlide = () => ({
+const defaultSlide = (index = 1) => ({
     id: `local-${Date.now()}`,
-    title: 'Lysbilde 1', // Slide 1
+    title: `Lysbilde ${index}`, // Slide
     content: '',
     backgroundColor: '#ffffff',
-    fabricData: null,
+    fabricData: createDefaultSlideFabricData(),
     polls: [],
 });
 
@@ -321,7 +322,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
             backgroundColor: '#ffffff',
-            fabricData: null,
+            fabricData: createDefaultSlideFabricData(),
             polls: [],
         };
         markDirty();
@@ -372,16 +373,30 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setCurrentSlideIndex(index);
     };
 
+    // Helper function to constrain position within canvas bounds
+    const getSafePosition = (preferredLeft, preferredTop, elementWidth = 200, elementHeight = 150) => {
+        const minPos = 30;
+        const maxLeft = 960 - elementWidth - 30; // Account for typical element width safely
+        const maxTop = 540 - elementHeight - 30;  // Account for typical element height safely
+        
+        return {
+            left: Math.max(minPos, Math.min(preferredLeft, maxLeft)),
+            top: Math.max(minPos, Math.min(preferredTop, maxTop)),
+        };
+    };
+
     // Fabric.js Tools
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
+        const pos = getSafePosition(80, 150, 250, 40);
         const text = new IText('Klikk for å redigere', { // Click to edit
-            left: 100,
-            top: 100,
-            fontSize: 32,
+            left: pos.left,
+            top: pos.top,
+            fontSize: 28,
             fill: '#000000',
             fontFamily: 'Arial',
+            lineHeight: 1.2,
         });
         
         fabricCanvasRef.current.add(text);
@@ -394,13 +409,15 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
+        const pos = getSafePosition(80, 60, 300, 60);
         const text = new IText('Tittel', { // Slide Title
-            left: 50,
-            top: 50,
+            left: pos.left,
+            top: pos.top,
             fontSize: 48,
             fill: '#000000',
             fontFamily: 'Arial',
             fontWeight: 'bold',
+            lineHeight: 1.16,
         });
         
         fabricCanvasRef.current.add(text);
@@ -421,7 +438,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             FabricImage.fromURL(imageSource).then((img) => {
                 img.scaleToWidth(400);
-                img.set({ left: 50, top: 50 });
+                const pos = getSafePosition(80, 150);
+                img.set({ left: pos.left, top: pos.top });
                 fabricCanvasRef.current.add(img);
                 fabricCanvasRef.current.renderAll();
             });
@@ -438,12 +456,13 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addShape = (shapeType) => {
         if (!fabricCanvasRef.current) return;
         
+        const pos = getSafePosition(100, 150);
         let shape;
         switch (shapeType) {
             case 'rectangle':
                 shape = new Rect({
-                    left: 100,
-                    top: 100,
+                    left: pos.left,
+                    top: pos.top,
                     width: 200,
                     height: 150,
                     fill: '#667eea',
@@ -451,8 +470,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 break;
             case 'circle':
                 shape = new Circle({
-                    left: 100,
-                    top: 100,
+                    left: pos.left,
+                    top: pos.top,
                     radius: 75,
                     fill: '#764ba2',
                 });
