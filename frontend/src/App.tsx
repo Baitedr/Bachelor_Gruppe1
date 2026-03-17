@@ -400,12 +400,13 @@ function App() {
     }
   }
 
-  const handleGuestJoin = (presentationId: string) => {
-    saveSessionState('live', presentationId, null, true)
-    setLivePresentationId(presentationId)
+  const handleGuestJoin = (presentationId: string | number) => {
+    const normalizedPresentationId = String(presentationId)
+    saveSessionState('lobby', normalizedPresentationId, null, true)
+    setLivePresentationId(normalizedPresentationId)
     setLiveJoinCode(null)
     setGuestMode(true)
-    setCurrentPage('live')
+    setCurrentPage('lobby')
   }
 
   const handleLogout = async () => {
