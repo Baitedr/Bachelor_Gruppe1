@@ -6,7 +6,7 @@ import PollCreator from './PollComponents/PollCreator';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette } from 'lucide-react';
+import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette, X } from 'lucide-react';
 
 const defaultSlide = () => ({
     id: `local-${Date.now()}`,
@@ -33,6 +33,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [slidePreviewImages, setSlidePreviewImages] = useState({});
     const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
     const [editingPollIndex, setEditingPollIndex] = useState(null);
+    const [pollToDeleteIndex, setPollToDeleteIndex] = useState(null);
 
     const currentSlideIdRef = useRef(null);
     useEffect(() => {
@@ -638,6 +639,13 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         updateCurrentSlidePolls((currentPolls) => currentPolls.filter((_, pollIndex) => pollIndex !== index));
     };
 
+    const confirmDeletePoll = () => {
+        if (pollToDeleteIndex !== null) {
+            handleDeletePoll(pollToDeleteIndex);
+            setPollToDeleteIndex(null);
+        }
+    };
+
     useImperativeHandle(ref, () => ({
         savePresentation: handleSavePresentation,
     }));
@@ -729,12 +737,124 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         Sist lagret {lastSavedAt.toLocaleTimeString()}
                     </div>
                 )}
-                <div className="canvas-container">
-                    <div className="slide-boundary">
-                        <canvas ref={canvasRef} />
+
+                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                    <div className="canvas-container">
+                        <div className="slide-boundary">
+                            <canvas ref={canvasRef} />
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Polls Sidebar */}
+            <div className="editor-sidebar" style={{ borderLeft: '1px solid var(--border)', borderRight: 'none', boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.15)' }}>
+                <div className="sidebar-header">
+                    <h3>Polls</h3>
+                    <Button onClick={openCreatePoll} size="sm" variant="outline" className="w-full flex items-center justify-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Ny poll
+                    </Button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4">
+                    {(slides[currentSlideIndex]?.polls || []).length === 0 ? (
+                        <div className="text-center mt-6">
+                            <strong className="block text-foreground mb-1">Ingen polls</strong>
+                            <span className="text-sm text-muted-foreground">Legg til en poll for å stille publikum et spørsmål.</span>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-4">
+                            {(slides[currentSlideIndex]?.polls || []).map((poll, index) => {
+                                const totalVotes = getPollTotalVotes(poll);
+
+                                return (
+                                    <div key={poll.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
+                                        <div className="mb-3">
+                                            <div className="flex justify-between items-start gap-2 mb-3">
+                                                <strong className="text-sm font-medium leading-tight">{poll.question}</strong>
+                                                <span className="text-xs text-muted-foreground whitespace-nowrap">{totalVotes} stemmer</span>
+                                            </div>
+
+                                            <div className="flex flex-col gap-2.5">
+                                                {(poll.options || []).map((option, optionIndex) => {
+                                                    const percentage = getPollOptionPercentage(option.votes, totalVotes);
+
+                                                    return (
+                                                        <div key={option.id || optionIndex} className="w-full">
+                                                            <div className="flex justify-between text-[13px] mb-1.5">
+                                                                <span className="font-medium text-foreground">{option.text}</span>
+                                                                <span className="text-muted-foreground">
+                                                                    {option.votes || 0} ({percentage}%)
+                                                                </span>
+                                                            </div>
+                                                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                                                <div
+                                                                    className="h-full bg-primary"
+                                                                    style={{ width: `${percentage}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {getPollHistory(poll)}
+                                        </div>
+
+                                        <div className="flex gap-2 pt-3 border-t border-border">
+                                            <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
+                                                Rediger
+                                            </Button>
+                                            <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
+                                                Slett
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {isPollCreatorOpen && (
+                <div className="poll-model-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="poll-model-card" style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <PollCreator
+                            onCancel={closePollCreator}
+                            onSave={handleSavePoll}
+                            initialData={editingPollIndex !== null ? (slides[currentSlideIndex]?.polls || [])[editingPollIndex] : null}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {pollToDeleteIndex !== null && (
+                <div className="fixed inset-0 z-9999 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-lg font-semibold text-foreground text-left mb-2">Slett poll?</h3>
+                        <p className="text-[15px] text-muted-foreground text-left mb-8">
+                            Er du sikker på at du vil slette denne pollen? Dette kan ikke angres.
+                        </p>
+                        <div className="flex justify-end gap-3 mt-4">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setPollToDeleteIndex(null)}
+                                className="flex items-center gap-1.5 bg-transparent border-input hover:bg-accent hover:text-accent-foreground transition-colors"
+                            >
+                                <X className="h-4 w-4" /> Avbryt
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                onClick={confirmDeletePoll}
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
+                            >
+                                <Trash2 className="h-4 w-4" /> Slett
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 });
