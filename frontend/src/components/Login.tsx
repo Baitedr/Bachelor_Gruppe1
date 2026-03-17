@@ -142,7 +142,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
                   <Label htmlFor="guestCode">Øktkode</Label>
                   <Input
                     id="guestCode"
-                    placeholder="f.eks. ABCD12"
+                    placeholder="f.eks. LIVE - ABCD"
                     value={guestCode}
                     onChange={(e) => setGuestCode(e.target.value)}
                     required
