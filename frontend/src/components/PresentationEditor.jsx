@@ -9,6 +9,10 @@ import { Label } from './ui/label';
 import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette, X } from 'lucide-react';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 
+const CANVAS_WIDTH = 960;
+const CANVAS_HEIGHT = 540;
+const CANVAS_PADDING = 30;
+
 const defaultSlide = (index = 1) => ({
     id: `local-${Date.now()}`,
     title: `Lysbilde ${index}`, // Slide
@@ -162,6 +166,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                    clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
                     isApplyingCanvasStateRef.current = false;
@@ -373,11 +378,44 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setCurrentSlideIndex(index);
     };
 
+    const clampObjectToCanvas = (object) => {
+        object.setCoords();
+        const bounds = object.getBoundingRect();
+
+        let nextLeft = object.left ?? 0;
+        let nextTop = object.top ?? 0;
+
+        const minBoundsLeft = CANVAS_PADDING;
+        const maxBoundsLeft = CANVAS_WIDTH - CANVAS_PADDING - bounds.width;
+        const targetBoundsLeft = Math.min(
+            Math.max(bounds.left, minBoundsLeft),
+            Math.max(minBoundsLeft, maxBoundsLeft)
+        );
+
+        const minBoundsTop = CANVAS_PADDING;
+        const maxBoundsTop = CANVAS_HEIGHT - CANVAS_PADDING - bounds.height;
+        const targetBoundsTop = Math.min(
+            Math.max(bounds.top, minBoundsTop),
+            Math.max(minBoundsTop, maxBoundsTop)
+        );
+
+        nextLeft += targetBoundsLeft - bounds.left;
+        nextTop += targetBoundsTop - bounds.top;
+
+        object.set({ left: nextLeft, top: nextTop });
+        object.setCoords();
+    };
+
+    const clampAllObjectsToCanvas = () => {
+        if (!fabricCanvasRef.current) return;
+        fabricCanvasRef.current.getObjects().forEach(clampObjectToCanvas);
+    };
+
     // Helper function to constrain position within canvas bounds
     const getSafePosition = (preferredLeft, preferredTop, elementWidth = 200, elementHeight = 150) => {
-        const minPos = 30;
-        const maxLeft = 960 - elementWidth - 30; // Account for typical element width safely
-        const maxTop = 540 - elementHeight - 30;  // Account for typical element height safely
+        const minPos = CANVAS_PADDING;
+        const maxLeft = CANVAS_WIDTH - elementWidth - CANVAS_PADDING; // Account for typical element width safely
+        const maxTop = CANVAS_HEIGHT - elementHeight - CANVAS_PADDING;  // Account for typical element height safely
         
         return {
             left: Math.max(minPos, Math.min(preferredLeft, maxLeft)),
@@ -389,10 +427,12 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
-        const pos = getSafePosition(80, 150, 250, 40);
+        const pos = getSafePosition(80, 150, 280, 40);
         const text = new IText('Klikk for å redigere', { // Click to edit
             left: pos.left,
             top: pos.top,
+            originX: 'left',
+            originY: 'top',
             fontSize: 28,
             fill: '#000000',
             fontFamily: 'Arial',
@@ -409,10 +449,12 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
-        const pos = getSafePosition(80, 60, 300, 60);
+        const pos = getSafePosition(80, 60, 340, 60);
         const text = new IText('Tittel', { // Slide Title
             left: pos.left,
             top: pos.top,
+            originX: 'left',
+            originY: 'top',
             fontSize: 48,
             fill: '#000000',
             fontFamily: 'Arial',
@@ -438,7 +480,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
             FabricImage.fromURL(imageSource).then((img) => {
                 img.scaleToWidth(400);
-                const pos = getSafePosition(80, 150);
+                const scaledHeight = (img.height || 0) * (img.scaleY || 1);
+                const pos = getSafePosition(80, 150, 400, scaledHeight || 300);
                 img.set({ left: pos.left, top: pos.top });
                 fabricCanvasRef.current.add(img);
                 fabricCanvasRef.current.renderAll();
@@ -456,7 +499,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const addShape = (shapeType) => {
         if (!fabricCanvasRef.current) return;
         
-        const pos = getSafePosition(100, 150);
+        const pos = getSafePosition(80, 150);
         let shape;
         switch (shapeType) {
             case 'rectangle':
