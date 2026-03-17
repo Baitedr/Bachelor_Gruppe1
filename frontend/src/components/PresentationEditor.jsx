@@ -34,6 +34,12 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
     const [editingPollIndex, setEditingPollIndex] = useState(null);
 
+    const hasUnsavedChangesRef = useRef(false);
+    
+    const markDirty = () => {
+        hasUnsavedChangesRef.current = true;
+    }
+
     const currentSlideIdRef = useRef(null);
     useEffect(() => {
         currentSlideIdRef.current = slides[currentSlideIndex]?.id || null;
@@ -98,6 +104,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
             setCurrentSlideIndex(0);
+            hasUnsavedChangesRef.current = false;
             return;
         }
 
@@ -117,6 +124,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
+        hasUnsavedChangesRef.current = false;
     }, [presentation]);
 
     // Initialiserer selve Fabric.js lerretet når komponenten blir montert
@@ -178,6 +186,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         const handleCanvasChange = () => {
             if (isApplyingCanvasStateRef.current) return;
             pushHistorySnapshot(createCanvasSnapshot());
+            markDirty();
         };
 
         const updatePreview = () => {
@@ -314,6 +323,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             fabricData: null,
             polls: [],
         };
+        markDirty();
         setSlides([...currentSlides, newSlide]);
         setCurrentSlideIndex(currentSlides.length);
     };
@@ -324,6 +334,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             alert('Du må ha minst èn slide');
             return;
         }
+        markDirty();
         const newSlides = slides.filter((_, i) => i !== index);
         setSlides(newSlides);
         if (currentSlideIndex >= newSlides.length) {
@@ -350,6 +361,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         };
         const newSlides = [...currentSlides];
         newSlides.splice(index + 1, 0, newSlide);
+        markDirty();
         setSlides(newSlides);
         setCurrentSlideIndex(index + 1);
     };
@@ -467,6 +479,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         if (!fabricCanvasRef.current) return;
         fabricCanvasRef.current.backgroundColor = color;
         fabricCanvasRef.current.renderAll();
+        markDirty();
 
         setSlides((prevSlides) => {
             const newSlides = [...prevSlides];
@@ -575,6 +588,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             }
 
             setLastSavedAt(new Date());
+            hasUnsavedChangesRef.current = false;
             return true;
         } catch (error) {
             setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.');
@@ -584,6 +598,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     const updateCurrentSlidePolls = (updater) => {
         setSlides((previousSlides) => {
+            markDirty();
             const nextSlides = [...previousSlides];
             const currentSlide = nextSlides[currentSlideIndex];
 
@@ -640,6 +655,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
     useImperativeHandle(ref, () => ({
         savePresentation: handleSavePresentation,
+        hasUnsavedChanges: () => hasUnsavedChangesRef.current,
     }));
 
     return (
@@ -672,7 +688,10 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             type="text"
                             className="presentation-title-input"
                             value={presentationTitle}
-                            onChange={(e) => setPresentationTitle(e.target.value)}
+                            onChange={(e) => {
+                                setPresentationTitle(e.target.value);
+                                markDirty();
+                            }}
                             placeholder="Presentasjonstittel"
                         />
                         <span className="slide-counter">

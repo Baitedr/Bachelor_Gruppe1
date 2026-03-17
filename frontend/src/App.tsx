@@ -58,6 +58,11 @@ type TrashItem = {
   deletedAt: string
 }
 
+type PresentationEditorHandle = {
+  savePresentation?: () => Promise<boolean>
+  hasUnsavedChanges?: () => boolean
+}
+
 const MOBILE_BREAKPOINT = 768
 const DELETE_UNDO_TIMEOUT_MS = 10_000
 
@@ -92,9 +97,9 @@ function App() {
   } | null>(null)
 
   const undoToastTimerRef = useRef<number | null>(null)
-  const presentationEditorRef = useRef<{ savePresentation?: () => Promise<boolean> } | null>(null)
 
-  const PresentationEditorView = PresentationEditor as unknown as React.ComponentType<Record<string, unknown>>
+  const presentationEditorRef = useRef<PresentationEditorHandle | null>(null)
+  const PresentationEditorView = PresentationEditor as any
 
   const clearUndoToastTimer = () => {
     if (!undoToastTimerRef.current) return
@@ -416,11 +421,22 @@ function App() {
     setCurrentPage('login')
   }
 
-  const handleGoHome = () => {
+  const handleGoHome = async () => {
     if (currentPage === 'editor') {
-      setIsExitEditorDialogOpen(true)
+      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+
+      // Ingen endringer - gå hjem 
+      if (!hasUnsavedChanges) {
+        setIsExitEditorDialogOpen(false)
+        clearSessionState()
+        setCurrentPage('home');
+        return;
+      }
+
+      setIsExitEditorDialogOpen(true) //Viser dialog vindu hvis noe er endret på
       return
     }
+
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
