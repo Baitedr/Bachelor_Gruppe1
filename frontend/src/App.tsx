@@ -490,17 +490,6 @@ function App() {
     return <Login onLoginSuccess={handleLoginSuccess} onGuestJoin={handleGuestJoin} />
   }
 
-  if (currentPage === 'phoneinteraction') {
-    return (
-      <PhoneInteraction
-        onJoined={(presentationId) => {
-          setLivePresentationId(presentationId)
-          setCurrentPage('live')
-        }}
-      />
-    )
-  }
-
   if (guestMode) {
     const leaveGuestSession = () => {
       clearSessionState()
@@ -736,6 +725,17 @@ function App() {
         )}
 
         {currentPage === 'polls' && <PollPage onNavigate={setCurrentPage} user={user} />}
+
+        {currentPage === 'phoneinteraction' && (
+          <div className='mx-auto w-full max-w-4xl'>
+            <PhoneInteraction
+              onJoined={(presentationId) => {
+                setLivePresentationId(presentationId)
+                setCurrentPage('live')
+              }}
+            />
+          </div>
+        )}
 
         {currentPage === 'lobby' && (
           <div className='mx-auto w-full max-w-4xl'>

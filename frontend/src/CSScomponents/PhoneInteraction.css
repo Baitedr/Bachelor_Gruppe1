@@ -1,9 +1,6 @@
 .phone-interaction-page {
-  position: fixed;
-  inset: 0;
   width: 100%;
-  height: 100dvh;
-  overflow: hidden;
+  min-height: calc(100dvh - 6rem);
   display: flex;
   align-items: center;
   justify-content: center;
