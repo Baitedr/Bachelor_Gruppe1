@@ -5,7 +5,13 @@ class User < ApplicationRecord
   has_many :presentations, foreign_key: :owner_id, dependent: :destroy
 
   validates :email, presence: true, uniqueness: { case_sensitive: false }
-  validates :password, presence: true, on: :create, unless: :oauth_user?
+  validates :password, presence: true, 
+            length: { minimum: 8 }, 
+            format: { 
+              with: /\A(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+\z/,
+              message: "must contain at least one lowercase letter, one uppercase letter, and one digit"
+            },
+            on: :create, unless: :oauth_user?
 
   before_validation :normalize_email
   before_save :hash_password, if: -> { password.present? }

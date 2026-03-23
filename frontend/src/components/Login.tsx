@@ -3,7 +3,7 @@ import api from '../services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { LogIn, UserPlus, Users } from 'lucide-react'
+import { LogIn, UserPlus, Users, Eye, EyeOff } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -22,14 +22,51 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [name, setName] = useState('')
   const [guestCode, setGuestCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  const getPasswordStrength = (pass: string) => {
+    if (!pass) return { score: 0, label: '', color: 'bg-muted' }
+    let score = 1
+    if (pass.length >= 8) score += 1
+    if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) score += 1
+    if (/[0-9]/.test(pass) || /[^A-Za-z0-9]/.test(pass)) score += 1
+
+    switch (score) {
+      case 1: return { score, label: 'Svakt', color: 'bg-destructive' }
+      case 2: return { score, label: 'Greit', color: 'bg-orange-500' }
+      case 3: return { score, label: 'Bra', color: 'bg-yellow-500' }
+      case 4: return { score, label: 'Sterkt', color: 'bg-green-500' }
+      default: return { score: 0, label: '', color: 'bg-muted' }
+    }
+  }
+
+  const strength = getPasswordStrength(password)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+    
+    if (!isLogin) {
+      if (password !== confirmPassword) {
+        setError('Passordene er ikke like.')
+        return
+      }
+      if (password.length < 8) {
+        setError('Passordet må være minst 8 tegn langt.')
+        return
+      }
+      if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        setError('Passordet må inneholde minst én liten, én stor bokstav og ett tall.')
+        return
+      }
+    }
+
     setIsLoading(true)
     try {
       const credentials: any = { email, password }
@@ -105,14 +142,58 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Passord</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {!isLogin && password.length > 0 && (
+                  <div className="space-y-1 mt-2">
+                    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div 
+                        className={`h-full ${strength.color} transition-all duration-300`} 
+                        style={{ width: `${(strength.score / 4) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground text-right">{strength.label}</p>
+                  </div>
+                )}
               </div>
+
+              {!isLogin && (
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Bekreft passord</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex flex-col gap-2 mt-2">
               <Button type="submit" className="w-full flex items-center gap-2" disabled={isLoading}>
