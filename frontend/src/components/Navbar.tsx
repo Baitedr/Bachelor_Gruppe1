@@ -28,9 +28,7 @@ export default function Navbar({
         >
           ProSlides
         </h1>
-        <Badge variant={apiStatus === 'error' ? 'destructive' : 'secondary'}>
-          API {apiStatus === 'error' ? 'frakoblet' : 'tilkoblet'}
-        </Badge>
+        
         <span className='text-sm text-muted-foreground'>Logget inn som {userEmail}</span>
 
         <div className='ml-auto flex flex-wrap items-center gap-2'>
