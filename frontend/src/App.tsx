@@ -61,6 +61,14 @@ type TrashItem = {
   deletedAt: string
 }
 
+type PersistedPageState = {
+  currentPage: Page
+  activePresentationId: string | null
+  livePresentationId: string | null
+  liveJoinCode: string | null
+  guestMode: boolean
+}
+
 const MOBILE_BREAKPOINT = 768
 const DELETE_UNDO_TIMEOUT_MS = 10_000
 
@@ -97,6 +105,23 @@ function App() {
 
   const presentationEditorRef = useRef<PresentationEditorHandle | null>(null)
 
+  const PAGE_STATE_KEY = 'proslides_page_state'
+
+  const loadPageState = (): PersistedPageState | null => {
+    try {
+      const raw = sessionStorage.getItem(PAGE_STATE_KEY)
+      return raw ? (JSON.parse(raw) as PersistedPageState): null
+    } catch {
+      return null
+    }
+  }
+
+  const savePageState = (state: PersistedPageState) => {
+    sessionStorage.setItem(PAGE_STATE_KEY, JSON.stringify(state))
+  }
+
+  const clearPageState = () => sessionStorage.removeItem(PAGE_STATE_KEY)
+
   const clearUndoToastTimer = () => {
     if (!undoToastTimerRef.current) return
     window.clearTimeout(undoToastTimerRef.current)
@@ -123,42 +148,70 @@ function App() {
   }
 
   useEffect(() => {
+  if (!user && !guestMode) return
+  savePageState({
+    currentPage,
+    activePresentationId: activePresentation?.id ?? null,
+    livePresentationId,
+    liveJoinCode,
+    guestMode,
+  })
+}, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, guestMode, user])
+
+  useEffect(() => {
     // Sjekker om det finnes en aktiv økt eller token ved oppstart
-    const restoreSession = async () => {
-      const savedRaw = sessionStorage.getItem('proslides_session')
-      const saved = savedRaw ? JSON.parse(savedRaw) : null
+  const restoreSession = async () => {
+  const savedRaw = sessionStorage.getItem('proslides_session')
+  const saved = savedRaw ? JSON.parse(savedRaw) : null
+  const savedPage = loadPageState()
 
-      if (saved?.guestMode) {
-        setLivePresentationId(saved.presentationId)
-        setGuestMode(true)
-        setCurrentPage(saved.page)
-        setIsAuthChecking(false)
-        return
-      }
+  if (saved?.guestMode) {
+    setLivePresentationId(saved.presentationId)
+    setGuestMode(true)
+    setCurrentPage(saved.page)
+    setIsAuthChecking(false)
+    return
+  }
 
-      if (!api.hasToken()) {
-        setIsAuthChecking(false)
-        return
-      }
+  if (!api.hasToken()) {
+    setIsAuthChecking(false)
+    return
+  }
 
-      try {
-        const data = await api.me()
-        setUser(data.user)
+  try {
+    const data = await api.me()
+    setUser(data.user)
 
-        if (saved?.page === 'lobby' || saved?.page === 'live') {
-          setLivePresentationId(saved.presentationId)
-          setLiveJoinCode(saved.joinCode ?? null)
-          setCurrentPage(saved.page)
-        } else {
+    if (saved?.page === 'lobby' || saved?.page === 'live') {
+      setLivePresentationId(saved.presentationId)
+      setLiveJoinCode(saved.joinCode ?? null)
+      setCurrentPage(saved.page)
+    } else if (savedPage) {
+      setLivePresentationId(savedPage.livePresentationId)
+      setLiveJoinCode(savedPage.liveJoinCode)
+      setGuestMode(savedPage.guestMode)
+
+      if (savedPage.currentPage === 'editor' && savedPage.activePresentationId) {
+        try {
+          const p = await api.getPresentation(savedPage.activePresentationId)
+          setActivePresentation(p.presentation)
+          setCurrentPage('editor')
+        } catch {
           setCurrentPage('home')
         }
-      } catch {
-        await api.logout()
-        setUser(null)
-      } finally {
-        setIsAuthChecking(false)
+      } else {
+        setCurrentPage(savedPage.currentPage === 'login' ? 'home' : savedPage.currentPage)
       }
+    } else {
+      setCurrentPage('home')
     }
+  } catch {
+    await api.logout()
+    setUser(null)
+  } finally {
+    setIsAuthChecking(false)
+  }
+}
 
     restoreSession()
   }, [])
@@ -398,6 +451,7 @@ function App() {
     await api.logout()
     clearUndoToastTimer()
     clearSessionState()
+    clearPageState()
     setUser(null)
     setPresentations([])
     setTrashedPresentations([])
@@ -414,7 +468,7 @@ function App() {
         
 
       // Hvis bruker endret på noe så blir det vist en dialog box
-      if (!hasUnsavedChanges) {
+      if (hasUnsavedChanges) {
         setIsExitEditorDialogOpen(true)
         return
       }
