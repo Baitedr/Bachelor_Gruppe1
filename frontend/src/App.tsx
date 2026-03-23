@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import LivePresentation from './components/LivePresentation'
 import Login from './components/Login'
-import PhoneInteraction from './components/MobileComponents/PhoneInteraction'
+import PhoneInteraction from './components/joinSession'
 import PollPage from './components/PollPage'
 import PresentationEditor from './components/PresentationEditor'
 import SessionLobby from './components/SessionLobby'
