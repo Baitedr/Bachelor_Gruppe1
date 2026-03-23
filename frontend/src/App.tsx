@@ -5,9 +5,10 @@ import PhoneInteraction from './components/joinSession'
 import PollPage from './components/PollPage'
 import PresentationEditor from './components/PresentationEditor'
 import SessionLobby from './components/SessionLobby'
+import Navbar from './components/Navbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MonitorPlay, Pencil, Trash2, LogOut, RotateCcw, Home, Plus, Save, X } from 'lucide-react'
+import { MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -539,37 +540,14 @@ function App() {
 
   return (
     <div className='min-h-screen bg-background text-foreground'>
-      <header className='sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur'>
-        <div className='mx-auto flex w-full flex-wrap items-center gap-2 px-4 py-3'>
-          <h1 
-            className='mr-2 text-lg font-semibold cursor-pointer transition-colors hover:text-primary' 
-            onClick={handleGoHome}
-          >
-            ProSlides
-          </h1>
-          <Badge variant={apiStatus === 'error' ? 'destructive' : 'secondary'}>
-            API {apiStatus === 'error' ? 'frakoblet' : 'tilkoblet'}
-          </Badge>
-          <span className='text-sm text-muted-foreground'>Logget inn som {user?.email}</span>
-
-          <div className='ml-auto flex flex-wrap items-center gap-2'>
-            {currentPage !== 'home' && (
-              <Button onClick={handleGoHome} variant='outline' size='sm'>
-                <Home className="mr-2 h-4 w-4" />
-                Hjem
-              </Button>
-            )}
-            <Button onClick={() => setCurrentPage('phoneinteraction')} variant='outline' size='sm' className='flex items-center justify-center gap-1.5 bg-primary/10 text-primary border-primary/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'>
-              <MonitorPlay className="mr-2 h-4 w-4" />
-              Bli med live
-            </Button>
-            <Button onClick={handleLogout} variant='outline' size='sm' className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'>
-              <LogOut className="mr-2 h-4 w-4" />
-              Logg ut
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Navbar
+        apiStatus={apiStatus}
+        currentPage={currentPage}
+        userEmail={user?.email}
+        onGoHome={handleGoHome}
+        onJoinLive={() => setCurrentPage('phoneinteraction')}
+        onLogout={handleLogout}
+      />
 
       <main className='mx-auto w-full px-4 py-6'>
         {currentPage === 'home' && (
