@@ -16,6 +16,9 @@ export default function Navbar({
   onJoinLive,
   onLogout,
 }: NavbarProps) {
+  const isInLiveFlow =
+    currentPage === 'phoneinteraction' || currentPage === 'lobby' || currentPage === 'live'
+
   return (
     <header className='sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur'>
       <div className='mx-auto flex w-full flex-wrap items-center gap-2 px-4 py-3'>
@@ -35,15 +38,17 @@ export default function Navbar({
               Hjem
             </Button>
           )}
-          <Button
-            onClick={onJoinLive}
-            variant='outline'
-            size='sm'
-            className='flex items-center justify-center gap-1.5 border-primary/30 bg-primary/10 text-primary transition-colors hover:border-input hover:bg-accent hover:text-accent-foreground'
-          >
-            <MonitorPlay className='mr-2 h-4 w-4' />
-            Bli med live
-          </Button>
+          {!isInLiveFlow && (
+            <Button
+              onClick={onJoinLive}
+              variant='outline'
+              size='sm'
+              className='flex items-center justify-center gap-1.5 border-primary/30 bg-primary/10 text-primary transition-colors hover:border-input hover:bg-accent hover:text-accent-foreground'
+            >
+              <MonitorPlay className='mr-2 h-4 w-4' />
+              Bli med live
+            </Button>
+          )}
           <Button
             onClick={onLogout}
             variant='outline'
