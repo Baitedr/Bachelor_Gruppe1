@@ -53,6 +53,22 @@ type Poll = {
     createdAt: string;
 };
 
+type QuestionType = 'open_text' | 'single_choice';
+
+type QuestionOption = {
+    id: string;
+    text: string;
+};
+
+type QuestionItem = {
+    id: string;
+    prompt: string;
+    type: QuestionType;
+    required: boolean;
+    options: QuestionOption[];
+    createdAt: string;
+};
+
 type Slide = {
     id: string;
     title: string;
@@ -60,13 +76,14 @@ type Slide = {
     backgroundColor: string;
     fabricData: unknown;
     polls: Poll[];
+    questions: QuestionItem[];
     previewImage?: string;
 };
 
 type PresentationData = {
     id?: string | number | null;
     title?: string;
-    slides?: Array<Partial<Slide> & { polls?: unknown[] }>;
+    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[] }>;
 };
 
 type SavePresentationPayload = {
@@ -115,14 +132,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [undoStack, setUndoStack] = useState<CanvasSnapshot[]>([]);
     const [redoStack, setRedoStack] = useState<CanvasSnapshot[]>([]);
     const [slidePreviewImages, setSlidePreviewImages] = useState<Record<string, string | null>>({});
-    const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
-    const [editingPollIndex, setEditingPollIndex] = useState(null);
-    const [pollToDeleteIndex, setPollToDeleteIndex] = useState(null);
-    const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
-    const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
-    const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState(null);
     const [editingPollIndex, setEditingPollIndex] = useState<number | null>(null);
     const [pollToDeleteIndex, setPollToDeleteIndex] = useState<number | null>(null);
+    const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
+    const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
+    const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
+    const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
 
     const hasUnsavedChangesRef = useRef(false);
     
@@ -783,7 +798,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         });
     };
 
-    const updateCurrentSlideQuestions = (updater) => {
+    const updateCurrentSlideQuestions = (updater: (currentQuestions: QuestionItem[]) => QuestionItem[]) => {
         setSlides((previousSlides) => {
             markDirty();
             const nextSlides = [...previousSlides];
@@ -823,7 +838,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         setIsQuestionCreatorOpen(true);
     };
 
-    const openEditQuestion = (index) => {
+    const openEditQuestion = (index: number) => {
         setEditingQuestionIndex(index);
         setIsQuestionCreatorOpen(true);
     };
@@ -855,7 +870,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         updateCurrentSlidePolls((currentPolls) => currentPolls.filter((_, pollIndex) => pollIndex !== index));
     };
 
-    const handleSaveQuestion = (questionData) => {
+    const handleSaveQuestion = (questionData: unknown) => {
         const normalizedQuestion = normalizeQuestion(
             questionData,
             editingQuestionIndex !== null ? editingQuestionIndex : 0
@@ -874,7 +889,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         closeQuestionCreator();
     };
 
-    const handleDeleteQuestion = (index) => {
+    const handleDeleteQuestion = (index: number) => {
         updateCurrentSlideQuestions((currentQuestions) => currentQuestions.filter((_, questionIndex) => questionIndex !== index));
     };
 
@@ -898,7 +913,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     }));
 
     return (
-        <div className="flex h-screen items-stretch bg-background">
+        <div className="flex h-screen items-stretch bg-background overflow-hidden">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -907,16 +922,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 onChange={handleImageFileChange}
             />
 
-            <div className="editor-sidebar">
-                <div className="sidebar-header">
-                    <h3>Lysbilder</h3>
-                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
-                        <Plus className="h-3.5 w-3.5" /> Legg til
-                    </Button>
             <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-r border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.35)]">
                 <div className="border-b border-border p-6">
                     <h3 className="mb-4 text-xl text-foreground">Lysbilder</h3>
-                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Legg til</Button>
+                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Legg til
+                    </Button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -928,9 +939,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 />
             </div>
 
-            <div className="editor-main">
-                <div className="editor-toolbar">
-                    <div className="toolbar-left">
             <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
                 <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
@@ -976,24 +984,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                         >
                             <Save className="h-3.5 w-3.5" /> {isSaving ? 'Lagrer...' : 'Lagre'}
                         </Button>
-                        <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5">
-                            <TypeIcon className="h-3.5 w-3.5" /> Tittel
-                        </Button>
-                        <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5">
-                            <Type className="h-3.5 w-3.5" /> Tekst
-                        </Button>
-                        <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5">
-                            <ImageIcon className="h-3.5 w-3.5" /> Bilde
-                        </Button>
-                        <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5">
-                            <Square className="h-3.5 w-3.5" /> Rektangel
-                        </Button>
-                        <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5">
-                            <CircleIcon className="h-3.5 w-3.5" /> Sirkel
-                        </Button>
-                        <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" /> Slett
-                        </Button>
+                        <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
+                        <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
+                        <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
+                        <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
+                        <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
+                        <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <Label className="flex items-center gap-2 px-3 py-1.5 border border-input rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
                             <Palette className="h-3.5 w-3.5" /> Bakgrunn
                             <Input
@@ -1020,16 +1016,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 </div>
             </div>
 
-            <div className="editor-sidebar" style={{ borderLeft: '1px solid var(--border)', borderRight: 'none', boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.15)' }}>
-                <div className="sidebar-header">
-                    <h3>Interaksjoner</h3>
-            {/* Polls Sidebar */}
             <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-l border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)]">
                 <div className="border-b border-border p-6">
-                    <h3 className="mb-4 text-xl text-foreground">Polls</h3>
-                    <Button onClick={openCreatePoll} size="sm" variant="outline" className="w-full flex items-center justify-center gap-1.5">
-                        <Plus className="h-3.5 w-3.5" /> Ny poll
-                    </Button>
+                    <h3 className="mb-4 text-xl text-foreground">Interaksjoner</h3>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4">
@@ -1058,30 +1047,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                                                 {question.type === 'single_choice' ? 'Single choice' : 'Åpent svar'}
                                                 {question.required ? ' • Obligatorisk' : ''}
                                             </span>
-
-                                            <div className="flex flex-col gap-2.5">
-                                                {(poll.options || []).map((option, optionIndex) => {
-                                                    const percentage = getPollOptionPercentage(option.votes, totalVotes);
-
-                                                    return (
-                                                        <div key={option.id || optionIndex} className="w-full">
-                                                            <div className="flex justify-between text-[13px] mb-1.5">
-                                                                <span className="font-medium text-foreground">{option.text}</span>
-                                                                <span className="text-muted-foreground">
-                                                                    {option.votes || 0} ({percentage}%)
-                                                                </span>
-                                                            </div>
-                                                            <progress
-                                                                className="h-1.5 w-full overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-secondary [&::-webkit-progress-value]:bg-primary"
-                                                                value={percentage}
-                                                                max={100}
-                                                            />
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {getPollHistory(poll)}
                                         </div>
                                         <div className="flex gap-2 pt-3 border-t border-border">
                                             <Button variant="secondary" size="sm" onClick={() => openEditQuestion(index)} className="flex-1 h-8 text-xs">
@@ -1246,36 +1211,33 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
 export default PresentationEditor;
 
-const normalizeQuestion = (question, questionIndex) => ({
-    id: question?.id || `local-question-${Date.now()}-${questionIndex}`,
-    prompt: question?.prompt || '',
-    type: question?.type === 'single_choice' ? 'single_choice' : 'open_text',
-    required: Boolean(question?.required),
-    options: Array.isArray(question?.options)
-        ? question.options
-            .map((option, optionIndex) => ({
-                id: option?.id || `local-question-option-${Date.now()}-${questionIndex}-${optionIndex}`,
-                text: typeof option === 'string' ? option : (option?.text || ''),
-            }))
-            .filter((option) => option.text.trim().length > 0)
-        : [],
-    createdAt: question?.createdAt || new Date().toISOString(),
-});
+const normalizeQuestionOption = (option: unknown, questionIndex: number, optionIndex: number): QuestionOption => {
+    const rawOption = (typeof option === 'object' && option !== null ? option : {}) as Partial<QuestionOption>;
 
-const normalizePoll = (poll, pollIndex) => ({
-    id: poll?.id || `local-poll-${Date.now()}-${pollIndex}`,
-    question: poll?.question || '',
-    options: Array.isArray(poll?.options)
-        ? poll.options.map((option, optionIndex) => ({
-            id: option?.id || `local-option-${Date.now()}-${pollIndex}-${optionIndex}`,
-            text: typeof option === 'string' ? option : (option?.text || ''),
-            votes: Number(option?.votes || 0),
-        }))
-        : [],
-    latestSessionId: poll?.latestSessionId || null,
-    sessionHistory: Array.isArray(poll?.sessionHistory) ? poll.sessionHistory : [],
-    createdAt: poll?.createdAt || new Date().toISOString(),
-});
+    return {
+        id: rawOption.id || `local-question-option-${Date.now()}-${questionIndex}-${optionIndex}`,
+        text: typeof option === 'string' ? option : (rawOption.text || ''),
+    };
+};
+
+const normalizeQuestion = (question: unknown, questionIndex: number): QuestionItem => {
+    const rawQuestion = (typeof question === 'object' && question !== null ? question : {}) as Partial<QuestionItem> & {
+        options?: unknown[];
+    };
+
+    return {
+        id: rawQuestion.id || `local-question-${Date.now()}-${questionIndex}`,
+        prompt: rawQuestion.prompt || '',
+        type: rawQuestion.type === 'single_choice' ? 'single_choice' : 'open_text',
+        required: Boolean(rawQuestion.required),
+        options: Array.isArray(rawQuestion.options)
+            ? rawQuestion.options
+                .map((option, optionIndex) => normalizeQuestionOption(option, questionIndex, optionIndex))
+                .filter((option) => option.text.trim().length > 0)
+            : [],
+        createdAt: rawQuestion.createdAt || new Date().toISOString(),
+    };
+};
 type PollInput = Partial<Poll> & {
     options?: unknown[];
     sessionHistory?: unknown[];
