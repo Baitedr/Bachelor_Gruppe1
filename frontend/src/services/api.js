@@ -58,6 +58,10 @@ const setToken = (token) => {
 }
 
 const api = {
+  setAuthToken: (token) => {
+    setToken(token);
+  },
+
   getSlides: async () => {
     const response = await axiosRetry(() => apiClient.get('/slides'), 1)
     return response.data

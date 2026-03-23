@@ -125,6 +125,18 @@ function App() {
   useEffect(() => {
     // Sjekker om det finnes en aktiv økt eller token ved oppstart
     const restoreSession = async () => {
+      // Check for OAuth token in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const error = urlParams.get('error');
+
+      if (token) {
+        api.setAuthToken(token);
+        window.history.replaceState({}, document.title, window.location.pathname); // clear URL
+      } else if (error === 'oauth_failed') {
+        window.history.replaceState({}, document.title, window.location.pathname); // clear URL
+      }
+
       const savedRaw = sessionStorage.getItem('proslides_session')
       const saved = savedRaw ? JSON.parse(savedRaw) : null
 

@@ -15,6 +15,11 @@ module Backend
     config.load_defaults 7.1
     config.api_only = true
 
+    # Required for OmniAuth in API-only mode
+    config.session_store :cookie_store, key: '_proslides_session'
+    config.middleware.use ActionDispatch::Cookies
+    config.middleware.use config.session_store, config.session_options
+
     # Optimize database connection pool for cold-start requests
     # Increase from default 5 to handle better concurrency under load
     config.database_connection_pool_size = 10

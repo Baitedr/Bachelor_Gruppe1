@@ -5,10 +5,27 @@ class User < ApplicationRecord
   has_many :presentations, foreign_key: :owner_id, dependent: :destroy
 
   validates :email, presence: true, uniqueness: { case_sensitive: false }
-  validates :password, presence: true, on: :create
+  validates :password, presence: true, on: :create, unless: :oauth_user?
 
   before_validation :normalize_email
   before_save :hash_password, if: -> { password.present? }
+
+  def oauth_user?
+    has_attribute?(:provider) && provider.present? && uid.present?
+  end
+
+  def self.from_omniauth(auth)
+    where(email: auth.info.email).first_or_create do |user|
+      user.email = auth.info.email
+      # If your users table has provider and uid columns, uncomment these:
+      # user.provider = auth.provider
+      # user.uid = auth.uid
+      
+      # We just set a random password for users created via OAuth
+      # to bypass password validations if we don't have oauth_user? field.
+      user.password = SecureRandom.hex(16)
+    end
+  end
 
   def authenticate(raw_password)
     return false if raw_password.blank?

@@ -26,6 +26,28 @@ module Api
         end
       end
 
+      def omniauth_callback
+        auth = request.env['omniauth.auth']
+        user = User.from_omniauth(auth)
+
+        if user.persisted?
+          token = JsonWebToken.encode(user_id: user.id)
+          
+          # We redirect to the frontend with the token since this is an OAuth flow
+          # Change according to your frontend URL
+          frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
+          redirect_to "#{frontend_url}/oauth/callback?token=#{token}", allow_other_host: true
+        else
+          frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
+          redirect_to "#{frontend_url}/login?error=oauth_failed", allow_other_host: true
+        end
+      end
+
+      def omniauth_failure
+        frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
+        redirect_to "#{frontend_url}/login?error=oauth_failed", allow_other_host: true
+      end
+
       def me
         render json: { user: user_payload(current_user) }, status: :ok
       end

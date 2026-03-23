@@ -8,6 +8,11 @@ Rails.application.routes.draw do
       post 'auth/login', to: 'auth#login'
       get 'auth/me', to: 'auth#me'
       post 'auth/logout', to: 'auth#logout'
+      
+      # OAuth routes
+      get '/auth/:provider/callback', to: 'auth#omniauth_callback'
+      post '/auth/:provider/callback', to: 'auth#omniauth_callback'
+      get '/auth/failure', to: 'auth#omniauth_failure'
 
       post 'sessions/guest_join', to: 'sessions#guest_join'
       post 'sessions/join_by_code', to: 'sessions#join_by_code'

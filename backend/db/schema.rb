@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_12_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_23_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -110,8 +110,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_12_000100) do
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.text "email", null: false
     t.text "name"
-    t.text "password_hash", null: false
-
+    t.text "oauth_avatar_url"
+    t.text "oauth_provider"
+    t.text "oauth_uid"
+    t.text "password_hash"
+    t.datetime "reset_password_sent_at"
+    t.text "reset_password_token_digest"
+    t.index ["oauth_provider", "oauth_uid"], name: "index_users_on_oauth_provider_and_oauth_uid", unique: true, where: "((oauth_provider IS NOT NULL) AND (oauth_uid IS NOT NULL))"
+    t.index ["reset_password_sent_at"], name: "index_users_on_reset_password_sent_at"
     t.unique_constraint ["email"], name: "users_email_key"
   end
 
