@@ -64,6 +64,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6 md:p-10">
       <div className="w-full max-w-sm flex flex-col gap-6">
+        <h1 className="text-center text-4xl font-extrabold tracking-tight leading-none">ProSlides</h1>
+
         <Card>
           <CardHeader>
             <CardTitle>{isLogin ? 'Logg inn' : 'Opprett konto'}</CardTitle>
