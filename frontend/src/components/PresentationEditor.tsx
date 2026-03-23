@@ -1,19 +1,84 @@
-import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
+import {
+    Circle as CircleIcon,
+    Image as ImageIcon,
+    Palette,
+    Plus,
+    Redo2,
+    Save,
+    Square,
+    Trash2,
+    Type,
+    Type as TypeIcon,
+    Undo2,
+    X,
+} from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
-import '../CSScomponents/PresentationEditor.css';
 import PollCreator from './PollComponents/PollCreator';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Undo2, Redo2, Save, Type, Image as ImageIcon, Square, Circle as CircleIcon, Trash2, Plus, Type as TypeIcon, Palette, X } from 'lucide-react';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
 
-const defaultSlide = (index = 1) => ({
+type CanvasSnapshot = {
+    backgroundColor: string;
+    fabricData: unknown;
+};
+
+type PollOption = {
+    id: string;
+    text: string;
+    votes: number;
+};
+
+type PollSession = {
+    id: string;
+    startedAt: string;
+    total: number;
+    options: PollOption[];
+};
+
+type Poll = {
+    id: string;
+    question: string;
+    options: PollOption[];
+    latestSessionId: string | null;
+    sessionHistory: PollSession[];
+    createdAt: string;
+};
+
+type Slide = {
+    id: string;
+    title: string;
+    content: string;
+    backgroundColor: string;
+    fabricData: unknown;
+    polls: Poll[];
+    previewImage?: string;
+};
+
+type PresentationData = {
+    id?: string | number | null;
+    title?: string;
+    slides?: Array<Partial<Slide> & { polls?: unknown[] }>;
+};
+
+type SavePresentationPayload = {
+    id: string | number | null;
+    title: string;
+    slides: Slide[];
+};
+
+type SavePresentationResult = {
+    id?: string | number;
+} | null;
+
+const defaultSlide = (index = 1): Slide => ({
     id: `local-${Date.now()}`,
     title: `Lysbilde ${index}`, // Slide
     content: '',
@@ -22,23 +87,35 @@ const defaultSlide = (index = 1) => ({
     polls: [],
 });
 
-const PresentationEditor = forwardRef(function PresentationEditor({ presentation, onSavePresentation, isSaving = false }, ref) {
-    const canvasRef = useRef(null);
-    const fabricCanvasRef = useRef(null);
-    const imageUploadInputRef = useRef(null);
+export type PresentationEditorHandle = {
+    savePresentation: () => Promise<boolean>;
+    hasUnsavedChanges: () => boolean;
+};
+
+type PresentationEditorProps = {
+    presentation?: PresentationData | null;
+    onSavePresentation?: (payload: SavePresentationPayload) => Promise<SavePresentationResult>;
+    isSaving?: boolean;
+};
+
+const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(function PresentationEditor({ presentation, onSavePresentation, isSaving = false }, ref) {
+    // Referanser og grunnstate for editoren.
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const fabricCanvasRef = useRef<Canvas | null>(null);
+    const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
     const isApplyingCanvasStateRef = useRef(false);
-    const [slides, setSlides] = useState([defaultSlide()]);
+    const [slides, setSlides] = useState<Slide[]>([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-    const [presentationId, setPresentationId] = useState(null);
+    const [presentationId, setPresentationId] = useState<string | number | null>(null);
     const [presentationTitle, setPresentationTitle] = useState('Uten navn'); // Untitled Presentation
-    const [saveError, setSaveError] = useState(null);
-    const [lastSavedAt, setLastSavedAt] = useState(null);
-    const [undoStack, setUndoStack] = useState([]);
-    const [redoStack, setRedoStack] = useState([]);
-    const [slidePreviewImages, setSlidePreviewImages] = useState({});
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+    const [undoStack, setUndoStack] = useState<CanvasSnapshot[]>([]);
+    const [redoStack, setRedoStack] = useState<CanvasSnapshot[]>([]);
+    const [slidePreviewImages, setSlidePreviewImages] = useState<Record<string, string | null>>({});
     const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
-    const [editingPollIndex, setEditingPollIndex] = useState(null);
-    const [pollToDeleteIndex, setPollToDeleteIndex] = useState(null);
+    const [editingPollIndex, setEditingPollIndex] = useState<number | null>(null);
+    const [pollToDeleteIndex, setPollToDeleteIndex] = useState<number | null>(null);
 
     const hasUnsavedChangesRef = useRef(false);
     
@@ -46,26 +123,29 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         hasUnsavedChangesRef.current = true;
     }
 
-    const currentSlideIdRef = useRef(null);
+    const currentSlideIdRef = useRef<string | null>(null);
     useEffect(() => {
         currentSlideIdRef.current = slides[currentSlideIndex]?.id || null;
     }, [slides, currentSlideIndex]);
 
-    const createCanvasSnapshot = () => {
+    // Snapshot brukes for angre/gjør om uten å mutere lerretet direkte.
+    const createCanvasSnapshot = (): CanvasSnapshot | null => {
         if (!fabricCanvasRef.current) return null;
 
+        const canvasBackgroundColor = fabricCanvasRef.current.backgroundColor;
+
         return {
-            backgroundColor: fabricCanvasRef.current.backgroundColor || '#ffffff',
+            backgroundColor: typeof canvasBackgroundColor === 'string' ? canvasBackgroundColor : '#ffffff',
             fabricData: fabricCanvasRef.current.toJSON(),
         };
     };
 
-    const areSnapshotsEqual = (first, second) => {
+    const areSnapshotsEqual = (first: CanvasSnapshot | undefined, second: CanvasSnapshot | undefined) => {
         if (!first || !second) return false;
         return JSON.stringify(first) === JSON.stringify(second);
     };
 
-    const pushHistorySnapshot = (snapshot) => {
+    const pushHistorySnapshot = (snapshot: CanvasSnapshot | null) => {
         if (!snapshot) return;
 
         setUndoStack((previousStack) => {
@@ -78,7 +158,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setRedoStack([]);
     };
 
-    const resetHistoryWithSnapshot = (snapshot) => {
+    const resetHistoryWithSnapshot = (snapshot: CanvasSnapshot | null) => {
         if (!snapshot) {
             setUndoStack([]);
             setRedoStack([]);
@@ -90,7 +170,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Gjenoppretter et definert state (snapshot) tilbake til canvas-lerretet
-    const applyCanvasSnapshot = async (snapshot) => {
+    const applyCanvasSnapshot = async (snapshot: CanvasSnapshot) => {
         if (!fabricCanvasRef.current || !snapshot) return;
 
         isApplyingCanvasStateRef.current = true;
@@ -104,6 +184,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }
     };
 
+    // Synkroniserer innkommende presentasjon fra parent til lokal editor-state.
     useEffect(() => {
         if (!presentation) {
             setPresentationId(null);
@@ -133,7 +214,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         hasUnsavedChangesRef.current = false;
     }, [presentation]);
 
-    // Initialiserer selve Fabric.js lerretet når komponenten blir montert
+    // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
     useEffect(() => {
         if (canvasRef.current && !fabricCanvasRef.current) {
             fabricCanvasRef.current = new Canvas(canvasRef.current, {
@@ -155,7 +236,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         };
     }, []);
 
-    // Laster inn riktig lysbilde-data til lerretet hver gang man bytter lysbilde
+    // Laster aktivt lysbilde inn i Fabric ved bytte av slide.
     useEffect(() => {
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
@@ -236,8 +317,11 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         if (!fabricCanvasRef.current || !slides[currentSlideIndex]) return slides;
 
         const currentSlide = slides[currentSlideIndex];
+        const canvasBackgroundColor = fabricCanvasRef.current.backgroundColor;
         const backgroundColor =
-            fabricCanvasRef.current.backgroundColor || currentSlide.backgroundColor || '#ffffff';
+            typeof canvasBackgroundColor === 'string'
+                ? canvasBackgroundColor
+                : currentSlide.backgroundColor || '#ffffff';
 
         const newSlides = [...slides];
         newSlides[currentSlideIndex] = {
@@ -250,7 +334,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Lager et miniatyrbilde av lysbildet (snapshot) i bakgrunnen uten å påvirke hovedlerretet
-    const createSlideSnapshot = async (slide) => {
+    const createSlideSnapshot = async (slide: Slide): Promise<string> => {
         const tempElement = document.createElement('canvas');
         tempElement.width = 960;
         tempElement.height = 540;
@@ -288,7 +372,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 return;
             }
 
-            const previews = {};
+            const previews: Record<string, string | null> = {};
 
             for (const slide of slides) {
                 if (!slide?.id) continue;
@@ -336,7 +420,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Sletter et lysbilde (krever at det finnes minst ett igjen)
-    const deleteSlide = (index) => {
+    const deleteSlide = (index: number) => {
         if (slides.length === 1) {
             alert('Du må ha minst èn slide');
             return;
@@ -350,7 +434,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Dupliserer et eksisterende lysbilde og plasserer den etter originalen
-    const duplicateSlide = (index) => {
+    const duplicateSlide = (index: number) => {
         const currentSlides = saveCurrentSlide();
         const slideToDuplicate = currentSlides[index];
         const newSlide = {
@@ -373,12 +457,12 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setCurrentSlideIndex(index + 1);
     };
 
-    const handleSlideSelect = (index) => {
+    const handleSlideSelect = (index: number) => {
         saveCurrentSlide();
         setCurrentSlideIndex(index);
     };
 
-    const clampObjectToCanvas = (object) => {
+    const clampObjectToCanvas = (object: any) => {
         object.setCoords();
         const bounds = object.getBoundingRect();
 
@@ -412,7 +496,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Helper function to constrain position within canvas bounds
-    const getSafePosition = (preferredLeft, preferredTop, elementWidth = 200, elementHeight = 150) => {
+    const getSafePosition = (preferredLeft: number, preferredTop: number, elementWidth = 200, elementHeight = 150) => {
         const minPos = CANVAS_PADDING;
         const maxLeft = CANVAS_WIDTH - elementWidth - CANVAS_PADDING; // Account for typical element width safely
         const maxTop = CANVAS_HEIGHT - elementHeight - CANVAS_PADDING;  // Account for typical element height safely
@@ -469,14 +553,14 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         text.selectAll();
     };
 
-    const handleImageFileChange = (event) => {
+    const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !fabricCanvasRef.current) return;
 
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const imageSource = loadEvent.target?.result;
-            if (!imageSource) return;
+            if (!imageSource || typeof imageSource !== 'string') return;
 
             FabricImage.fromURL(imageSource).then((img) => {
                 img.scaleToWidth(400);
@@ -496,7 +580,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         imageUploadInputRef.current?.click();
     };
 
-    const addShape = (shapeType) => {
+    const addShape = (shapeType: 'rectangle' | 'circle') => {
         if (!fabricCanvasRef.current) return;
         
         const pos = getSafePosition(80, 150);
@@ -538,7 +622,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }
     };
 
-    const changeBackgroundColor = (color) => {
+    const changeBackgroundColor = (color: string) => {
         if (!fabricCanvasRef.current) return;
         fabricCanvasRef.current.backgroundColor = color;
         fabricCanvasRef.current.renderAll();
@@ -659,7 +743,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         }
     };
 
-    const updateCurrentSlidePolls = (updater) => {
+    // Hjelper for å oppdatere polls atomisk på valgt slide.
+    const updateCurrentSlidePolls = (updater: (currentPolls: Poll[]) => Poll[]) => {
         setSlides((previousSlides) => {
             markDirty();
             const nextSlides = [...previousSlides];
@@ -684,7 +769,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         setIsPollCreatorOpen(true);
     };
 
-    const openEditPoll = (index) => {
+    const openEditPoll = (index: number) => {
         setEditingPollIndex(index);
         setIsPollCreatorOpen(true);
     };
@@ -695,7 +780,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     };
 
     // Lagrer eller oppdaterer en avstemning (poll) på gjeldende lysbilde
-    const handleSavePoll = (pollData) => {
+    const handleSavePoll = (pollData: unknown) => {
         // Gjenbruker normalizePoll-hjelpefunksjonen for å sikre konsistent datastruktur
         const normalizedPoll = normalizePoll(pollData, editingPollIndex !== null ? editingPollIndex : 0);
 
@@ -712,7 +797,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
         closePollCreator();
     };
 
-    const handleDeletePoll = (index) => {
+    const handleDeletePoll = (index: number) => {
         updateCurrentSlidePolls((currentPolls) => currentPolls.filter((_, pollIndex) => pollIndex !== index));
     };
 
@@ -729,7 +814,7 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
     }));
 
     return (
-        <div className="slide-editor">
+        <div className="flex h-screen items-stretch bg-background">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -737,9 +822,9 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                 className="hidden"
                 onChange={handleImageFileChange}
             />
-            <div className="editor-sidebar">
-                <div className="sidebar-header">
-                    <h3>Lysbilder</h3>
+            <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-r border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.35)]">
+                <div className="border-b border-border p-6">
+                    <h3 className="mb-4 text-xl text-foreground">Lysbilder</h3>
                     <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Legg til</Button>
                 </div>
                 <SlideThumbnails
@@ -751,12 +836,12 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                     onSlideDuplicate={duplicateSlide}
                 />
             </div>
-            <div className="editor-main">
-                <div className="editor-toolbar">
-                    <div className="toolbar-left">
+            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
+                <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
+                    <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
                             type="text"
-                            className="presentation-title-input"
+                            className="h-auto w-auto min-w-55 flex-1 basis-[320px] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
                             value={presentationTitle}
                             onChange={(e) => {
                                 setPresentationTitle(e.target.value);
@@ -764,11 +849,11 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                             }}
                             placeholder="Presentasjonstittel"
                         />
-                        <span className="slide-counter">
+                        <span className="ml-auto inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
                             Lysbilde {currentSlideIndex + 1} av {slides.length}
                         </span>
                     </div>
-                    <div className="toolbar-actions">
+                    <div className="flex flex-wrap items-center justify-start gap-2">
                         <Button
                             onClick={handleUndo}
                             variant="secondary"
@@ -812,16 +897,16 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                         </Label>
                     </div>
                 </div>
-                {saveError && <div className="save-status error">{saveError}</div>}
+                {saveError && <div className="rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">{saveError}</div>}
                 {lastSavedAt && !saveError && (
-                    <div className="save-status success">
+                    <div className="rounded-lg bg-[rgba(16,185,129,0.18)] px-4 py-2.5 text-sm font-semibold text-[#6ee7b7]">
                         Sist lagret {lastSavedAt.toLocaleTimeString()}
                     </div>
                 )}
 
-                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
-                    <div className="canvas-container">
-                        <div className="slide-boundary">
+                <div className="flex flex-1 overflow-auto">
+                    <div className="relative flex min-h-100 flex-1 items-center justify-center rounded-[10px] bg-transparent p-8 [&_canvas]:rounded-lg">
+                        <div>
                             <canvas ref={canvasRef} />
                         </div>
                     </div>
@@ -829,9 +914,9 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             </div>
 
             {/* Polls Sidebar */}
-            <div className="editor-sidebar" style={{ borderLeft: '1px solid var(--border)', borderRight: 'none', boxShadow: '-2px 0 10px rgba(0, 0, 0, 0.15)' }}>
-                <div className="sidebar-header">
-                    <h3>Polls</h3>
+            <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-l border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)]">
+                <div className="border-b border-border p-6">
+                    <h3 className="mb-4 text-xl text-foreground">Polls</h3>
                     <Button onClick={openCreatePoll} size="sm" variant="outline" className="w-full flex items-center justify-center gap-1.5">
                         <Plus className="h-3.5 w-3.5" /> Ny poll
                     </Button>
@@ -868,12 +953,11 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
                                                                     {option.votes || 0} ({percentage}%)
                                                                 </span>
                                                             </div>
-                                                            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                                                <div
-                                                                    className="h-full bg-primary"
-                                                                    style={{ width: `${percentage}%` }}
-                                                                />
-                                                            </div>
+                                                            <progress
+                                                                className="h-1.5 w-full overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-secondary [&::-webkit-progress-value]:bg-primary"
+                                                                value={percentage}
+                                                                max={100}
+                                                            />
                                                         </div>
                                                     );
                                                 })}
@@ -899,8 +983,8 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
             </div>
 
             {isPollCreatorOpen && (
-                <div className="poll-model-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="poll-model-card" style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4">
+                    <div className="max-h-[90vh] w-full max-w-125 overflow-y-auto rounded-xl border border-border bg-card p-6">
                         <PollCreator
                             onCancel={closePollCreator}
                             onSave={handleSavePoll}
@@ -942,43 +1026,79 @@ const PresentationEditor = forwardRef(function PresentationEditor({ presentation
 
 export default PresentationEditor;
 
-const normalizePoll = (poll, pollIndex) => ({
-    id: poll?.id || `local-poll-${Date.now()}-${pollIndex}`,
-    question: poll?.question || '',
-    options: Array.isArray(poll?.options)
-        ? poll.options.map((option, optionIndex) => ({
-            id: option?.id || `local-option-${Date.now()}-${pollIndex}-${optionIndex}`,
-            text: typeof option === 'string' ? option : (option?.text || ''),
-            votes: Number(option?.votes || 0),
-        }))
-        : [],
-    latestSessionId: poll?.latestSessionId || null,
-    sessionHistory: Array.isArray(poll?.sessionHistory) ? poll.sessionHistory : [],
-    createdAt: poll?.createdAt || new Date().toISOString(),
-});
+type PollInput = Partial<Poll> & {
+    options?: unknown[];
+    sessionHistory?: unknown[];
+};
 
-const getPollTotalVotes = (poll) => {
+const normalizePollOption = (option: unknown, pollIndex: number, optionIndex: number): PollOption => {
+    const rawOption = (typeof option === 'object' && option !== null ? option : {}) as Partial<PollOption>;
+
+    return {
+        id: rawOption.id || `local-option-${Date.now()}-${pollIndex}-${optionIndex}`,
+        text: typeof option === 'string' ? option : (rawOption.text || ''),
+        votes: Number(rawOption.votes || 0),
+    };
+};
+
+const normalizePollSession = (session: unknown): PollSession => {
+    const rawSession = (typeof session === 'object' && session !== null ? session : {}) as Partial<PollSession> & {
+        options?: unknown[];
+    };
+
+    return {
+        id: rawSession.id || `local-session-${Date.now()}`,
+        startedAt: rawSession.startedAt || new Date().toISOString(),
+        total: Number(rawSession.total || 0),
+        options: Array.isArray(rawSession.options)
+            ? rawSession.options.map((option, optionIndex) => normalizePollOption(option, 0, optionIndex))
+            : [],
+    };
+};
+
+// Normaliserer vilkårlig poll-input til en konsistent intern struktur.
+const normalizePoll = (poll: unknown, pollIndex: number): Poll => {
+    const rawPoll = (typeof poll === 'object' && poll !== null ? poll : {}) as PollInput;
+
+    return {
+        id: rawPoll.id || `local-poll-${Date.now()}-${pollIndex}`,
+        question: rawPoll.question || '',
+        options: Array.isArray(rawPoll.options)
+            ? rawPoll.options.map((option, optionIndex) => normalizePollOption(option, pollIndex, optionIndex))
+            : [],
+        latestSessionId: rawPoll.latestSessionId || null,
+        sessionHistory: Array.isArray(rawPoll.sessionHistory)
+            ? rawPoll.sessionHistory.map(normalizePollSession)
+            : [],
+        createdAt: rawPoll.createdAt || new Date().toISOString(),
+    };
+};
+
+// Summerer stemmer for alle alternativer i en poll.
+const getPollTotalVotes = (poll: Poll) => {
     return (poll.options || []).reduce((sum, option) => sum + Number(option.votes || 0), 0);
 };
 
-const getPollOptionPercentage = (optionVotes, totalVotes) => {
+// Regner ut prosentandel per alternativ.
+const getPollOptionPercentage = (optionVotes: number, totalVotes: number) => {
     if (!totalVotes) return 0;
     return Math.round((Number(optionVotes || 0) / totalVotes) * 100);
 };
 
-const getPollHistory = (poll) => {
+// Rendrer tidligere sesjoner for en poll når historikk finnes.
+const getPollHistory = (poll: Poll) => {
     return poll.sessionHistory?.length > 1 && (
-        <details className="slide-poll-history">
-            <summary>Previous Sessions</summary>
-            <div className="slide-poll-history-list">
+        <details className="border-t border-border pt-3">
+            <summary className="cursor-pointer text-[0.85rem] font-semibold text-muted-foreground">Previous Sessions</summary>
+            <div className="mt-3 flex flex-col gap-3">
                 {poll.sessionHistory.slice(1).map((session) => (
-                    <div key={session.id} className="slide-poll-history-item">
-                        <div className="slide-poll-history-title">
+                    <div key={session.id} className="rounded-lg border border-border bg-card p-3">
+                        <div className="mb-2 text-[0.82rem] font-semibold text-muted-foreground">
                             {new Date(session.startedAt).toLocaleString()} • {session.total} votes
                         </div>
-                        <div className="slide-poll-history-results">
+                        <div className="flex flex-col gap-1.5">
                             {session.options.map((option) => (
-                                <div key={option.id} className="slide-poll-history-row">
+                                <div key={option.id} className="flex justify-between gap-3 text-[0.85rem] text-foreground">
                                     <span>{option.text}</span>
                                     <span>{option.votes}</span>
                                 </div>

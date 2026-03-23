@@ -4,6 +4,7 @@ import Login from './components/Login'
 import PhoneInteraction from './components/joinSession'
 import PollPage from './components/PollPage'
 import PresentationEditor from './components/PresentationEditor'
+import type { PresentationEditorHandle } from './components/PresentationEditor'
 import SessionLobby from './components/SessionLobby'
 import Navbar from './components/Navbar'
 import { Badge } from '@/components/ui/badge'
@@ -60,11 +61,6 @@ type TrashItem = {
   deletedAt: string
 }
 
-type PresentationEditorHandle = {
-  savePresentation?: () => Promise<boolean>
-  hasUnsavedChanges?: () => boolean
-}
-
 const MOBILE_BREAKPOINT = 768
 const DELETE_UNDO_TIMEOUT_MS = 10_000
 
@@ -101,7 +97,6 @@ function App() {
   const undoToastTimerRef = useRef<number | null>(null)
 
   const presentationEditorRef = useRef<PresentationEditorHandle | null>(null)
-  const PresentationEditorView = PresentationEditor as any
 
   const clearUndoToastTimer = () => {
     if (!undoToastTimerRef.current) return
@@ -780,7 +775,7 @@ function App() {
         )}
 
         {currentPage === 'editor' && (
-          <PresentationEditorView
+          <PresentationEditor
             ref={presentationEditorRef}
             presentation={activePresentation}
             onSavePresentation={handleSavePresentation}
