@@ -4,6 +4,7 @@ import Login from './components/Login'
 import PhoneInteraction from './components/joinSession'
 import PollPage from './components/PollPage'
 import PresentationEditor from './components/PresentationEditor'
+import type { PresentationEditorHandle } from './components/PresentationEditor'
 import SessionLobby from './components/SessionLobby'
 import Navbar from './components/Navbar'
 import { Badge } from '@/components/ui/badge'
@@ -60,16 +61,10 @@ type TrashItem = {
   deletedAt: string
 }
 
-type PresentationEditorHandle = {
-  savePresentation?: () => Promise<boolean>
-  hasUnsavedChanges?: () => boolean
-}
-
 const MOBILE_BREAKPOINT = 768
 const DELETE_UNDO_TIMEOUT_MS = 10_000
 
 function App() {
-  const [apiStatus, setApiStatus] = useState<string | null>(null)
   const [presentations, setPresentations] = useState<PresentationSummary[]>([])
   const [deletingPresentationIds, setDeletingPresentationIds] = useState<Record<string, boolean>>({})
   const [trashedPresentations, setTrashedPresentations] = useState<TrashItem[]>([])
@@ -101,7 +96,6 @@ function App() {
   const undoToastTimerRef = useRef<number | null>(null)
 
   const presentationEditorRef = useRef<PresentationEditorHandle | null>(null)
-  const PresentationEditorView = PresentationEditor as any
 
   const clearUndoToastTimer = () => {
     if (!undoToastTimerRef.current) return
@@ -171,7 +165,6 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      checkApiHealth()
       loadPresentations()
     }
   }, [user])
@@ -179,15 +172,6 @@ function App() {
   useEffect(() => {
     return () => clearUndoToastTimer()
   }, [])
-
-  const checkApiHealth = async () => {
-    try {
-      const data = await api.checkHealth()
-      setApiStatus(data.status)
-    } catch {
-      setApiStatus('error')
-    }
-  }
 
   // Henter inn og oppdaterer brukerens lagrede presentasjoner
   const loadPresentations = async () => {
@@ -427,19 +411,26 @@ function App() {
   const handleGoHome = async () => {
     if (currentPage === 'editor') {
       const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+        
 
-      // Ingen endringer - gå hjem 
+      // Hvis bruker endret på noe så blir det vist en dialog box
       if (!hasUnsavedChanges) {
-        setIsExitEditorDialogOpen(false)
-        clearSessionState()
-        setCurrentPage('home');
-        return;
+        setIsExitEditorDialogOpen(true)
+        return
       }
 
-      setIsExitEditorDialogOpen(true) //Viser dialog vindu hvis noe er endret på
-      return
+      //Hvis det er en ny presentasjon som aldri blir gjort noe med - forkast
+      if (isNewPresentationSession && !hasSavedCurrentSession && activePresentation?.id) {
+        await handleDiscardAndGoHome()
+        return
+      }
+
+      clearSessionState()
+        setCurrentPage('home');
+        return
     }
 
+    //Eksisterende presentasjon, ingen endringer - bare gå hjem
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
@@ -541,7 +532,6 @@ function App() {
   return (
     <div className='min-h-screen bg-background text-foreground'>
       <Navbar
-        apiStatus={apiStatus}
         currentPage={currentPage}
         userEmail={user?.email}
         onGoHome={handleGoHome}
@@ -773,7 +763,7 @@ function App() {
         )}
 
         {currentPage === 'editor' && (
-          <PresentationEditorView
+          <PresentationEditor
             ref={presentationEditorRef}
             presentation={activePresentation}
             onSavePresentation={handleSavePresentation}
