@@ -58,11 +58,6 @@ const setToken = (token) => {
 }
 
 const api = {
-  checkHealth: async () => {
-    const response = await axiosRetry(() => apiClient.get('/health'), 1)
-    return response.data
-  },
-
   getSlides: async () => {
     const response = await axiosRetry(() => apiClient.get('/slides'), 1)
     return response.data

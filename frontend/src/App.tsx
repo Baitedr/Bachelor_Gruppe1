@@ -65,7 +65,6 @@ const MOBILE_BREAKPOINT = 768
 const DELETE_UNDO_TIMEOUT_MS = 10_000
 
 function App() {
-  const [apiStatus, setApiStatus] = useState<string | null>(null)
   const [presentations, setPresentations] = useState<PresentationSummary[]>([])
   const [deletingPresentationIds, setDeletingPresentationIds] = useState<Record<string, boolean>>({})
   const [trashedPresentations, setTrashedPresentations] = useState<TrashItem[]>([])
@@ -166,7 +165,6 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      checkApiHealth()
       loadPresentations()
     }
   }, [user])
@@ -174,15 +172,6 @@ function App() {
   useEffect(() => {
     return () => clearUndoToastTimer()
   }, [])
-
-  const checkApiHealth = async () => {
-    try {
-      const data = await api.checkHealth()
-      setApiStatus(data.status)
-    } catch {
-      setApiStatus('error')
-    }
-  }
 
   // Henter inn og oppdaterer brukerens lagrede presentasjoner
   const loadPresentations = async () => {
@@ -543,7 +532,6 @@ function App() {
   return (
     <div className='min-h-screen bg-background text-foreground'>
       <Navbar
-        apiStatus={apiStatus}
         currentPage={currentPage}
         userEmail={user?.email}
         onGoHome={handleGoHome}

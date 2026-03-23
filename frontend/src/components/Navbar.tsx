@@ -1,9 +1,7 @@
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Home, LogOut, MonitorPlay } from 'lucide-react'
 
 type NavbarProps = {
-  apiStatus: string | null
   currentPage: string
   userEmail?: string
   onGoHome: () => void
@@ -12,7 +10,6 @@ type NavbarProps = {
 }
 
 export default function Navbar({
-  apiStatus,
   currentPage,
   userEmail,
   onGoHome,
