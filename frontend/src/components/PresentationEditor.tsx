@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './PollComponents/PollCreator';
+import Question from './Question';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -52,6 +53,22 @@ type Poll = {
     createdAt: string;
 };
 
+type QuestionType = 'open_text' | 'single_choice';
+
+type QuestionOption = {
+    id: string;
+    text: string;
+};
+
+type QuestionItem = {
+    id: string;
+    prompt: string;
+    type: QuestionType;
+    required: boolean;
+    options: QuestionOption[];
+    createdAt: string;
+};
+
 type Slide = {
     id: string;
     title: string;
@@ -59,13 +76,14 @@ type Slide = {
     backgroundColor: string;
     fabricData: unknown;
     polls: Poll[];
+    questions: QuestionItem[];
     previewImage?: string;
 };
 
 type PresentationData = {
     id?: string | number | null;
     title?: string;
-    slides?: Array<Partial<Slide> & { polls?: unknown[] }>;
+    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[] }>;
 };
 
 type SavePresentationPayload = {
@@ -85,6 +103,7 @@ const defaultSlide = (index = 1): Slide => ({
     backgroundColor: '#ffffff',
     fabricData: createDefaultSlideFabricData(),
     polls: [],
+    questions: [],
 });
 
 export type PresentationEditorHandle = {
@@ -113,9 +132,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [undoStack, setUndoStack] = useState<CanvasSnapshot[]>([]);
     const [redoStack, setRedoStack] = useState<CanvasSnapshot[]>([]);
     const [slidePreviewImages, setSlidePreviewImages] = useState<Record<string, string | null>>({});
-    const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
     const [editingPollIndex, setEditingPollIndex] = useState<number | null>(null);
     const [pollToDeleteIndex, setPollToDeleteIndex] = useState<number | null>(null);
+    const [isPollCreatorOpen, setIsPollCreatorOpen] = useState(false);
+    const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
+    const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
+    const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
 
     const hasUnsavedChangesRef = useRef(false);
     
@@ -203,6 +225,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             fabricData: slide.fabricData || null,
             polls: Array.isArray(slide.polls)
                 ? slide.polls.map((poll, pollIndex) => normalizePoll(poll, pollIndex))
+                : [],
+            questions: Array.isArray(slide.questions)
+                ? slide.questions.map((question, questionIndex) => normalizeQuestion(question, questionIndex))
                 : [],
         }));
 
@@ -413,6 +438,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             backgroundColor: '#ffffff',
             fabricData: createDefaultSlideFabricData(),
             polls: [],
+            questions: [],
         };
         markDirty();
         setSlides([...currentSlides, newSlide]);
@@ -447,6 +473,14 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 options: (poll.options || []).map((option, optionIndex) => ({
                     ...option,
                     id: `local-option-${Date.now()}-${pollIndex}-${optionIndex}`,
+                })),
+            })),
+            questions: (slideToDuplicate.questions || []).map((question, questionIndex) => ({
+                ...question,
+                id: `local-question-${Date.now()}-${questionIndex}`,
+                options: (question.options || []).map((option, optionIndex) => ({
+                    ...option,
+                    id: option?.id || `local-question-option-${Date.now()}-${questionIndex}-${optionIndex}`,
                 })),
             })),
         };
@@ -764,6 +798,26 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         });
     };
 
+    const updateCurrentSlideQuestions = (updater: (currentQuestions: QuestionItem[]) => QuestionItem[]) => {
+        setSlides((previousSlides) => {
+            markDirty();
+            const nextSlides = [...previousSlides];
+            const currentSlide = nextSlides[currentSlideIndex];
+
+            if (!currentSlide) return previousSlides;
+
+            const currentQuestions = Array.isArray(currentSlide.questions) ? currentSlide.questions : [];
+            const nextQuestions = updater(currentQuestions);
+
+            nextSlides[currentSlideIndex] = {
+                ...currentSlide,
+                questions: nextQuestions,
+            };
+
+            return nextSlides;
+        });
+    };
+
     const openCreatePoll = () => {
         setEditingPollIndex(null);
         setIsPollCreatorOpen(true);
@@ -777,6 +831,21 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const closePollCreator = () => {
         setEditingPollIndex(null);
         setIsPollCreatorOpen(false);
+    };
+
+    const openCreateQuestion = () => {
+        setEditingQuestionIndex(null);
+        setIsQuestionCreatorOpen(true);
+    };
+
+    const openEditQuestion = (index: number) => {
+        setEditingQuestionIndex(index);
+        setIsQuestionCreatorOpen(true);
+    };
+
+    const closeQuestionCreator = () => {
+        setEditingQuestionIndex(null);
+        setIsQuestionCreatorOpen(false);
     };
 
     // Lagrer eller oppdaterer en avstemning (poll) på gjeldende lysbilde
@@ -801,10 +870,40 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         updateCurrentSlidePolls((currentPolls) => currentPolls.filter((_, pollIndex) => pollIndex !== index));
     };
 
+    const handleSaveQuestion = (questionData: unknown) => {
+        const normalizedQuestion = normalizeQuestion(
+            questionData,
+            editingQuestionIndex !== null ? editingQuestionIndex : 0
+        );
+
+        updateCurrentSlideQuestions((currentQuestions) => {
+            if (editingQuestionIndex === null) {
+                return [...currentQuestions, normalizedQuestion];
+            }
+
+            return currentQuestions.map((question, index) => (
+                index === editingQuestionIndex ? normalizedQuestion : question
+            ));
+        });
+
+        closeQuestionCreator();
+    };
+
+    const handleDeleteQuestion = (index: number) => {
+        updateCurrentSlideQuestions((currentQuestions) => currentQuestions.filter((_, questionIndex) => questionIndex !== index));
+    };
+
     const confirmDeletePoll = () => {
         if (pollToDeleteIndex !== null) {
             handleDeletePoll(pollToDeleteIndex);
             setPollToDeleteIndex(null);
+        }
+    };
+
+    const confirmDeleteQuestion = () => {
+        if (questionToDeleteIndex !== null) {
+            handleDeleteQuestion(questionToDeleteIndex);
+            setQuestionToDeleteIndex(null);
         }
     };
 
@@ -814,7 +913,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     }));
 
     return (
-        <div className="flex h-screen items-stretch bg-background">
+        <div className="flex h-screen items-stretch bg-background overflow-hidden">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -822,10 +921,13 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 className="hidden"
                 onChange={handleImageFileChange}
             />
+
             <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-r border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.35)]">
                 <div className="border-b border-border p-6">
                     <h3 className="mb-4 text-xl text-foreground">Lysbilder</h3>
-                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Legg til</Button>
+                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
+                        <Plus className="h-3.5 w-3.5" /> Legg til
+                    </Button>
                 </div>
                 <SlideThumbnails
                     slides={slides}
@@ -836,6 +938,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     onSlideDuplicate={duplicateSlide}
                 />
             </div>
+
             <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
                 <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
@@ -874,9 +977,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                         </Button>
                         <Button
                             onClick={handleSavePresentation}
-                              variant="outline"
-                              size="sm"
-                              className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
                             disabled={isSaving}
                         >
                             <Save className="h-3.5 w-3.5" /> {isSaving ? 'Lagrer...' : 'Lagre'}
@@ -913,74 +1016,156 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 </div>
             </div>
 
-            {/* Polls Sidebar */}
             <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-l border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)]">
                 <div className="border-b border-border p-6">
-                    <h3 className="mb-4 text-xl text-foreground">Polls</h3>
-                    <Button onClick={openCreatePoll} size="sm" variant="outline" className="w-full flex items-center justify-center gap-1.5">
-                        <Plus className="h-3.5 w-3.5" /> Ny poll
-                    </Button>
+                    <h3 className="mb-4 text-xl text-foreground">Interaksjoner</h3>
                 </div>
-                
+
                 <div className="flex-1 overflow-y-auto p-4">
-                    {(slides[currentSlideIndex]?.polls || []).length === 0 ? (
-                        <div className="text-center mt-6">
-                            <strong className="block text-foreground mb-1">Ingen polls</strong>
-                            <span className="text-sm text-muted-foreground">Legg til en poll for å stille publikum et spørsmål.</span>
+                    <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-semibold">Spørsmål</h4>
+                            <Button onClick={openCreateQuestion} size="sm" variant="outline" className="h-8 flex items-center justify-center gap-1.5">
+                                <Plus className="h-3.5 w-3.5" /> Nytt
+                            </Button>
                         </div>
-                    ) : (
-                        <div className="flex flex-col gap-4">
-                            {(slides[currentSlideIndex]?.polls || []).map((poll, index) => {
-                                const totalVotes = getPollTotalVotes(poll);
 
-                                return (
-                                    <div key={poll.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
+                        {(slides[currentSlideIndex]?.questions || []).length === 0 ? (
+                            <div className="text-center mt-4 border border-dashed border-border rounded-xl p-4">
+                                <strong className="block text-foreground mb-1">Ingen spørsmål</strong>
+                                <span className="text-sm text-muted-foreground">Legg til spørsmål deltakerne kan svare på live.</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                {(slides[currentSlideIndex]?.questions || []).map((question, index) => (
+                                    <div key={question.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
                                         <div className="mb-3">
-                                            <div className="flex justify-between items-start gap-2 mb-3">
-                                                <strong className="text-sm font-medium leading-tight">{poll.question}</strong>
-                                                <span className="text-xs text-muted-foreground whitespace-nowrap">{totalVotes} stemmer</span>
+                                            <div className="flex justify-between items-start gap-2 mb-1.5">
+                                                <strong className="text-sm font-medium leading-tight">{question.prompt}</strong>
                                             </div>
-
-                                            <div className="flex flex-col gap-2.5">
-                                                {(poll.options || []).map((option, optionIndex) => {
-                                                    const percentage = getPollOptionPercentage(option.votes, totalVotes);
-
-                                                    return (
-                                                        <div key={option.id || optionIndex} className="w-full">
-                                                            <div className="flex justify-between text-[13px] mb-1.5">
-                                                                <span className="font-medium text-foreground">{option.text}</span>
-                                                                <span className="text-muted-foreground">
-                                                                    {option.votes || 0} ({percentage}%)
-                                                                </span>
-                                                            </div>
-                                                            <progress
-                                                                className="h-1.5 w-full overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-secondary [&::-webkit-progress-value]:bg-primary"
-                                                                value={percentage}
-                                                                max={100}
-                                                            />
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {getPollHistory(poll)}
+                                            <span className="text-xs text-muted-foreground">
+                                                {question.type === 'single_choice' ? 'Single choice' : 'Åpent svar'}
+                                                {question.required ? ' • Obligatorisk' : ''}
+                                            </span>
                                         </div>
-
                                         <div className="flex gap-2 pt-3 border-t border-border">
-                                            <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
+                                            <Button variant="secondary" size="sm" onClick={() => openEditQuestion(index)} className="flex-1 h-8 text-xs">
                                                 Rediger
                                             </Button>
-                                            <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
+                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
                                                 Slett
                                             </Button>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-border pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-semibold">Polls</h4>
+                            <Button onClick={openCreatePoll} size="sm" variant="outline" className="h-8 flex items-center justify-center gap-1.5">
+                                <Plus className="h-3.5 w-3.5" /> Ny
+                            </Button>
                         </div>
-                    )}
+
+                        {(slides[currentSlideIndex]?.polls || []).length === 0 ? (
+                            <div className="text-center mt-4 border border-dashed border-border rounded-xl p-4">
+                                <strong className="block text-foreground mb-1">Ingen polls</strong>
+                                <span className="text-sm text-muted-foreground">Legg til en poll for å stille publikum et spørsmål.</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-4">
+                                {(slides[currentSlideIndex]?.polls || []).map((poll, index) => {
+                                    const totalVotes = getPollTotalVotes(poll);
+
+                                    return (
+                                        <div key={poll.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
+                                            <div className="mb-3">
+                                                <div className="flex justify-between items-start gap-2 mb-3">
+                                                    <strong className="text-sm font-medium leading-tight">{poll.question}</strong>
+                                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{totalVotes} stemmer</span>
+                                                </div>
+
+                                                <div className="flex flex-col gap-2.5">
+                                                    {(poll.options || []).map((option, optionIndex) => {
+                                                        const percentage = getPollOptionPercentage(option.votes, totalVotes);
+
+                                                        return (
+                                                            <div key={option.id || optionIndex} className="w-full">
+                                                                <div className="flex justify-between text-[13px] mb-1.5">
+                                                                    <span className="font-medium text-foreground">{option.text}</span>
+                                                                    <span className="text-muted-foreground">
+                                                                        {option.votes || 0} ({percentage}%)
+                                                                    </span>
+                                                                </div>
+                                                                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-primary" style={{ width: `${percentage}%` }} />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {getPollHistory(poll)}
+                                            </div>
+
+                                            <div className="flex gap-2 pt-3 border-t border-border">
+                                                <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
+                                                    Rediger
+                                                </Button>
+                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
+                                                    Slett
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
+
+            {isQuestionCreatorOpen && (
+                <div className="poll-model-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="poll-model-card" style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <Question
+                            onCancel={closeQuestionCreator}
+                            onSave={handleSaveQuestion}
+                            initialData={editingQuestionIndex !== null ? (slides[currentSlideIndex]?.questions || [])[editingQuestionIndex] : null}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {questionToDeleteIndex !== null && (
+                <div className="fixed inset-0 z-9999 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                        <h3 className="text-lg font-semibold text-foreground text-left mb-2">Slett spørsmål?</h3>
+                        <p className="text-[15px] text-muted-foreground text-left mb-8">
+                            Er du sikker på at du vil slette dette spørsmålet? Dette kan ikke angres.
+                        </p>
+                        <div className="flex justify-end gap-3 mt-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => setQuestionToDeleteIndex(null)}
+                                className="flex items-center gap-1.5 bg-transparent border-input hover:bg-accent hover:text-accent-foreground transition-colors"
+                            >
+                                <X className="h-4 w-4" /> Avbryt
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={confirmDeleteQuestion}
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
+                            >
+                                <Trash2 className="h-4 w-4" /> Slett
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isPollCreatorOpen && (
                 <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4">
@@ -1002,14 +1187,14 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                             Er du sikker på at du vil slette denne pollen? Dette kan ikke angres.
                         </p>
                         <div className="flex justify-end gap-3 mt-4">
-                            <Button 
-                                variant="outline" 
+                            <Button
+                                variant="outline"
                                 onClick={() => setPollToDeleteIndex(null)}
                                 className="flex items-center gap-1.5 bg-transparent border-input hover:bg-accent hover:text-accent-foreground transition-colors"
                             >
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
-                            <Button 
+                            <Button
                                 variant="outline"
                                 onClick={confirmDeletePoll}
                                 className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
@@ -1026,6 +1211,33 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
 export default PresentationEditor;
 
+const normalizeQuestionOption = (option: unknown, questionIndex: number, optionIndex: number): QuestionOption => {
+    const rawOption = (typeof option === 'object' && option !== null ? option : {}) as Partial<QuestionOption>;
+
+    return {
+        id: rawOption.id || `local-question-option-${Date.now()}-${questionIndex}-${optionIndex}`,
+        text: typeof option === 'string' ? option : (rawOption.text || ''),
+    };
+};
+
+const normalizeQuestion = (question: unknown, questionIndex: number): QuestionItem => {
+    const rawQuestion = (typeof question === 'object' && question !== null ? question : {}) as Partial<QuestionItem> & {
+        options?: unknown[];
+    };
+
+    return {
+        id: rawQuestion.id || `local-question-${Date.now()}-${questionIndex}`,
+        prompt: rawQuestion.prompt || '',
+        type: rawQuestion.type === 'single_choice' ? 'single_choice' : 'open_text',
+        required: Boolean(rawQuestion.required),
+        options: Array.isArray(rawQuestion.options)
+            ? rawQuestion.options
+                .map((option, optionIndex) => normalizeQuestionOption(option, questionIndex, optionIndex))
+                .filter((option) => option.text.trim().length > 0)
+            : [],
+        createdAt: rawQuestion.createdAt || new Date().toISOString(),
+    };
+};
 type PollInput = Partial<Poll> & {
     options?: unknown[];
     sessionHistory?: unknown[];
