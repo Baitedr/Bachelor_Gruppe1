@@ -84,12 +84,12 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className='min-h-[420px] rounded-xl border border-border p-6 flex flex-col justify-center items-center' style={{ backgroundColor: currentSlideData?.backgroundColor || 'hsl(var(--card))' }}>
+          <div className='min-h-105 rounded-xl border border-border p-6 flex flex-col justify-center items-center' style={{ backgroundColor: currentSlideData?.backgroundColor || 'hsl(var(--card))' }}>
             {currentSlideData ? (
               currentSlideData.fabricData ? (
                 <LivePresentationCanvas slideData={currentSlideData} />
               ) : (
-                <div className="w-full flex-grow text-center flex flex-col justify-center items-center">
+                <div className="w-full grow text-center flex flex-col justify-center items-center">
                   {currentSlideData.title && (
                     <h2 className='text-3xl font-bold mb-6 text-foreground'>{currentSlideData.title}</h2>
                   )}

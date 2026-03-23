@@ -141,7 +141,8 @@ module Api
           'title' => 'Slide 1',
           'content' => '',
           'backgroundColor' => '#ffffff',
-          'fabricData' => nil
+          'fabricData' => nil,
+          'questions' => []
         }
       end
 
@@ -153,8 +154,46 @@ module Api
           content: source['content'].to_s.presence || source[:content].to_s.presence || '',
           backgroundColor: source['backgroundColor'].presence || source[:backgroundColor].presence || '#ffffff',
           fabricData: source['fabricData'] || source[:fabricData],
-          previewImage: source['previewImage'] || source[:previewImage]
+          previewImage: source['previewImage'] || source[:previewImage],
+          questions: normalize_slide_questions(source['questions'] || source[:questions])
         }
+      end
+
+      def normalize_slide_questions(questions)
+        return [] unless questions.is_a?(Array)
+
+        questions.filter_map do |question_data|
+          question_source = question_data.is_a?(ActionController::Parameters) ? question_data.to_unsafe_h : question_data
+          prompt = question_source['prompt'] || question_source[:prompt]
+          next if prompt.blank?
+
+          question_type = question_source['type'] || question_source[:type]
+          raw_options = question_source['options'] || question_source[:options] || []
+
+          {
+            id: question_source['id'] || question_source[:id] || "local-question-#{SecureRandom.hex(6)}",
+            prompt: prompt.to_s,
+            type: question_type == 'single_choice' ? 'single_choice' : 'open_text',
+            required: ActiveModel::Type::Boolean.new.cast(question_source['required'] || question_source[:required]),
+            options: normalize_question_options(raw_options),
+            createdAt: question_source['createdAt'] || question_source[:createdAt] || Time.current.iso8601
+          }
+        end
+      end
+
+      def normalize_question_options(options)
+        return [] unless options.is_a?(Array)
+
+        options.filter_map do |option_data|
+          option_source = option_data.is_a?(ActionController::Parameters) ? option_data.to_unsafe_h : option_data
+          text = option_source.is_a?(String) ? option_source : (option_source['text'] || option_source[:text])
+          next if text.blank?
+
+          {
+            id: option_source.is_a?(Hash) ? (option_source['id'] || option_source[:id] || "local-question-option-#{SecureRandom.hex(6)}") : "local-question-option-#{SecureRandom.hex(6)}",
+            text: text.to_s
+          }
+        end
       end
 
       def presentation_summary(presentation)
@@ -211,6 +250,7 @@ module Api
           content: payload['content'] || '',
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
+          questions: normalize_slide_questions(payload['questions']),
           polls: polls.map { |poll| poll_payload_for_editor(poll, latest_session, sessions) }
         }
       end
