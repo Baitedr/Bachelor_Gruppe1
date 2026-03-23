@@ -427,19 +427,26 @@ function App() {
   const handleGoHome = async () => {
     if (currentPage === 'editor') {
       const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+        
 
-      // Ingen endringer - gå hjem 
+      // Hvis bruker endret på noe så blir det vist en dialog box
       if (!hasUnsavedChanges) {
-        setIsExitEditorDialogOpen(false)
-        clearSessionState()
-        setCurrentPage('home');
-        return;
+        setIsExitEditorDialogOpen(true)
+        return
       }
 
-      setIsExitEditorDialogOpen(true) //Viser dialog vindu hvis noe er endret på
-      return
+      //Hvis det er en ny presentasjon som aldri blir gjort noe med - forkast
+      if (isNewPresentationSession && !hasSavedCurrentSession && activePresentation?.id) {
+        await handleDiscardAndGoHome()
+        return
+      }
+
+      clearSessionState()
+        setCurrentPage('home');
+        return
     }
 
+    //Eksisterende presentasjon, ingen endringer - bare gå hjem
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
