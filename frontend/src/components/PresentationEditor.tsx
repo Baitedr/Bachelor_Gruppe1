@@ -1189,8 +1189,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
             </div>
 
             {isQuestionCreatorOpen && (
-                <div className="poll-model-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="poll-model-card" style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4">
+                <div className="max-h-[90vh] w-full max-w-125 overflow-y-auto rounded-xl border border-border bg-card p-6">
                         <Question
                             onCancel={closeQuestionCreator}
                             onSave={handleSaveQuestion}
