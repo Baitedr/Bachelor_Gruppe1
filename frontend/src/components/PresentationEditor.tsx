@@ -1,8 +1,13 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import {
+    BarChart3,
     Circle as CircleIcon,
     Image as ImageIcon,
+    PanelLeftClose,
+    PanelLeftOpen,
+    PanelRightClose,
+    PanelRightOpen,
     Palette,
     Plus,
     Redo2,
@@ -17,6 +22,7 @@ import {
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './PollComponents/PollCreator';
 import Question from './Question';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -25,6 +31,8 @@ import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
+// Når vinduet er smalere enn dette, kollapser sidepanelene automatisk.
+const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
 
 type CanvasSnapshot = {
     backgroundColor: string;
@@ -144,7 +152,33 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [textColor, setTextColor] = useState<string>('#000000');
     const [hasSelectedText, setHasSelectedText] = useState(false);
 
+    // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+    const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
+    const [isAutoCollapsed, setIsAutoCollapsed] = useState(false);
+
+    // Referanser/tilstand for responsiv skalering av canvas.
+    const canvasViewportRef = useRef<HTMLDivElement | null>(null);
+    const canvasScaleWrapperRef = useRef<HTMLDivElement | null>(null);
+    const [canvasScale, setCanvasScale] = useState(1);
+
     const hasUnsavedChangesRef = useRef(false);
+
+    // Regner ut hvor mye 16:9-canvas kan skaleres innenfor tilgjengelig plass.
+    const updateCanvasScale = useCallback(() => {
+        const container = canvasViewportRef.current;
+        if (!container) return;
+
+        const availableWidth = Math.max(container.clientWidth - CANVAS_PADDING * 2, 0);
+        const availableHeight = Math.max(container.clientHeight - CANVAS_PADDING * 2, 0);
+        const nextScale = Math.min(
+            1,
+            availableWidth / CANVAS_WIDTH,
+            availableHeight / CANVAS_HEIGHT
+        );
+
+        setCanvasScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
+    }, []);
 
     const markDirty = () => {
         hasUnsavedChangesRef.current = true;
@@ -302,6 +336,65 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             }
         };
     }, []);
+
+    // Setter riktig initial kollaps-status ved første render.
+    useEffect(() => {
+        const shouldAutoCollapse = window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_BREAKPOINT;
+
+        setIsAutoCollapsed(shouldAutoCollapse);
+        if (shouldAutoCollapse) {
+            setIsLeftSidebarCollapsed(true);
+            setIsRightSidebarCollapsed(true);
+        } else {
+            // Ved stor skjerm ved oppstart vises begge panelene.
+            setIsLeftSidebarCollapsed(false);
+            setIsRightSidebarCollapsed(false);
+        }
+    }, []);
+
+    // Ved resize: auto-kollaps sidepanelene og oppdater canvasskalering.
+    useEffect(() => {
+        const handleResize = () => {
+            const shouldAutoCollapse = window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_BREAKPOINT;
+
+            setIsAutoCollapsed(shouldAutoCollapse);
+            if (shouldAutoCollapse) {
+                setIsLeftSidebarCollapsed(true);
+                setIsRightSidebarCollapsed(true);
+            } else {
+                // Når vinduet blir stort igjen, utvides panelene automatisk.
+                setIsLeftSidebarCollapsed(false);
+                setIsRightSidebarCollapsed(false);
+            }
+
+            updateCanvasScale();
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [updateCanvasScale]);
+
+    // Observerer layoutendringer i canvas-viewporten for jevn responsiv skalering.
+    useEffect(() => {
+        const viewport = canvasViewportRef.current;
+        if (!viewport) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            updateCanvasScale();
+        });
+
+        resizeObserver.observe(viewport);
+        updateCanvasScale();
+
+        return () => resizeObserver.disconnect();
+    }, [updateCanvasScale, isLeftSidebarCollapsed, isRightSidebarCollapsed]);
+
+    // Skriver skalering direkte på wrapper for å unngå inline-style i JSX.
+    useEffect(() => {
+        if (!canvasScaleWrapperRef.current) return;
+
+        canvasScaleWrapperRef.current.style.transform = `scale(${canvasScale})`;
+    }, [canvasScale]);
 
     // Laster aktivt lysbilde inn i Fabric ved bytte av slide.
     useEffect(() => {
@@ -1097,7 +1190,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
     }));
 
     return (
-        <div className="flex h-screen items-stretch bg-background overflow-hidden">
+        <div className="flex h-screen items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -1106,21 +1199,73 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 onChange={handleImageFileChange}
             />
 
-            <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-r border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.35)]">
-                <div className="border-b border-border p-6">
-                    <h3 className="mb-4 text-xl text-foreground">Lysbilder</h3>
-                    <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
-                        <Plus className="h-3.5 w-3.5" /> Legg til
+            <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.2)] ring-1 ring-border/40 transition-all duration-200`}>
+                <div className="flex items-center justify-between border-b border-border p-3">
+                    {!isLeftSidebarCollapsed && <h3 className="text-lg text-foreground">Lysbilder</h3>}
+                    <Button
+                        onClick={() => setIsLeftSidebarCollapsed((prev) => !prev)}
+                        size="icon"
+                        variant="ghost"
+                        className="ml-auto h-8 w-8"
+                        title={isLeftSidebarCollapsed ? 'Vis lysbildepanel' : 'Skjul lysbildepanel'}
+                        aria-label={isLeftSidebarCollapsed ? 'Vis lysbildepanel' : 'Skjul lysbildepanel'}
+                    >
+                        {isLeftSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                     </Button>
                 </div>
-                <SlideThumbnails
-                    slides={slides}
-                    slidePreviewImages={slidePreviewImages}
-                    currentSlideIndex={currentSlideIndex}
-                    onSlideSelect={handleSlideSelect}
-                    onSlideDelete={deleteSlide}
-                    onSlideDuplicate={duplicateSlide}
-                />
+
+                {/* Kompaktmodus: viser direktevalg av lysbilder slik at bruker kan hoppe rett til ønsket slide. */}
+                {isLeftSidebarCollapsed && (
+                    <div className="flex flex-1 flex-col items-center gap-2 p-2">
+                        <Button
+                            onClick={addSlide}
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            title="Legg til lysbilde"
+                            aria-label="Legg til lysbilde"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                        {/* Vertikal miniliste med alle lysbilder i kollapset visning. */}
+                        <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto pb-1">
+                            {slides.map((slide, index) => (
+                                <Button
+                                    key={slide.id}
+                                    onClick={() => setCurrentSlideIndex(index)}
+                                    size="icon"
+                                    // Aktiv slide vises med tydeligere kontrast via default-variant.
+                                    variant={index === currentSlideIndex ? 'default' : 'outline'}
+                                    className="h-8 w-8 text-xs"
+                                    title={`Lysbilde ${index + 1}: ${slide.title || 'Uten tittel'}`}
+                                    aria-label={`Gå til lysbilde ${index + 1}`}
+                                >
+                                    {index + 1}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {!isLeftSidebarCollapsed && (
+                    <>
+                        <div className="border-b border-border p-4">
+                            <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
+                                <Plus className="h-3.5 w-3.5" /> Legg til
+                            </Button>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            <SlideThumbnails
+                                slides={slides}
+                                slidePreviewImages={slidePreviewImages}
+                                currentSlideIndex={currentSlideIndex}
+                                onSlideSelect={handleSlideSelect}
+                                onSlideDelete={deleteSlide}
+                                onSlideDuplicate={duplicateSlide}
+                            />
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
@@ -1139,6 +1284,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         <span className="ml-auto inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
                             Lysbilde {currentSlideIndex + 1} av {slides.length}
                         </span>
+                        {/* Shad-badge gjør auto-status mer synlig og konsistent i UI-et. */}
+                        {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
                     </div>
                     <div className="flex flex-wrap items-center justify-start gap-2">
                         <Button
@@ -1223,21 +1370,69 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     </div>
                 )}
 
-                <div className="flex flex-1 overflow-auto">
-                    <div className="relative flex min-h-100 flex-1 items-center justify-center rounded-[10px] bg-transparent p-8 [&_canvas]:rounded-lg">
-                        <div>
+                <div className="flex h-full w-full flex-1 overflow-hidden">
+                    <div
+                        ref={canvasViewportRef}
+                        className="relative flex min-h-100 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-8"
+                    >
+                        <div
+                            ref={canvasScaleWrapperRef}
+                            className="h-135 w-240 origin-center [&_canvas]:rounded-lg"
+                        >
                             <canvas ref={canvasRef} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="flex h-screen w-72.5 shrink-0 grow-0 basis-72.5 flex-col overflow-y-auto border-l border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)]">
-                <div className="border-b border-border p-6">
-                    <h3 className="mb-4 text-xl text-foreground">Interaksjoner</h3>
+            <div className={`${isRightSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)] ring-1 ring-border/40 transition-all duration-200`}>
+                <div className="flex items-center gap-2 border-b border-border p-3">
+                    <Button
+                        onClick={() => setIsRightSidebarCollapsed((prev) => !prev)}
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        title={isRightSidebarCollapsed ? 'Vis interaksjonspanel' : 'Skjul interaksjonspanel'}
+                        aria-label={isRightSidebarCollapsed ? 'Vis interaksjonspanel' : 'Skjul interaksjonspanel'}
+                    >
+                        {isRightSidebarCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+                    </Button>
+                    {!isRightSidebarCollapsed && <h3 className="text-lg text-foreground">Interaksjoner</h3>}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                {isRightSidebarCollapsed && (
+                    <div className="flex flex-1 flex-col items-center gap-2 p-2">
+                        <Button
+                            onClick={openCreateQuestion}
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            title="Nytt spørsmål"
+                            aria-label="Lag nytt spørsmål"
+                        >
+                            <Type className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            onClick={openCreatePoll}
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            title="Ny poll"
+                            aria-label="Lag ny poll"
+                        >
+                            <BarChart3 className="h-4 w-4" />
+                        </Button>
+                        {/* Kompakte badges gjør antall lettere å lese i smal kollapset sidebar. */}
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10px] leading-none">
+                            S {(slides[currentSlideIndex]?.questions || []).length}
+                        </Badge>
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10px] leading-none">
+                            P {(slides[currentSlideIndex]?.polls || []).length}
+                        </Badge>
+                    </div>
+                )}
+
+                {!isRightSidebarCollapsed && <div className="flex-1 overflow-y-auto p-4">
                     <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-sm font-semibold">Spørsmål</h4>
@@ -1316,9 +1511,11 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                                                         {option.votes || 0} ({percentage}%)
                                                                     </span>
                                                                 </div>
-                                                                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                                                                    <div className="h-full bg-primary" style={{ width: `${percentage}%` }} />
-                                                                </div>
+                                                                <progress
+                                                                    className="h-1.5 w-full overflow-hidden rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-secondary [&::-webkit-progress-value]:bg-primary"
+                                                                    max={100}
+                                                                    value={percentage}
+                                                                />
                                                             </div>
                                                         );
                                                     })}
@@ -1341,7 +1538,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             </div>
                         )}
                     </div>
-                </div>
+                </div>}
             </div>
 
             {isQuestionCreatorOpen && (
