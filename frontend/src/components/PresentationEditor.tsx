@@ -138,12 +138,43 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
     const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
     const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
+    const [shapeColor, setShapeColor] = useState<string>('#667eea');
+    const [hasSelectedShape, setHasSelectedShape] = useState(false);
+    const [textColor, setTextColor] = useState<string>('#000000');
+    const [hasSelectedText, setHasSelectedText] = useState(false);
 
     const hasUnsavedChangesRef = useRef(false);
-    
+
     const markDirty = () => {
         hasUnsavedChangesRef.current = true;
-    }
+    };
+
+    const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
+    const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
+
+    const syncHasSelectedShape = () => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) {
+            setHasSelectedShape(false);
+            setHasSelectedText(false);
+            return;
+        }
+
+        const activeObjects = canvas.getActiveObjects();
+        const selectedShape = activeObjects.find(isShapeObject);
+        const selectedText = activeObjects.find(isTextObject);
+
+        setHasSelectedShape(Boolean(selectedShape));
+        setHasSelectedText(Boolean(selectedText));
+
+        if (selectedShape && typeof selectedShape.fill === 'string') {
+            setShapeColor(selectedShape.fill);
+        }
+
+        if (selectedText && typeof selectedText.fill === 'string') {
+            setTextColor(selectedText.fill);
+        }
+    };
 
     const currentSlideIdRef = useRef<string | null>(null);
     useEffect(() => {
@@ -247,7 +278,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 height: 540,
                 backgroundColor: '#ffffff',
             });
-            
+
             fabricCanvasRef.current.set({ backgroundColor: '#ffffff' });
             fabricCanvasRef.current.renderAll();
 
@@ -265,7 +296,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     useEffect(() => {
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
-            
+
             const backgroundColor = currentSlide.backgroundColor || '#ffffff';
 
             isApplyingCanvasStateRef.current = true;
@@ -304,7 +335,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         const updatePreview = () => {
             if (isApplyingCanvasStateRef.current) return;
-            
+
             const currentId = currentSlideIdRef.current;
             if (currentId && fabricCanvasRef.current) {
                 const dataUrl = fabricCanvasRef.current.toDataURL({
@@ -312,9 +343,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     quality: 0.9,
                     multiplier: 0.8,
                 });
-                setSlidePreviewImages(prev => ({
+                setSlidePreviewImages((prev) => ({
                     ...prev,
-                    [currentId]: dataUrl
+                    [currentId]: dataUrl,
                 }));
             }
         };
@@ -328,12 +359,20 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
         canvas.on('text:changed', updatePreview);
+        canvas.on('selection:created', syncHasSelectedShape);
+        canvas.on('selection:updated', syncHasSelectedShape);
+        canvas.on('selection:cleared', syncHasSelectedShape);
+
+        syncHasSelectedShape();
 
         return () => {
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
             canvas.off('text:changed', updatePreview);
+            canvas.off('selection:created', syncHasSelectedShape);
+            canvas.off('selection:updated', syncHasSelectedShape);
+            canvas.off('selection:cleared', syncHasSelectedShape);
         };
     }, []);
 
@@ -423,38 +462,38 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
     // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
     useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Delete' && event.key !== 'Backspace') return;
 
-        const target = event.target as HTMLElement | null;
-        const tagName = target?.tagName?.toLowerCase();
+            const target = event.target as HTMLElement | null;
+            const tagName = target?.tagName?.toLowerCase();
 
-        // Gjør slik at Delete/Backspace-tasten ikke sletter objekter når man skriver i tekstfelt
-        if (
-            tagName === 'input' ||
-            tagName === 'textarea' ||
-            target?.isContentEditable
-        ) {
-            return;
-        }
+            // Gjør slik at Delete/Backspace-tasten ikke sletter objekter når man skriver i tekstfelt
+            if (
+                tagName === 'input' ||
+                tagName === 'textarea' ||
+                target?.isContentEditable
+            ) {
+                return;
+            }
 
-        const canvas = fabricCanvasRef.current;
-        if (!canvas) return;
+            const canvas = fabricCanvasRef.current;
+            if (!canvas) return;
 
-        const activeObject = canvas.getActiveObject();
-        if (!activeObject) return;
+            const activeObject = canvas.getActiveObject();
+            if (!activeObject) return;
 
-        // Hvis et tekstobjekt er i redigeringsmodus, skal ikke Delete-tasten slette hele objektet
-        if ('isEditing' in activeObject && (activeObject as any).isEditing) {
-            return;
-        }
+            // Hvis et tekstobjekt er i redigeringsmodus, skal ikke Delete-tasten slette hele objektet
+            if ('isEditing' in activeObject && (activeObject as any).isEditing) {
+                return;
+            }
 
-        event.preventDefault();
-        deleteSelected();
-    };
+            event.preventDefault();
+            deleteSelected();
+        };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
@@ -588,7 +627,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             originX: 'left',
             originY: 'top',
             fontSize: 28,
-            fill: '#000000',
+            fill: textColor,
             fontFamily: 'Arial',
             lineHeight: 1.2,
         });
@@ -610,7 +649,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             originX: 'left',
             originY: 'top',
             fontSize: 48,
-            fill: '#000000',
+            fill: textColor,
             fontFamily: 'Arial',
             fontWeight: 'bold',
             lineHeight: 1.16,
@@ -652,7 +691,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
     const addShape = (shapeType: 'rectangle' | 'circle') => {
         if (!fabricCanvasRef.current) return;
-        
+
         const pos = getSafePosition(80, 150);
         let shape;
         switch (shapeType) {
@@ -662,7 +701,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     top: pos.top,
                     width: 200,
                     height: 150,
-                    fill: '#667eea',
+                    fill: shapeColor,
                 });
                 break;
             case 'circle':
@@ -670,15 +709,84 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     left: pos.left,
                     top: pos.top,
                     radius: 75,
-                    fill: '#764ba2',
+                    fill: shapeColor,
                 });
                 break;
         }
-        
+
         if (shape) {
             fabricCanvasRef.current.add(shape);
             fabricCanvasRef.current.setActiveObject(shape);
             fabricCanvasRef.current.renderAll();
+            syncHasSelectedShape();
+        }
+    };
+
+    const changeSelectedShapeColor = (color: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (obj.type === 'rect' || obj.type === 'circle') {
+                obj.set('fill', color);
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.renderAll();
+        markDirty();
+        pushHistorySnapshot(createCanvasSnapshot());
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId) {
+            setSlidePreviewImages((prev) => ({
+                ...prev,
+                [currentId]: fabricCanvasRef.current!.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                }),
+            }));
+        }
+    };
+
+    const changeSelectedTextColor = (color: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (isTextObject(obj)) {
+                obj.set('fill', color);
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.renderAll();
+        markDirty();
+        pushHistorySnapshot(createCanvasSnapshot());
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId) {
+            setSlidePreviewImages((prev) => ({
+                ...prev,
+                [currentId]: fabricCanvasRef.current!.toDataURL({
+                    format: 'png',
+                    quality: 0.9,
+                    multiplier: 0.8,
+                }),
+            }));
         }
     };
 
@@ -1026,14 +1134,46 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                         <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
                         <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
                         <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
-                        <Label className="flex items-center gap-2 px-3 py-1.5 border border-input rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
+                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
                             <Palette className="h-3.5 w-3.5" /> Bakgrunn
                             <Input
                                 type="color"
+                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
                                 value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
                                 onChange={(e) => changeBackgroundColor(e.target.value)}
                             />
                         </Label>
+                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
+                            <Square className="h-3.5 w-3.5" /> Figurfarge
+                            <Input
+                                type="color"
+                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
+                                value={shapeColor}
+                                disabled={!hasSelectedShape}
+                                onChange={(e) => {
+                                    const color = e.target.value;
+                                    setShapeColor(color);
+                                    changeSelectedShapeColor(color);
+                                }}
+                            />
+                        </Label>
+                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
+                            <Type className="h-3.5 w-3.5" /> Tekstfarge
+                            <Input
+                                type="color"
+                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
+                                value={textColor}
+                                disabled={!hasSelectedText}
+                                onChange={(e) => {
+                                    const color = e.target.value;
+                                    setTextColor(color);
+                                    changeSelectedTextColor(color);
+                                }}
+                            />
+                        </Label>
+
+                            
+                    
                     </div>
                 </div>
                 {saveError && <div className="rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">{saveError}</div>}
