@@ -77,7 +77,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
         : await api.register(credentials)
       onLoginSuccess?.(response.user)
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Godkjenning mislyktes. Vennligst prøv igjen.') // Authentication failed. Please try again.
+      if (err?.response?.data?.errors) {
+        setError(err.response.data.errors.join(', '));
+      } else {
+        setError(err?.response?.data?.error || 'Godkjenning mislyktes. Vennligst prøv igjen.') 
+      }
     } finally {
       setIsLoading(false)
     }
