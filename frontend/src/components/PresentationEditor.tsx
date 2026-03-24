@@ -421,6 +421,42 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         };
     }, [slides]);
 
+    // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
+    useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+
+        const target = event.target as HTMLElement | null;
+        const tagName = target?.tagName?.toLowerCase();
+
+        // Gjør slik at Delete/Backspace-tasten ikke sletter objekter når man skriver i tekstfelt
+        if (
+            tagName === 'input' ||
+            tagName === 'textarea' ||
+            target?.isContentEditable
+        ) {
+            return;
+        }
+
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        const activeObject = canvas.getActiveObject();
+        if (!activeObject) return;
+
+        // Hvis et tekstobjekt er i redigeringsmodus, skal ikke Delete-tasten slette hele objektet
+        if ('isEditing' in activeObject && (activeObject as any).isEditing) {
+            return;
+        }
+
+        event.preventDefault();
+        deleteSelected();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
     const saveCurrentSlide = () => {
         const newSlides = buildSlidesWithCurrentCanvasState();
