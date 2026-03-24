@@ -618,8 +618,25 @@ function App() {
               ) : (
                 <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
                   {presentations.map((presentation) => (
-                    <Card key={presentation.id} className='border-border/70'>
-                      <CardContent className='space-y-4 p-4'>
+                    <Card
+                      key={presentation.id}
+                      className='group border-border/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent/30 hover:shadow-lg'
+                    >
+                      <CardContent
+                        className='space-y-4 rounded-lg p-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+                        role='button'
+                        tabIndex={0}
+                        aria-label={`Rediger ${presentation.title}`}
+                        onClick={(event) => {
+                          if ((event.target as HTMLElement).closest('button')) return
+                          void handleOpenPresentation(presentation.id)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return
+                          event.preventDefault()
+                          void handleOpenPresentation(presentation.id)
+                        }}
+                      >
                         {presentation.first_slide?.previewImage ? (
                           <div className='aspect-video w-full overflow-hidden rounded-md border border-border bg-muted/20'>
                             <img
