@@ -250,6 +250,7 @@ module Api
           content: payload['content'] || '',
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
+          previewImage: payload_value(payload, 'previewImage'),
           questions: normalize_slide_questions(payload['questions']),
           polls: polls.map { |poll| poll_payload_for_editor(poll, latest_session, sessions) }
         }

@@ -150,6 +150,16 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         hasUnsavedChangesRef.current = true;
     };
 
+    const captureCanvasPreview = () => {
+        if (!fabricCanvasRef.current) return null;
+
+        return fabricCanvasRef.current.toDataURL({
+            format: 'png',
+            quality: 0.9,
+            multiplier: 0.8,
+        });
+    };
+
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
     const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
 
@@ -338,12 +348,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             if (isApplyingCanvasStateRef.current) return;
 
             const currentId = currentSlideIdRef.current;
-            if (currentId && fabricCanvasRef.current) {
-                const dataUrl = fabricCanvasRef.current.toDataURL({
-                    format: 'png',
-                    quality: 0.9,
-                    multiplier: 0.8,
-                });
+            if (currentId) {
+                const dataUrl = captureCanvasPreview();
+                if (!dataUrl) return;
                 setSlidePreviewImages((prev) => ({
                     ...prev,
                     [currentId]: dataUrl,
@@ -896,6 +903,13 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
     // Current canvas er med i neste save 
     const slidesToSave = saveCurrentSlide()
+        const currentSlide = slidesToSave[currentSlideIndex]
+        const currentSlidePreview = captureCanvasPreview()
+        const slidePreviewsById = { ...slidePreviewImages }
+
+        if (currentSlide?.id && currentSlidePreview) {
+            slidePreviewsById[currentSlide.id] = currentSlidePreview
+        }
 
     const payload = {
       id: presentationId ?? undefined,
@@ -905,6 +919,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         content: slide?.content || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
+                previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
       })),
     }
@@ -927,6 +942,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         content: slide?.content || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
+                previewImage: slide?.previewImage || null,
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
       }))
 

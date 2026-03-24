@@ -52,6 +52,7 @@ type PresentationSummary = {
     content?: string
     backgroundColor?: string
     fabricData?: unknown
+    previewImage?: string
   }>
 }
 
@@ -136,6 +137,7 @@ function App() {
       content: slide?.content || '',
       backgroundColor: slide?.backgroundColor || '#ffffff',
       fabricData: slide?.fabricData || null,
+      previewImage: slide?.previewImage || (index === 0 ? presentation?.first_slide?.previewImage : null),
     })),
   })
 
@@ -310,7 +312,16 @@ function App() {
 
     try {
       const details = await api.getPresentation(presentationId)
+      const summaryPresentation = presentations.find((item) => item.id === presentationId)
       const restorablePresentation = details?.presentation
+        ? {
+            ...details.presentation,
+            first_slide:
+              details.presentation?.first_slide ||
+              summaryPresentation?.first_slide ||
+              null,
+          }
+        : details?.presentation
       await api.deletePresentation(presentationId)
 
       if (activePresentation?.id === presentationId) {
@@ -711,12 +722,35 @@ function App() {
                     {trashedPresentations.map((trashedItem) => (
                       <Card key={trashedItem.id} className='border-border/70'>
                         <CardContent className='flex flex-col gap-3 p-4 sm:flex-row sm:items-center'>
+                          <div className='w-full sm:w-40 shrink-0'>
+                            {(trashedItem.presentation?.first_slide?.previewImage || trashedItem.presentation?.slides?.[0]?.previewImage) ? (
+                              <div className='aspect-video w-full overflow-hidden rounded-md border border-border bg-muted/20'>
+                                <img
+                                  src={trashedItem.presentation?.first_slide?.previewImage || trashedItem.presentation?.slides?.[0]?.previewImage}
+                                  alt={`${trashedItem.presentation?.title || 'Presentasjon'} forhåndsvisning`}
+                                  className='h-full w-full object-cover'
+                                />
+                              </div>
+                            ) : (
+                              <div className='aspect-video w-full rounded-md border border-border bg-muted/40 p-3'>
+                                <p className='line-clamp-1 text-sm font-medium'>
+                                  {trashedItem.presentation?.slides?.[0]?.title || trashedItem.presentation?.first_slide?.title || 'Lysbilde 1'}
+                                </p>
+                                <p className='mt-2 line-clamp-3 text-xs text-muted-foreground'>
+                                  {trashedItem.presentation?.slides?.[0]?.content || trashedItem.presentation?.first_slide?.content || 'Intet innhold ennå'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                           <div className='min-w-0 flex-1'>
                             <p className='line-clamp-1 text-sm font-medium'>
                               {trashedItem.presentation?.title || 'Uten navn'}
                             </p>
                             <p className='text-xs text-muted-foreground'>
                               Slettet {new Date(trashedItem.deletedAt).toLocaleTimeString()}
+                            </p>
+                            <p className='text-xs text-muted-foreground'>
+                              {(trashedItem.presentation?.slides?.length || trashedItem.presentation?.slide_count || 0)} lysbilde(r)
                             </p>
                           </div>
                           <div className='flex gap-2'>
@@ -853,6 +887,14 @@ function App() {
               <CardDescription>Vil du lagre endringene dine før du går tilbake?</CardDescription>
             </CardHeader>
             <CardContent className='flex justify-end gap-2'>
+              <Button
+                variant='outline'
+                onClick={() => setIsExitEditorDialogOpen(false)}
+                disabled={isSavingPresentation || isDiscardingPresentation}
+                className='flex items-center justify-center gap-1.5 bg-muted/30 text-foreground border-border hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+              >
+                Avbryt
+              </Button>
               <Button
                 variant='outline'
                 onClick={handleDiscardAndGoHome}
