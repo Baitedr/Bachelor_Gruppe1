@@ -9,6 +9,9 @@ export const usePresentation = (presentationId, token) => {
   const [participantCount, setParticipantCount] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [submittedPollIds, setSubmittedPollIds] = useState({});
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [questionResults, setQuestionResults] = useState({});
+  const [submittedQuestionIds, setSubmittedQuestionIds] = useState({});
 
   const cableRef = useRef(null);
   const subscriptionRef = useRef(null);
@@ -50,6 +53,20 @@ export const usePresentation = (presentationId, token) => {
               setSessionEnded(true)
               break
             default:
+              break
+            case 'question_activated':
+              setActiveQuestion(data.question || null)
+              break
+            case 'question_results':
+              setQuestionResults((prev) => ({
+                ...prev,
+                [data.question_id]: {
+                  results: data.results || {},
+                  total: data.total || 0,
+                  recent_answers: data.recent_answers || [],
+                  question_type: data.question_type || 'open_text',
+                },
+              }))
               break
           }
         },
@@ -95,6 +112,24 @@ export const usePresentation = (presentationId, token) => {
     }
   }
 
+  // Spørsmål-funksjonalitet til LivePresentation
+  const activateQuestion = (questionId, answer) => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('activate_question', { question_id: questionId })
+    }
+  }
+
+  const submitQuestionAnswer = (questionId, answer) => {
+    if (!subscriptionRef.current) return
+    if (submittedQuestionIds[questionId]) return
+
+    setSubmittedQuestionIds((prev) => ({ ...prev, [questionId]: true }))
+    subscriptionRef.current.perform('submit_question_response', {
+      question_id: questionId,
+      answer,
+    })
+  }
+
   return {
     currentSlide,
     activePoll,
@@ -107,5 +142,10 @@ export const usePresentation = (presentationId, token) => {
     sessionEnded,
     startSession,
     submittedPollIds,
+    activeQuestion,
+    questionResults,
+    activateQuestion,
+    submitQuestionAnswer,
+    submittedQuestionIds,
   }
 }

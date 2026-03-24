@@ -47,6 +47,115 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
+  def activate_question(data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    question = find_question_in_presentation(presentation, data['question_id'])
+    return unless question
+
+    PresentationChannel.broadcast_to(
+      presentation,
+      { type: 'question_activated', question_id: question[:id], question: serialize_question(question) }
+    )
+
+    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    broadcast_question_results(presentation, active_session, question) if active_session
+  end
+
+  def submit_question_response(data)
+    presentation = Presentation.find(params[:presentation_id])
+    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    return unless active_session
+
+    question = find_question_in_presentation(presentation, data['question_id'])
+    return unless question
+
+    answer = data['answer'].to_s.strip
+    return if answer.blank?
+
+    if question[:question_type] == 'single_choice'
+      valid = (question[:options] || []).map { |o| o[:text] }.include?(answer)
+      return unless valid
+    end
+
+    store = question_store_for_session(active_session.id, question[:id])
+    user_key = current_user.id.to_s
+    return if store['user_answers'].key?(user_key)
+
+    store['user_answers'][user_key] = answer
+    store['results'][answer] = store['results'].fetch(answer, 0) + 1
+    store['total'] = store['total'].to_i + 1
+
+    if question[:type] == 'open_text'
+      store['recent_answers'] ||= []
+      store['recent_answers'] << answer
+      store['recent_answers'] = store['recent_answers'].last(20)
+    end
+  
+    Rails.cache.write(question_store_key(active_session.id, question[:id]), store, expires_in: 12.hours)
+    broadcast_question_results(presentation, active_session, question)
+  end
+
+  def question_store_key(session_id, question_id)
+    "presentation_session:#{params[:presentation_id]}:session:#{session_id}:question:#{question_id}"
+  end
+
+  def question_store_for_session(session_id, question_id)
+    Rails.cache.fetch(question_store_key(session_id, question_id)) do
+      { 'results' => {}, 'total' => 0, 'user_answers' => {}, 'recent_answers' => [] }
+    end
+  end
+
+  def find_question_in_presentation(presentation, question_id)
+    target_id = question_id.to_s
+    presentation.slides.each do |slide|
+      payload = slide.background.is_a?(Hash) ? slide.background : {}
+      questions = payload['questions'] || payload[:questions] || []
+      questions.each do |q|
+        qh = q.is_a?(Hash) ? q : {}
+        next unless (qh['id'] || qh[:id]).to_s == target_id
+
+        options = (qh['options'] || qh[:options] || []).map do |opt|
+          oh = opt.is_a?(Hash) ? opt : {}
+          { id: (oh['id'] || oh[:id]).to_s, text: (oh['text'] || oh[:text]).to_s }
+        end
+
+        return {
+          id: (qh['id'] || qh[:id]).to_s,
+          prompt: (qh['prompt'] || qh[:prompt]).to_s,
+          type: ((qh['type'] || qh[:type]).to_s == 'single_choice' ? 'single_choice' : 'open_text'),
+          options: options
+        }
+      end
+    end
+    nil
+  end
+
+  def serialize_question(question)
+    {
+      id: question[:id],
+      prompt: question[:prompt],
+      type: question[:type],
+      options: question[:options]
+    }
+  end
+
+  def broadcast_question_results(presentation, active_session, question)
+    store = question_store_for_session(active_session.id, question[:id])
+    PresentationChannel.broadcast_to(
+      presentation,
+      {
+        type: 'question_results',
+        question_id: question[:id],
+        question_type: question[:type],
+        results: store['results'] || {},
+        total: store['total'] || 0,
+        recent_answers: store['recent_answers'] || []
+      }
+    )
+  end
+  
   def activate_poll(data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
