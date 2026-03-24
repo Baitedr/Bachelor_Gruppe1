@@ -109,9 +109,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
 
         <Card>
           <CardHeader>
-            <CardTitle>{isLogin ? 'Logg inn' : 'Opprett konto'}</CardTitle>
+            <CardTitle>{isLogin ? 'Logg inn' : 'Opprett bruker'}</CardTitle>
             <CardDescription>
-              {isLogin ? 'Skriv inn påloggingsinformasjonen din for å få tilgang til kontoen din.' : 'Registrer deg for en ny konto.'}
+              {isLogin ? 'Skriv inn påloggingsinformasjonen din for å få tilgang til kontoen din.' : 'Registrer en ny bruker'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
