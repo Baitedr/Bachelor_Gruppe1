@@ -113,11 +113,12 @@ export type PresentationEditorHandle = {
 
 type PresentationEditorProps = {
     presentation?: PresentationData | null;
-    onSavePresentation?: (payload: SavePresentationPayload) => Promise<SavePresentationResult>;
+    onSavePresentation?: (payload: any) => Promise<any>;
     isSaving?: boolean;
 };
 
-const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(function PresentationEditor({ presentation, onSavePresentation, isSaving = false }, ref) {
+const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(
+({ presentation, onSavePresentation, isSaving }, ref) => {
     // Referanser og grunnstate for editoren.
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<Canvas | null>(null);
@@ -741,41 +742,64 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     };
 
     // Klargjør og lagrer hele presentasjonen, inkludert state og et preview-bilde av første lysbilde
-    const handleSavePresentation = async () => {
-        if (!onSavePresentation || isSaving) return false;
+    // ...existing code...
 
-        const slidesToSave = saveCurrentSlide();
-        setSaveError(null);
+const handleSavePresentation = async (): Promise<boolean> => {
+  if (!onSavePresentation || isSaving) return false
 
-        try {
-            const firstSlideSnapshot = await createSlideSnapshot(slidesToSave[0]);
-            const slidesWithPreview = slidesToSave.map((slide, index) => (
-                index === 0
-                    ? {
-                        ...slide,
-                        previewImage: firstSlideSnapshot,
-                    }
-                    : slide
-            ));
+  try {
+    setSaveError(null)
 
-            const savedPresentation = await onSavePresentation({
-                id: presentationId,
-                title: presentationTitle.trim() || 'Uten navn',
-                slides: slidesWithPreview,
-            });
+    // Current canvas er med i neste save 
+    const slidesToSave = saveCurrentSlide()
 
-            if (savedPresentation?.id) {
-                setPresentationId(savedPresentation.id);
-            }
+    const payload = {
+      id: presentationId ?? undefined,
+      title: (presentationTitle || 'Untitled Presentation').trim() || 'Untitled Presentation',
+      slides: slidesToSave.map((slide, index) => ({
+        title: slide?.title || `Slide ${index + 1}`,
+        content: slide?.content || '',
+        backgroundColor: slide?.backgroundColor || '#ffffff',
+        fabricData: slide?.fabricData ?? null,
+        polls: Array.isArray(slide?.polls) ? slide.polls : [],
+      })),
+    }
 
-            setLastSavedAt(new Date());
-            hasUnsavedChangesRef.current = false;
-            return true;
-        } catch (error) {
-            setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.');
-            return false;
-        }
-    };
+    const savedPresentation = await onSavePresentation(payload)
+
+    // Syncer lokal editor med backend respons
+    if (savedPresentation?.id) {
+      setPresentationId(savedPresentation.id)
+    }
+
+    if (typeof savedPresentation?.title === 'string') {
+      setPresentationTitle(savedPresentation.title)
+    }
+
+    if (Array.isArray(savedPresentation?.slides) && savedPresentation.slides.length > 0) {
+      const normalizedSlides = savedPresentation.slides.map((slide: any, index: number) => ({
+        id: slide?.id ?? `local-${Date.now()}-${index}`,
+        title: slide?.title || `Slide ${index + 1}`,
+        content: slide?.content || '',
+        backgroundColor: slide?.backgroundColor || '#ffffff',
+        fabricData: slide?.fabricData ?? null,
+        polls: Array.isArray(slide?.polls) ? slide.polls : [],
+      }))
+
+      setSlides(normalizedSlides)
+      setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
+    }
+
+    setLastSavedAt(new Date())
+    hasUnsavedChangesRef.current = false
+    return true
+  } catch (err) {
+    console.error('Save presentation failed:', err)
+    setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.')
+    return false
+  }
+}
+
 
     // Hjelper for å oppdatere polls atomisk på valgt slide.
     const updateCurrentSlidePolls = (updater: (currentPolls: Poll[]) => Poll[]) => {
