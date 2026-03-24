@@ -8,6 +8,7 @@ Rails.application.routes.draw do
       post 'auth/login', to: 'auth#login'
       get 'auth/me', to: 'auth#me'
       post 'auth/logout', to: 'auth#logout'
+      patch 'auth/profile', to: 'auth#update_profile'
       
       # OAuth routes
       get '/auth/:provider/callback', to: 'auth#omniauth_callback'

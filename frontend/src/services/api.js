@@ -91,6 +91,14 @@ const api = {
     return response.data
   },
 
+  updateProfile: async (profileData) => {
+    const response = await axiosRetry(
+      () => apiClient.patch('/auth/profile', profileData),
+      1
+    )
+    return response.data
+  },
+
   logout: async () => {
     try {
       await axiosRetry(() => apiClient.post('/auth/logout'), 1)

@@ -32,6 +32,7 @@ type Page =
 type UserRecord = {
   id?: number | string
   email?: string
+  name?: string
 }
 
 type SlidePreview = {
@@ -487,6 +488,11 @@ function App() {
     setCurrentPage('home')
   }
 
+  const handleUpdateProfileName = async (name: string) => {
+    const data = await api.updateProfile({ name })
+    setUser((previous) => ({ ...(previous || {}), ...(data?.user || {}), name }))
+  }
+
   const handleDiscardAndGoHome = async () => {
     if (isSavingPresentation || isDiscardingPresentation) return
 
@@ -585,8 +591,10 @@ function App() {
       <Navbar
         currentPage={currentPage}
         userEmail={user?.email}
+        userName={user?.name}
         onGoHome={handleGoHome}
         onJoinLive={() => setCurrentPage('phoneinteraction')}
+        onUpdateProfileName={handleUpdateProfileName}
         onLogout={handleLogout}
       />
 

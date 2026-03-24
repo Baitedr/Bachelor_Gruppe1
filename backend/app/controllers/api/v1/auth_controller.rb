@@ -1,7 +1,7 @@
 module Api
   module V1
     class AuthController < ApplicationController
-      before_action :authenticate_request!, only: [:me, :logout]
+      before_action :authenticate_request!, only: [:me, :logout, :update_profile]
 
       def register
         user = User.new(auth_params)
@@ -55,6 +55,14 @@ module Api
         render json: { message: 'Logged out' }, status: :ok
       end
 
+      def update_profile
+        if current_user.update(profile_params)
+          render json: { user: user_payload(current_user) }, status: :ok
+        else
+          render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
       private
 
       def auth_params
@@ -72,6 +80,10 @@ module Api
           email: user.email,
           name: user.name
         }
+      end
+
+      def profile_params
+        params.permit(:name)
       end
     end
   end
