@@ -464,24 +464,9 @@ function App() {
 
   const handleGoHome = async () => {
     if (currentPage === 'editor') {
-      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+      setIsExitEditorDialogOpen(true)
+      return
         
-
-      // Hvis bruker endret på noe så blir det vist en dialog box
-      if (hasUnsavedChanges) {
-        setIsExitEditorDialogOpen(true)
-        return
-      }
-
-      //Hvis det er en ny presentasjon som aldri blir gjort noe med - forkast
-      if (isNewPresentationSession && !hasSavedCurrentSession && activePresentation?.id) {
-        await handleDiscardAndGoHome()
-        return
-      }
-
-      clearSessionState()
-        setCurrentPage('home');
-        return
     }
 
     //Eksisterende presentasjon, ingen endringer - bare gå hjem
@@ -517,11 +502,12 @@ function App() {
     if (isSavingPresentation) return
 
     const didSave = await presentationEditorRef.current?.savePresentation?.()
-    if (didSave) {
+    if (!didSave) return 
+      
       setIsExitEditorDialogOpen(false)
       clearSessionState()
       setCurrentPage('home')
-    }
+    
   }
 
   if (isAuthChecking) {
