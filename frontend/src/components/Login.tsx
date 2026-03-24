@@ -56,15 +56,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
       if (password !== confirmPassword) {
         setError('Passordene er ikke like.')
         return
-      }
-      if (password.length < 8) {
-        setError('Passordet må være minst 8 tegn langt.')
-        return
-      }
-      if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-        setError('Passordet må inneholde minst én liten, én stor bokstav og ett tall.')
-        return
-      }
+      } 
     }
 
     setIsLoading(true)
@@ -163,6 +155,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+
+                {!isLogin && (
+                  <p
+                  className={`text-xs ${
+                    password.length >= 8 ? 'text-green-600' : 'text-muted-foreground'
+                  }`}
+                >
+                  Passordkrav: Minst 8 tegn med både store og små bokstaver, og minst ett tall
+                </p>
+                )}
+
                 {!isLogin && password.length > 0 && (
                   <div className="space-y-1 mt-2">
                     <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
