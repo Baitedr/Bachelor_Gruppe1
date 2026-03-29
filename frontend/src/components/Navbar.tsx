@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
+import { Home, LogOut, MonitorPlay, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Home, LogOut, MonitorPlay } from 'lucide-react'
+import { useTheme } from '@/components/ThemeProvider'
 
 type NavbarProps = {
   currentPage: string
@@ -16,8 +18,16 @@ export default function Navbar({
   onJoinLive,
   onLogout,
 }: NavbarProps) {
+  const { theme, setTheme } = useTheme()
   const isInLiveFlow =
     currentPage === 'phoneinteraction' || currentPage === 'lobby' || currentPage === 'live'
+
+  const isDark = useMemo(
+    () =>
+      theme === 'dark' ||
+      (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
+    [theme],
+  )
 
   return (
     <header className='sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur'>
@@ -32,6 +42,14 @@ export default function Navbar({
         <span className='text-sm text-muted-foreground'>Logget inn som {userEmail}</span>
 
         <div className='ml-auto flex flex-wrap items-center gap-2'>
+          <Button
+            variant='outline'
+            size='icon'
+            aria-label='Bytt tema'
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          >
+            {isDark ? <Sun className='h-4 w-4' /> : <Moon className='h-4 w-4' />}
+          </Button>
           {currentPage !== 'home' && (
             <Button onClick={onGoHome} variant='outline' size='sm'>
               <Home className='mr-2 h-4 w-4' />
