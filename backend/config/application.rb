@@ -15,6 +15,11 @@ module Backend
     config.load_defaults 7.1
     config.api_only = true
 
+    # Vite build is copied to public/ in the production image; serve assets and index.
+    if Rails.env.production?
+      config.middleware.insert_before 0, ActionDispatch::Static, Rails.public_path.to_s
+    end
+
     # Required for OmniAuth in API-only mode
     config.session_store :cookie_store, key: '_proslides_session'
     config.middleware.use ActionDispatch::Cookies
@@ -29,10 +34,12 @@ module Backend
       config.eager_load_paths += %W(#{config.root}/app/models)
     end
     
-    # CORS configuration
+    # CORS: comma-separated origins in ALLOWED_ORIGINS (production); dev default below
     config.middleware.insert_before 0, Rack::Cors do
       allow do
-        origins 'http://localhost:5173' # React dev server
+        origins(
+          ENV.fetch('ALLOWED_ORIGINS', 'http://localhost:5173').split(',').map(&:strip)
+        )
         resource '*',
           headers: :any,
           methods: [:get, :post, :put, :patch, :delete, :options, :head],

@@ -19,3 +19,8 @@
 
 .byebug_history
 .env
+.env-common
+
+# Kamal local hook file (optional; team uses `secrets_path: .env` in deploy.yml)
+/.kamal/secrets
+/.kamal/secrets-common

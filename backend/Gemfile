@@ -17,6 +17,7 @@ end
 
 group :development do
   gem 'spring'
+  gem 'kamal', '~> 2.0', require: false
 end
 
 gem "jwt", "~> 3.1"

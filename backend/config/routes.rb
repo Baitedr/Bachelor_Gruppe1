@@ -1,4 +1,7 @@
 Rails.application.routes.draw do
+  # Kamal-proxy (and load balancers) expect GET /up
+  get "up" => "rails/health#show", as: :rails_health_check
+
   namespace :api do
     namespace :v1 do
       get 'health', to: 'health#index'
@@ -37,4 +40,17 @@ Rails.application.routes.draw do
   end
 
   mount ActionCable.server => '/cable' if defined?(ActionCable)
+
+  spa_fallback = lambda do |req|
+    next false if req.path.include?("..")
+    next false if req.path.start_with?("/api")
+    next false if req.path.start_with?("/cable")
+    next false if req.path == "/up"
+    next false if req.path.start_with?("/rails")
+
+    true
+  end
+
+  root to: "spa#index"
+  get "*path", to: "spa#index", format: false, constraints: spa_fallback
 end
