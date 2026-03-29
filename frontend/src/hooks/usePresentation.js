@@ -16,7 +16,11 @@ export const usePresentation = (presentationId, token) => {
   useEffect(() => {
     if (!presentationId || !token) return
 
-    const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:3000'
+    const wsBase =
+      import.meta.env.VITE_WS_URL ||
+      (import.meta.env.DEV
+        ? 'ws://localhost:3000'
+        : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`)
     const consumer = createConsumer(`${wsBase}/cable?token=${token}`)
     cableRef.current = consumer
 

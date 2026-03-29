@@ -1,0 +1,17 @@
+# Build context = repo root (see backend/config/deploy.yml).
+.git
+**/.env
+**/.env.*
+!**/.env.example
+
+frontend/node_modules
+frontend/dist
+
+backend/log/*
+backend/tmp/*
+backend/.kamal
+backend/.env
+backend/storage
+
+**/*.md
+.DS_Store
