@@ -1,7 +1,7 @@
 module Api
   module V1
     class AuthController < ApplicationController
-      before_action :authenticate_request!, only: [:me, :logout, :update_profile]
+      before_action :authenticate_request!, only: [:me, :logout, :update_profile, :change_password]
 
       def register
         user = User.new(auth_params)
@@ -27,24 +27,23 @@ module Api
 
       def omniauth_callback
         auth = request.env['omniauth.auth']
+        unless auth
+          return redirect_to oauth_failure_redirect, allow_other_host: true
+        end
+
         user = User.from_omniauth(auth)
 
-        if user.persisted?
+        if user.persisted? && user.errors.empty?
           token = JsonWebToken.encode(user_id: user.id)
-          
-          # We redirect to the frontend with the token since this is an OAuth flow
-          # Change according to your frontend URL
-          frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
-          redirect_to "#{frontend_url}/oauth/callback?token=#{token}", allow_other_host: true
+          redirect_to "#{oauth_frontend_base}/oauth/callback?#{Rack::Utils.build_query(token: token)}",
+                      allow_other_host: true
         else
-          frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
-          redirect_to "#{frontend_url}/login?error=oauth_failed", allow_other_host: true
+          redirect_to oauth_failure_redirect, allow_other_host: true
         end
       end
 
       def omniauth_failure
-        frontend_url = ENV.fetch('FRONTEND_URL', 'http://localhost:5173')
-        redirect_to "#{frontend_url}/login?error=oauth_failed", allow_other_host: true
+        redirect_to oauth_failure_redirect, allow_other_host: true
       end
 
       def me
@@ -63,7 +62,36 @@ module Api
         end
       end
 
+      def change_password
+        p = password_change_params
+        if p[:password].blank? || p[:password] != p[:password_confirmation]
+          return render json: { errors: ['Passord og bekreftelse stemmer ikke, eller passord mangler.'] },
+                        status: :unprocessable_entity
+        end
+
+        unless current_user.oauth_user?
+          unless current_user.authenticate(p[:current_password].to_s)
+            return render json: { error: 'Nåværende passord er feil.' }, status: :unauthorized
+          end
+        end
+
+        current_user.password = p[:password]
+        if current_user.save(context: :password_change)
+          render json: { message: 'Passord oppdatert.', user: user_payload(current_user) }, status: :ok
+        else
+          render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
+        end
+      end
+
       private
+
+      def oauth_frontend_base
+        ENV.fetch('FRONTEND_URL', 'http://localhost:5173').to_s.chomp('/')
+      end
+
+      def oauth_failure_redirect
+        "#{oauth_frontend_base}/login?error=oauth_failed"
+      end
 
       def auth_params
         # Allow nested :auth params (due to wrap_parameters) or root level params
@@ -78,12 +106,21 @@ module Api
         {
           id: user.id,
           email: user.email,
-          name: user.name
+          name: user.name,
+          oauth_user: user.oauth_user?
         }
       end
 
       def profile_params
         params.permit(:name)
+      end
+
+      def password_change_params
+        if params[:password_change]
+          params.require(:password_change).permit(:current_password, :password, :password_confirmation)
+        else
+          params.permit(:current_password, :password, :password_confirmation)
+        end
       end
     end
   end

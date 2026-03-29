@@ -33,6 +33,7 @@ type UserRecord = {
   id?: number | string
   email?: string
   name?: string
+  oauth_user?: boolean
 }
 
 type SlidePreview = {
@@ -162,6 +163,15 @@ function App() {
 }, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, guestMode, user])
 
   useEffect(() => {
+    const loc = window.location
+    if (loc.pathname === '/oauth/callback' || loc.pathname.endsWith('/oauth/callback')) {
+      const token = new URLSearchParams(loc.search).get('token')
+      if (token) {
+        api.setAuthToken(token)
+        window.history.replaceState({}, '', '/')
+      }
+    }
+
     // Sjekker om det finnes en aktiv økt eller token ved oppstart
   const restoreSession = async () => {
   const savedRaw = sessionStorage.getItem('proslides_session')
@@ -493,6 +503,17 @@ function App() {
     setUser((previous) => ({ ...(previous || {}), ...(data?.user || {}), name }))
   }
 
+  const handleChangePassword = async (payload: {
+    current_password?: string
+    password: string
+    password_confirmation: string
+  }) => {
+    const data = await api.changePassword(payload)
+    if (data?.user) {
+      setUser((previous) => ({ ...(previous || {}), ...data.user }))
+    }
+  }
+
   const handleDiscardAndGoHome = async () => {
     if (isSavingPresentation || isDiscardingPresentation) return
 
@@ -592,9 +613,11 @@ function App() {
         currentPage={currentPage}
         userEmail={user?.email}
         userName={user?.name}
+        oauthUser={Boolean(user?.oauth_user)}
         onGoHome={handleGoHome}
         onJoinLive={() => setCurrentPage('phoneinteraction')}
         onUpdateProfileName={handleUpdateProfileName}
+        onChangePassword={handleChangePassword}
         onLogout={handleLogout}
       />
 

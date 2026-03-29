@@ -101,6 +101,21 @@ const api = {
     return response.data
   },
 
+  changePassword: async ({ current_password, password, password_confirmation }) => {
+    const response = await axiosRetry(
+      () =>
+        apiClient.patch('/auth/password', {
+          password_change: {
+            current_password: current_password ?? '',
+            password,
+            password_confirmation,
+          },
+        }),
+      1
+    )
+    return response.data
+  },
+
   logout: async () => {
     try {
       await axiosRetry(() => apiClient.post('/auth/logout'), 1)

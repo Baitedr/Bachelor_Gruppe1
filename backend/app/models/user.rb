@@ -14,24 +14,68 @@ class User < ApplicationRecord
             on: :create,
             unless: :oauth_user?
 
+  validates :password,
+            presence: true,
+            length: { minimum: 8 },
+            format: { with: PASSWORD_COMPLEXITY, message: "er ikke gyldig" },
+            on: :password_change
+
   before_validation :normalize_email
   before_save :hash_password, if: -> { password.present? }
 
   def oauth_user?
-    has_attribute?(:provider) && provider.present? && uid.present?
+    oauth_provider.present? && oauth_uid.present?
+  end
+
+  def self.email_from_omniauth(auth)
+    info = auth.info
+    email = info&.email.to_s.strip.downcase.presence
+    return email if email.present?
+
+    raw = auth.extra&.dig(:raw_info)
+    if raw.respond_to?(:[])
+      nested = raw[:email].presence || raw["email"].presence
+      return nested.to_s.strip.downcase if nested.present?
+    end
+
+    nil
   end
 
   def self.from_omniauth(auth)
-    where(email: auth.info.email).first_or_create do |user|
-      user.email = auth.info.email
-      # If your users table has provider and uid columns, uncomment these:
-      # user.provider = auth.provider
-      # user.uid = auth.uid
-      
-      # We just set a random password for users created via OAuth
-      # to bypass password validations if we don't have oauth_user? field.
-      user.password = SecureRandom.hex(16)
+    email = email_from_omniauth(auth)
+    unless email.present?
+      user = new
+      user.errors.add(:base, "Kunne ikke hente e-post fra leverandøren (sjekk at kontoen har synlig e-post).")
+      return user
     end
+
+    provider = auth.provider.to_s
+    uid = auth.uid.to_s
+
+    user = find_by(oauth_provider: provider, oauth_uid: uid)
+    return user if user
+
+    existing = find_by(email: email)
+    if existing
+      existing.update!(
+        oauth_provider: provider,
+        oauth_uid: uid,
+        oauth_avatar_url: auth.info&.image,
+        name: existing.name.presence || auth.info&.name
+      )
+      existing
+    else
+      create!(
+        email: email,
+        name: auth.info&.name.presence || email.split("@").first,
+        oauth_provider: provider,
+        oauth_uid: uid,
+        oauth_avatar_url: auth.info&.image,
+        password: SecureRandom.hex(16)
+      )
+    end
+  rescue ActiveRecord::RecordInvalid => e
+    e.record
   end
 
   def authenticate(raw_password)

@@ -9,9 +9,15 @@ type NavbarProps = {
   currentPage: string
   userEmail?: string
   userName?: string
+  oauthUser?: boolean
   onGoHome: () => void
   onJoinLive: () => void
   onUpdateProfileName?: (name: string) => Promise<void> | void
+  onChangePassword?: (payload: {
+    current_password?: string
+    password: string
+    password_confirmation: string
+  }) => Promise<void> | void
   onLogout: () => void
 }
 
@@ -19,9 +25,11 @@ export default function Navbar({
   currentPage,
   userEmail,
   userName,
+  oauthUser = false,
   onGoHome,
   onJoinLive,
   onUpdateProfileName,
+  onChangePassword,
   onLogout,
 }: NavbarProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
@@ -29,6 +37,11 @@ export default function Navbar({
   const [isSavingName, setIsSavingName] = useState(false)
   const [accountError, setAccountError] = useState<string | null>(null)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [isSavingPassword, setIsSavingPassword] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
 
   const isInLiveFlow =
@@ -75,6 +88,43 @@ export default function Navbar({
       setAccountError('Kunne ikke oppdatere navn.')
     } finally {
       setIsSavingName(false)
+    }
+  }
+
+  const handleSavePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setAccountError(null)
+    setAccountMessage(null)
+
+    if (newPassword !== confirmNewPassword) {
+      setAccountError('De nye passordene er ikke like.')
+      return
+    }
+
+    if (!onChangePassword) {
+      setAccountError('Passordendring er ikke tilgjengelig.')
+      return
+    }
+
+    try {
+      setIsSavingPassword(true)
+      await onChangePassword({
+        ...(oauthUser ? {} : { current_password: currentPassword }),
+        password: newPassword,
+        password_confirmation: confirmNewPassword,
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      setShowPasswordForm(false)
+      setAccountMessage('Passord oppdatert.')
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { errors?: string[]; error?: string } } }
+      const data = ax.response?.data
+      const msg = data?.errors?.join(', ') || data?.error || 'Kunne ikke oppdatere passord.'
+      setAccountError(msg)
+    } finally {
+      setIsSavingPassword(false)
     }
   }
 
@@ -126,12 +176,90 @@ export default function Navbar({
                   </Button>
                 </form>
 
-                {/* Passordknapp uten backend-kall foreløpig. */}
                 <div className='space-y-2'>
                   <Label>Passord</Label>
-                  <Button type='button' size='sm' variant='outline' disabled>
-                    Endre passord (kommer snart)
-                  </Button>
+                  {!showPasswordForm ? (
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      onClick={() => {
+                        setShowPasswordForm(true)
+                        setAccountError(null)
+                        setAccountMessage(null)
+                      }}
+                    >
+                      Endre passord
+                    </Button>
+                  ) : (
+                    <form className='space-y-2' onSubmit={handleSavePassword}>
+                      {oauthUser && (
+                        <p className='text-xs text-muted-foreground'>
+                          Du logget inn med OAuth. Du kan sette et passord for innlogging med e-post uten
+                          nåværende passord.
+                        </p>
+                      )}
+                      {!oauthUser && (
+                        <div className='space-y-1'>
+                          <Label htmlFor='account-current-password'>Nåværende passord</Label>
+                          <Input
+                            id='account-current-password'
+                            type='password'
+                            autoComplete='current-password'
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                      <div className='space-y-1'>
+                        <Label htmlFor='account-new-password'>Nytt passord</Label>
+                        <Input
+                          id='account-new-password'
+                          type='password'
+                          autoComplete='new-password'
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          required
+                          minLength={8}
+                        />
+                        <p className='text-xs text-muted-foreground'>
+                          Minst 8 tegn med store og små bokstaver og minst ett tall.
+                        </p>
+                      </div>
+                      <div className='space-y-1'>
+                        <Label htmlFor='account-confirm-password'>Bekreft nytt passord</Label>
+                        <Input
+                          id='account-confirm-password'
+                          type='password'
+                          autoComplete='new-password'
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          required
+                          minLength={8}
+                        />
+                      </div>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button type='submit' size='sm' variant='outline' disabled={isSavingPassword}>
+                          {isSavingPassword ? 'Lagrer...' : 'Lagre passord'}
+                        </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='ghost'
+                          onClick={() => {
+                            setShowPasswordForm(false)
+                            setCurrentPassword('')
+                            setNewPassword('')
+                            setConfirmNewPassword('')
+                            setAccountError(null)
+                          }}
+                        >
+                          Avbryt
+                        </Button>
+                      </div>
+                    </form>
+                  )}
                 </div>
 
                 {accountError && <p className='text-sm text-destructive'>{accountError}</p>}

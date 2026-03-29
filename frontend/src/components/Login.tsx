@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +29,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('error') === 'oauth_failed') {
+      setError('OAuth-innlogging mislyktes. Prøv igjen eller bruk e-post og passord.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const getPasswordStrength = (pass: string) => {
     if (!pass) return { score: 0, label: '', color: 'bg-muted' }

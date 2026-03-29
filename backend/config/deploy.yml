@@ -43,9 +43,18 @@ env:
     REDIS_URL: redis://slides-redis:6379/1
     # Frontend origins allowed by CORS (comma-separated)
     ALLOWED_ORIGINS: https://slides.rubynor.com
+    # OAuth redirect target (must match public site URL)
+    FRONTEND_URL: https://slides.rubynor.com
+    # Optional: if OmniAuth builds wrong callback URL behind proxy, set e.g. https://slides.rubynor.com
+    # OMNIAUTH_FULL_HOST: https://slides.rubynor.com
+  # Include GOOGLE_* and/or GITHUB_* in backend/.env (empty values = that provider is disabled in omniauth.rb).
   secret:
     - SECRET_KEY_BASE
     - DATABASE_URL
+    - GOOGLE_CLIENT_ID
+    - GOOGLE_CLIENT_SECRET
+    - GITHUB_CLIENT_ID
+    - GITHUB_CLIENT_SECRET
 
 accessories:
   redis:

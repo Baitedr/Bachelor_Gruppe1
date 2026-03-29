@@ -22,4 +22,7 @@ Rails.application.configure do
 
   # Kamal-proxy health checks use Host: <container-id>:<port> on the Docker network.
   config.hosts << /\A[0-9a-f]+:\d+\z/i
+
+  # Trust X-Forwarded-Proto from the edge proxy so OAuth callback URLs use https.
+  config.assume_ssl = ActiveModel::Type::Boolean.new.cast(ENV.fetch("RAILS_ASSUME_SSL", "true"))
 end
