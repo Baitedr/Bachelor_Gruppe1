@@ -3,50 +3,52 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* Mørke Tailwind-varianter når et overordnet element har klassen .dark (next-themes legger den på <html>). */
 @custom-variant dark (&:is(.dark *));
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: dark;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Excalidraw-inspired dark theme */
-  --background: oklch(0.13 0.02 268);
-  --foreground: oklch(0.93 0.005 268);
-  --card: oklch(0.19 0.02 268);
-  --card-foreground: oklch(0.93 0.005 268);
-  --popover: oklch(0.19 0.02 268);
-  --popover-foreground: oklch(0.93 0.005 268);
+  /* Lyst standardtema; samme lilla primary som i mørk modus. */
+  --background: oklch(0.99 0.003 268);
+  --foreground: oklch(0.22 0.02 268);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 268);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 268);
   --primary: oklch(0.55 0.21 277);
   --primary-foreground: oklch(0.98 0.005 0);
-  --secondary: oklch(0.24 0.015 268);
-  --secondary-foreground: oklch(0.93 0.005 268);
-  --muted: oklch(0.24 0.015 268);
-  --muted-foreground: oklch(0.62 0.01 268);
-  --accent: oklch(0.28 0.02 268);
-  --accent-foreground: oklch(0.93 0.005 268);
-  --destructive: oklch(0.7 0.19 22); --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.55 0.016 268);
+  --secondary: oklch(0.96 0.012 268);
+  --secondary-foreground: oklch(0.28 0.02 268);
+  --muted: oklch(0.96 0.012 268);
+  --muted-foreground: oklch(0.48 0.02 268);
+  --accent: oklch(0.94 0.015 268);
+  --accent-foreground: oklch(0.28 0.02 268);
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.9 0.015 268);
+  --input: oklch(0.9 0.015 268);
+  --ring: oklch(0.55 0.21 277);
   --chart-1: oklch(0.785 0.115 274.713);
   --chart-2: oklch(0.585 0.233 277.117);
   --chart-3: oklch(0.511 0.262 276.966);
   --chart-4: oklch(0.55 0.21 277);
   --chart-5: oklch(0.398 0.195 277.366);
   --radius: 0.875rem;
-  --sidebar: oklch(0.16 0.02 268);
-  --sidebar-foreground: oklch(0.93 0.005 268);
+  --sidebar: oklch(0.98 0.005 268);
+  --sidebar-foreground: oklch(0.22 0.02 268);
   --sidebar-primary: oklch(0.55 0.21 277);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.24 0.015 268);
-  --sidebar-accent-foreground: oklch(0.93 0.005 268);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.55 0.016 268);
+  --sidebar-accent: oklch(0.94 0.015 268);
+  --sidebar-accent-foreground: oklch(0.28 0.02 268);
+  --sidebar-border: oklch(0.9 0.015 268);
+  --sidebar-ring: oklch(0.55 0.21 277);
 }
 
 /* Base resets are already handled by Tailwind preflight, 
@@ -67,7 +69,9 @@ body {
   padding: 0;
 }
 
+/* Når <html class="dark"> — shadcn- og Tailwind-farger leses fra disse variablene. */
 .dark {
+  color-scheme: dark;
   --background: oklch(0.13 0.02 268);
   --foreground: oklch(0.93 0.005 268);
   --card: oklch(0.19 0.02 268);

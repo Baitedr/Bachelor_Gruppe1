@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Home, LogOut, MonitorPlay, User } from 'lucide-react'
+// Lys/mørk-modus (next-themes + shadcn-knapper).
+import { ModeToggle } from '@/components/mode-toggle'
 
 type NavbarProps = {
   currentPage: string
@@ -271,6 +273,8 @@ export default function Navbar({
 
         {/* Handlingsknapper holdes samlet på høyre side. */}
         <div className='ml-auto flex flex-wrap items-center gap-2'>
+          {/* Tema: sol/måne-ikon som veksler lyst og mørkt. */}
+          <ModeToggle />
           {currentPage !== 'home' && (
             <Button onClick={onGoHome} variant='outline' size='sm'>
               <Home className='mr-2 h-4 w-4' />
