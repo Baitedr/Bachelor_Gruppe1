@@ -1191,7 +1191,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
     }));
 
     return (
-        <div className="flex h-screen items-stretch gap-2 overflow-hidden bg-background p-2">
+        <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -1269,8 +1269,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
-                <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-3 overflow-hidden p-2 sm:gap-4 sm:p-4 md:gap-6">
+                <div className="flex w-full max-w-225 shrink-0 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_4px_6px_rgba(0,0,0,0.25)] sm:px-6 sm:py-4">
                     {/* Øverste rad: tittel + lysbilde-teller (lagre ligger i navbar) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
@@ -1357,12 +1357,16 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     
                     </div>
                 </div>
-                {saveError && <div className="rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">{saveError}</div>}
+                {saveError && (
+                    <div className="shrink-0 rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">
+                        {saveError}
+                    </div>
+                )}
 
-                <div className="flex h-full w-full flex-1 overflow-hidden">
+                <div className="flex min-h-0 w-full flex-1 overflow-hidden">
                     <div
                         ref={canvasViewportRef}
-                        className="relative flex min-h-100 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-8"
+                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-3 sm:p-6 md:p-8"
                     >
                         <div
                             ref={canvasScaleWrapperRef}

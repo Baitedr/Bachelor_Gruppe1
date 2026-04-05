@@ -1,4 +1,5 @@
 require "active_support/core_ext/integer/time"
+require_relative "../secret_key_base_resolver"
 
 Rails.application.configure do
   config.enable_reloading = false
@@ -12,7 +13,7 @@ Rails.application.configure do
   config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
 
   config.active_support.report_deprecations = false
-  config.secret_key_base = ENV.fetch("SECRET_KEY_BASE")
+  config.secret_key_base = SecretKeyBaseResolver.resolve
 
   if (host = ENV["RAILS_HOST"]).present?
     config.hosts << host

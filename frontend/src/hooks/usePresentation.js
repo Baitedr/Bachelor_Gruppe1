@@ -21,9 +21,7 @@ export const usePresentation = (presentationId, token) => {
 
     const wsBase =
       import.meta.env.VITE_WS_URL ||
-      (import.meta.env.DEV
-        ? 'ws://localhost:3000'
-        : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`)
+      `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
     const consumer = createConsumer(`${wsBase}/cable?token=${token}`)
     cableRef.current = consumer
 

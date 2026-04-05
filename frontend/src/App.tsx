@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/card'
 import api from './services/api'
 import { createDefaultSlideFabricData } from './lib/fabricDefaults'
+import { cn } from '@/lib/utils'
 
 type Page =
   | 'login'
@@ -293,6 +294,16 @@ function App() {
   useEffect(() => {
     return () => clearEditorSaveFlashTimer()
   }, [])
+
+  // Slideseditor: ingen body-scroll; layout bruker dvh + flex (canvas skalerer i viewporter).
+  useEffect(() => {
+    if (currentPage !== 'editor') return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [currentPage])
 
   // Nullstill lagre-status ved sidebytte eller når aktiv presentasjons-id faktisk endres (ikke bare nytt objekt etter save)
   useEffect(() => {
@@ -700,7 +711,14 @@ function App() {
   }
 
   return (
-    <div className='min-h-screen bg-background text-foreground'>
+    <div
+      className={cn(
+        'bg-background text-foreground',
+        currentPage === 'editor'
+          ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
+          : 'min-h-screen',
+      )}
+    >
       <Navbar
         currentPage={currentPage}
         userEmail={user?.email}
@@ -729,7 +747,13 @@ function App() {
         }
       />
 
-      <main className='mx-auto w-full px-4 py-6'>
+      <main
+        className={cn(
+          currentPage === 'editor'
+            ? 'mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden'
+            : 'mx-auto w-full px-4 py-6',
+        )}
+      >
         {currentPage === 'home' && (
           <Card className='mx-auto w-full max-w-7xl border-border/80'>
             <CardHeader className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
