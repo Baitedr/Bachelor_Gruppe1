@@ -11,7 +11,6 @@ import {
     Palette,
     Plus,
     Redo2,
-    Save,
     Square,
     Trash2,
     Type,
@@ -123,10 +122,12 @@ type PresentationEditorProps = {
     presentation?: PresentationData | null;
     onSavePresentation?: (payload: any) => Promise<any>;
     isSaving?: boolean;
+    /** Kalles etter vellykket lagring (navbar oppdaterer «sist lagret») */
+    onSaveComplete?: (savedAt: Date) => void;
 };
 
 const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(
-({ presentation, onSavePresentation, isSaving }, ref) => {
+({ presentation, onSavePresentation, isSaving, onSaveComplete }, ref) => {
     // Referanser og grunnstate for editoren.
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<Canvas | null>(null);
@@ -137,7 +138,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [presentationId, setPresentationId] = useState<string | number | null>(null);
     const [presentationTitle, setPresentationTitle] = useState('Uten navn'); // Untitled Presentation
     const [saveError, setSaveError] = useState<string | null>(null);
-    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const [undoStack, setUndoStack] = useState<CanvasSnapshot[]>([]);
     const [redoStack, setRedoStack] = useState<CanvasSnapshot[]>([]);
     const [slidePreviewImages, setSlidePreviewImages] = useState<Record<string, string | null>>({});
@@ -1043,8 +1043,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
       setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
     }
 
-    setLastSavedAt(new Date())
-    hasUnsavedChangesRef.current = false
+    const savedAt = new Date();
+    onSaveComplete?.(savedAt);
+    hasUnsavedChangesRef.current = false;
     return true
   } catch (err) {
     console.error('Save presentation failed:', err)
@@ -1270,10 +1271,11 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
             <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
                 <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
+                    {/* Øverste rad: tittel + lysbilde-teller (lagre ligger i navbar) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
                             type="text"
-                            className="h-auto w-auto min-w-55 flex-1 basis-[320px] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
+                            className="h-auto min-w-0 flex-1 basis-[min(100%,280px)] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
                             value={presentationTitle}
                             onChange={(e) => {
                                 setPresentationTitle(e.target.value);
@@ -1281,11 +1283,12 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             }}
                             placeholder="Presentasjonstittel"
                         />
-                        <span className="ml-auto inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
-                            Lysbilde {currentSlideIndex + 1} av {slides.length}
-                        </span>
-                        {/* Shad-badge gjør auto-status mer synlig og konsistent i UI-et. */}
-                        {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                        <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+                            <span className="inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
+                                Lysbilde {currentSlideIndex + 1} av {slides.length}
+                            </span>
+                            {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                        </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-start gap-2">
                         <Button
@@ -1305,15 +1308,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             disabled={!redoStack.length}
                         >
                             <Redo2 className="h-3.5 w-3.5" /> Gjør om
-                        </Button>
-                        <Button
-                            onClick={handleSavePresentation}
-                            variant="outline"
-                            size="sm"
-                            className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
-                            disabled={isSaving}
-                        >
-                            <Save className="h-3.5 w-3.5" /> {isSaving ? 'Lagrer...' : 'Lagre'}
                         </Button>
                         <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
                         <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
@@ -1364,11 +1358,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     </div>
                 </div>
                 {saveError && <div className="rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">{saveError}</div>}
-                {lastSavedAt && !saveError && (
-                    <div className="rounded-lg bg-[rgba(16,185,129,0.18)] px-4 py-2.5 text-sm font-semibold text-[#6ee7b7]">
-                        Sist lagret {lastSavedAt.toLocaleTimeString()}
-                    </div>
-                )}
 
                 <div className="flex h-full w-full flex-1 overflow-hidden">
                     <div

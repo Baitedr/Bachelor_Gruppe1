@@ -73,13 +73,22 @@ type PersistedPageState = {
 }
 
 const MOBILE_BREAKPOINT = 768
-const DELETE_UNDO_TIMEOUT_MS = 10_000
+// Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
+const DELETE_UNDO_TIMEOUT_MS = 16_000
+
+// Intern toast-state: Navbar får kun message + actions
+type NavbarUndoToastState = {
+  message: string
+  actions: React.ReactNode
+  undoTrashId: string
+}
 
 function App() {
   const [presentations, setPresentations] = useState<PresentationSummary[]>([])
   const [deletingPresentationIds, setDeletingPresentationIds] = useState<Record<string, boolean>>({})
   const [trashedPresentations, setTrashedPresentations] = useState<TrashItem[]>([])
-  const [deleteUndoToast, setDeleteUndoToast] = useState<{ trashId: string; title: string } | null>(null)
+  // Melding midt i navbar (f.eks. angre etter sletting)
+  const [navbarToast, setNavbarToast] = useState<NavbarUndoToastState | null>(null)
   const [presentationsError, setPresentationsError] = useState<string | null>(null)
   const [presentationsLoading, setPresentationsLoading] = useState(false)
 
@@ -104,9 +113,17 @@ function App() {
     title: string
   } | null>(null)
 
-  const undoToastTimerRef = useRef<number | null>(null)
+  // Auto-lukk av navbar-toast etter valgt antall millisekunder
+  const navbarToastTimerRef = useRef<number | null>(null)
 
   const presentationEditorRef = useRef<PresentationEditorHandle | null>(null)
+
+  // Lagre-knapp i navbar når editor er åpen
+  const [editorLastSavedAt, setEditorLastSavedAt] = useState<Date | null>(null)
+  const [editorSaveFlash, setEditorSaveFlash] = useState(false)
+  const editorSaveFlashTimerRef = useRef<number | null>(null)
+  // Husker hvilken presentasjon editoren viser, så vi ikke nullstiller ved nytt objekt med samme id etter lagring
+  const editorPresentationIdRef = useRef<string | undefined>(undefined)
 
   const PAGE_STATE_KEY = 'proslides_page_state'
 
@@ -125,10 +142,43 @@ function App() {
 
   const clearPageState = () => sessionStorage.removeItem(PAGE_STATE_KEY)
 
-  const clearUndoToastTimer = () => {
-    if (!undoToastTimerRef.current) return
-    window.clearTimeout(undoToastTimerRef.current)
-    undoToastTimerRef.current = null
+  const clearNavbarToastTimer = () => {
+    if (!navbarToastTimerRef.current) return
+    window.clearTimeout(navbarToastTimerRef.current)
+    navbarToastTimerRef.current = null
+  }
+
+  // Lukker toast med en gang (f.eks. «Lukk» eller utlogging)
+  const dismissNavbarToast = () => {
+    clearNavbarToastTimer()
+    setNavbarToast(null)
+  }
+
+  const clearEditorSaveFlashTimer = () => {
+    if (!editorSaveFlashTimerRef.current) return
+    window.clearTimeout(editorSaveFlashTimerRef.current)
+    editorSaveFlashTimerRef.current = null
+  }
+
+  // Oppdaterer tid + kort «Lagret»-blink i navbar etter vellykket lagring fra editoren
+  const handleEditorSaveComplete = (savedAt: Date) => {
+    setEditorLastSavedAt(savedAt)
+    setEditorSaveFlash(true)
+    clearEditorSaveFlashTimer()
+    editorSaveFlashTimerRef.current = window.setTimeout(() => {
+      setEditorSaveFlash(false)
+      editorSaveFlashTimerRef.current = null
+    }, 2500)
+  }
+
+  // Viser angre-toast og auto-lukker etter DELETE_UNDO_TIMEOUT_MS
+  const showNavbarUndoToast = (payload: NavbarUndoToastState) => {
+    clearNavbarToastTimer()
+    setNavbarToast(payload)
+    navbarToastTimerRef.current = window.setTimeout(() => {
+      setNavbarToast(null)
+      navbarToastTimerRef.current = null
+    }, DELETE_UNDO_TIMEOUT_MS)
   }
 
   // Hjelpefunksjon for å generere en "clean" payload når vi gjenoppretter en presentasjon fra papirkurven.
@@ -235,9 +285,34 @@ function App() {
     }
   }, [user])
 
+  // Rydd vekk pending auto-dismiss ved unmount
   useEffect(() => {
-    return () => clearUndoToastTimer()
+    return () => clearNavbarToastTimer()
   }, [])
+
+  useEffect(() => {
+    return () => clearEditorSaveFlashTimer()
+  }, [])
+
+  // Nullstill lagre-status ved sidebytte eller når aktiv presentasjons-id faktisk endres (ikke bare nytt objekt etter save)
+  useEffect(() => {
+    if (currentPage !== 'editor') {
+      editorPresentationIdRef.current = undefined
+      clearEditorSaveFlashTimer()
+      setEditorSaveFlash(false)
+      setEditorLastSavedAt(null)
+      return
+    }
+    const pid =
+      activePresentation?.id != null && activePresentation.id !== ''
+        ? String(activePresentation.id)
+        : undefined
+    if (editorPresentationIdRef.current === pid) return
+    editorPresentationIdRef.current = pid
+    clearEditorSaveFlashTimer()
+    setEditorSaveFlash(false)
+    setEditorLastSavedAt(null)
+  }, [currentPage, activePresentation?.id])
 
   // Henter inn og oppdaterer brukerens lagrede presentasjoner
   const loadPresentations = async () => {
@@ -347,16 +422,28 @@ function App() {
       }
 
       setTrashedPresentations((previous) => [trashedItem, ...previous])
-      setDeleteUndoToast({
-        trashId,
-        title: restorablePresentation?.title || 'Presentasjon',
+      const deletedTitle = restorablePresentation?.title || 'Presentasjon'
+      // Kompakt toast i navbar med angre (undoTrashId kobler til papirkurv-rad)
+      showNavbarUndoToast({
+        message: `Slettet "${deletedTitle}".`,
+        undoTrashId: trashId,
+        actions: (
+          <>
+            {/* Litt lavere enn sm-knapp så alt får plass i én toast-rad */}
+            <Button
+              size='sm'
+              variant='outline'
+              className='h-7 shrink-0 px-2 text-[11px]'
+              onClick={() => void handleRestorePresentation(trashId)}
+            >
+              Angre
+            </Button>
+            <Button size='sm' variant='ghost' className='h-7 shrink-0 px-2 text-[11px]' onClick={dismissNavbarToast}>
+              Lukk
+            </Button>
+          </>
+        ),
       })
-
-      clearUndoToastTimer()
-      undoToastTimerRef.current = window.setTimeout(() => {
-        setDeleteUndoToast(null)
-        undoToastTimerRef.current = null
-      }, DELETE_UNDO_TIMEOUT_MS)
 
       window.setTimeout(() => {
         setPresentations((previous) => previous.filter((item) => item.id !== presentationId))
@@ -387,10 +474,14 @@ function App() {
 
       setTrashedPresentations((previous) => previous.filter((item) => item.id !== trashId))
 
-      if (deleteUndoToast?.trashId === trashId) {
-        clearUndoToastTimer()
-        setDeleteUndoToast(null)
-      }
+      // Fjern angre-toast hvis den gjaldt akkurat denne raden (trygg etter async)
+      setNavbarToast((current) => {
+        if (current?.undoTrashId === trashId) {
+          clearNavbarToastTimer()
+          return null
+        }
+        return current
+      })
 
       await loadPresentations()
       setPresentationsError(null)
@@ -416,17 +507,16 @@ function App() {
 
     setTrashedPresentations((previous) => previous.filter((item) => item.id !== trashId))
 
-    if (deleteUndoToast?.trashId === trashId) {
-      clearUndoToastTimer()
-      setDeleteUndoToast(null)
-    }
+    // Skjul angre-linjen hvis brukeren slettet den samme tingen for godt
+    setNavbarToast((current) => {
+      if (current?.undoTrashId === trashId) {
+        clearNavbarToastTimer()
+        return null
+      }
+      return current
+    })
 
     setPermanentDeleteDialog(null)
-  }
-
-  const dismissDeleteUndoToast = () => {
-    clearUndoToastTimer()
-    setDeleteUndoToast(null)
   }
 
   const handleLoginSuccess = (userData: UserRecord) => {
@@ -471,13 +561,15 @@ function App() {
 
   const handleLogout = async () => {
     await api.logout()
-    clearUndoToastTimer()
+    dismissNavbarToast() // ikke la toast henge igjen etter utlogging
+    setEditorLastSavedAt(null)
+    setEditorSaveFlash(false)
+    clearEditorSaveFlashTimer()
     clearSessionState()
     clearPageState()
     setUser(null)
     setPresentations([])
     setTrashedPresentations([])
-    setDeleteUndoToast(null)
     setActivePresentation(null)
     setIsNewPresentationSession(false)
     setHasSavedCurrentSession(false)
@@ -619,6 +711,22 @@ function App() {
         onUpdateProfileName={handleUpdateProfileName}
         onChangePassword={handleChangePassword}
         onLogout={handleLogout}
+        // Send kun det Navbar trenger (ikke intern undoTrashId)
+        centerToast={
+          navbarToast
+            ? { message: navbarToast.message, actions: navbarToast.actions }
+            : null
+        }
+        editorSave={
+          currentPage === 'editor'
+            ? {
+                onSave: () => void presentationEditorRef.current?.savePresentation?.(),
+                isSaving: isSavingPresentation,
+                lastSavedAt: editorLastSavedAt,
+                saveFlash: editorSaveFlash,
+              }
+            : null
+        }
       />
 
       <main className='mx-auto w-full px-4 py-6'>
@@ -890,25 +998,10 @@ function App() {
             presentation={activePresentation}
             onSavePresentation={handleSavePresentation}
             isSaving={isSavingPresentation}
+            onSaveComplete={handleEditorSaveComplete}
           />
         )}
       </main>
-
-      {deleteUndoToast && (
-        <Card className='fixed bottom-4 right-4 z-50 w-[min(92vw,420px)] border-border/70 shadow-xl'>
-          <CardContent className='flex flex-wrap items-center gap-3 p-4'>
-            <p className='text-sm'>Slettet "{deleteUndoToast.title}".</p>
-            <div className='ml-auto flex gap-2'>
-              <Button size='sm' variant='outline' onClick={() => handleRestorePresentation(deleteUndoToast.trashId)}>
-                Angre
-              </Button>
-              <Button size='sm' variant='ghost' onClick={dismissDeleteUndoToast}>
-                Lukk
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {isExitEditorDialogOpen && (
         <div className='fixed inset-0 z-50 grid place-items-center bg-black/60 px-4'>
