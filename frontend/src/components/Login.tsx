@@ -13,6 +13,15 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+function sanitizeLiveCodeSuffix(raw: string): string {
+  let s = raw.trim().toUpperCase().replace(/^LIVE-?/, '')
+  return s.replace(/[^A-Z0-9]/g, '').slice(0, 4)
+}
+
+function fullLiveJoinCode(suffix: string): string {
+  return `LIVE-${sanitizeLiveCodeSuffix(suffix)}`
+}
+
 interface LoginProps {
   onLoginSuccess?: (user: unknown) => void
   onGuestJoin?: (presentationId: string | number) => void
@@ -89,11 +98,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
 
   const handleGuestJoin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!guestCode.trim()) return
+    const suffix = sanitizeLiveCodeSuffix(guestCode)
+    if (!suffix || suffix.length < 4) {
+      setError('Oppgi alle 4 tegnene i øktkoden (bokstaver eller tall).')
+      return
+    }
     setError(null)
     setIsLoading(true)
     try {
-      const data = await api.guestJoin(guestCode.trim().toUpperCase())
+      const data = await api.guestJoin(fullLiveJoinCode(suffix))
       onGuestJoin?.(data.presentation_id)
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Kunne ikke bli med i økten.') // Could not join session.
@@ -271,20 +284,33 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
           <Card>
             <CardHeader>
               <CardTitle>Bli med som gjest</CardTitle>
-              <CardDescription>Skriv inn en presentasjonskode for å bli med i en live økt.</CardDescription>
+              <CardDescription>
+                Skriv inn de fire tegnene etter «LIVE-» som presentatøren viser.
+              </CardDescription>
             </CardHeader>
             <form onSubmit={handleGuestJoin}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="guestCode">Øktkode</Label>
-                  <Input
-                    id="guestCode"
-                    placeholder="f.eks. LIVE - ABCD"
-                    value={guestCode}
-                    onChange={(e) => setGuestCode(e.target.value)}
-                    required
-                    className="uppercase"
-                  />
+                  <div className="flex overflow-hidden rounded-md border border-input shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                    <span
+                      className="inline-flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground"
+                      aria-hidden
+                    >
+                      LIVE-
+                    </span>
+                    <Input
+                      id="guestCode"
+                      placeholder="AB12"
+                      value={guestCode}
+                      onChange={(e) => setGuestCode(sanitizeLiveCodeSuffix(e.target.value))}
+                      required
+                      className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none font-mono uppercase"
+                      maxLength={4}
+                      inputMode="text"
+                      spellCheck={false}
+                    />
+                  </div>
                 </div>
               </CardContent>
               <CardFooter>

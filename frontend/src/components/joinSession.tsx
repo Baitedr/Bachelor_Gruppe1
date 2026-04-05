@@ -6,6 +6,15 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { LogIn } from "lucide-react";
 
+function sanitizeLiveCodeSuffix(raw: string): string {
+    let s = raw.trim().toUpperCase().replace(/^LIVE-?/, '');
+    return s.replace(/[^A-Z0-9]/g, '').slice(0, 4);
+}
+
+function fullLiveJoinCode(suffix: string): string {
+    return `LIVE-${sanitizeLiveCodeSuffix(suffix)}`;
+}
+
 interface JoinStatus {
     type: 'success' | 'error' | null;
     title: string;
@@ -42,22 +51,23 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
     const handleJoinInteraction = async (event: React.FormEvent) => {
         event.preventDefault();
 
-        const normalizedCode = joinCode.trim().toUpperCase();
+        const suffix = sanitizeLiveCodeSuffix(joinCode);
+        const normalizedCode = fullLiveJoinCode(suffix);
 
-        if (!normalizedCode) {
+        if (!suffix) {
             setJoinStatus({
                 type: 'error',
                 title: 'Kode mangler',
-                message: 'Skriv inn en gyldig kode for å bli med i live interaction.',
+                message: 'Skriv inn de 4 tegnene i live-koden.',
             });
             return;
         }
 
-        if (normalizedCode.length < 4) {
+        if (suffix.length < 4) {
             setJoinStatus({
                 type: 'error',
                 title: 'For kort kode',
-                message: 'Koden må være minst 4 tegn.',
+                message: 'Oppgi alle 4 tegnene (bokstaver eller tall).',
             });
             return;
         }
@@ -96,21 +106,35 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
             <Card className="border-border/70">
                 <CardHeader>
                     <CardTitle>Delta med kode</CardTitle>
-                    <CardDescription>Skriv inn live-koden for å koble til økten.</CardDescription>
+                    <CardDescription>
+                        Skriv inn de fire tegnene du ser etter «LIVE-» på skjermen til presentatøren.
+                    </CardDescription>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
                     <form className="space-y-4" onSubmit={handleJoinInteraction}>
                         <div className="space-y-2">
                             <Label htmlFor="liveInteractionCode">Live-kode</Label>
-                            <Input
-                                id="liveInteractionCode"
-                                type="text"
-                                value={joinCode}
-                                onChange={(event) => setJoinCode(event.target.value)}
-                                placeholder="F.eks. LIVE-1234"
-                                autoComplete="off"
-                            />
+                            <div className="flex overflow-hidden rounded-md border border-input shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+                                <span
+                                    className="inline-flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground"
+                                    aria-hidden
+                                >
+                                    LIVE-
+                                </span>
+                                <Input
+                                    id="liveInteractionCode"
+                                    type="text"
+                                    className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none font-mono uppercase"
+                                    value={joinCode}
+                                    onChange={(event) => setJoinCode(sanitizeLiveCodeSuffix(event.target.value))}
+                                    placeholder="AB12"
+                                    autoComplete="off"
+                                    maxLength={4}
+                                    inputMode="text"
+                                    spellCheck={false}
+                                />
+                            </div>
                         </div>
 
                         <Button
