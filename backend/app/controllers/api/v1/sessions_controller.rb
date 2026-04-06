@@ -22,6 +22,7 @@ module Api
                     session_id: session.id,
                     user_id: guest_user.id
                 )
+                broadcast_session_state(session)
 
                 token = JsonWebToken.encode(user_id: guest_user.id, guest: true)
 
@@ -49,6 +50,7 @@ module Api
 
                 participant = @current_user || create_guest_user!
                 SessionParticipant.find_or_create_by!(session_id: session.id, user_id: participant.id)
+                broadcast_session_state(session)
                 token = @current_user ? nil : JsonWebToken.encode(user_id: participant.id, guest: true)
 
                 render json: {
@@ -76,6 +78,7 @@ module Api
                     session_id: session.id,
                     user_id: @current_user.id
                 )
+                broadcast_session_state(session)
 
                 render json: {
                     message: 'Koblet til',
@@ -155,8 +158,31 @@ module Api
             def create_guest_user!
                 User.create!(
                     email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
-                    password: SecureRandom.hex(16),
+                    password: build_guest_password,
                     name: 'Gjest'
+                )
+            end
+
+            def build_guest_password
+                # Meets User complexity validation: lowercase, uppercase, and digit.
+                "Guest#{SecureRandom.alphanumeric(10)}1aA"
+            end
+
+            def broadcast_session_state(session)
+                count = session.session_participants.count
+                payload = {
+                    participant_count: count,
+                    session_started: session.started?,
+                    session_ended: session.ended_at.present?
+                }
+
+                PresentationChannel.broadcast_to(
+                    session.presentation,
+                    { type: 'participant_joined', count: count }
+                )
+                PresentationChannel.broadcast_to(
+                    session.presentation,
+                    { type: 'session_state' }.merge(payload)
                 )
             end
         end
