@@ -815,7 +815,7 @@ function App() {
                   {presentations.map((presentation) => (
                     <Card
                       key={presentation.id}
-                      className='group border-border/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent/30 hover:shadow-lg'
+                      className='border-border/70 hover:border-primary/40 hover:bg-accent/30 hover:shadow-lg'
                     >
                       <CardContent
                         className='space-y-4 rounded-lg p-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
