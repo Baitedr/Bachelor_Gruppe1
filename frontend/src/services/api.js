@@ -1,8 +1,17 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.DEV
-  ? 'http://localhost:3000/api/v1'
-  : `${window.location.origin}/api/v1`
+function resolveApiBaseUrl() {
+  const explicit = import.meta.env.VITE_API_BASE_URL
+  if (typeof explicit === 'string' && explicit.trim() !== '') {
+    return explicit.replace(/\/$/, '')
+  }
+  if (import.meta.env.DEV) {
+    return '/api/v1'
+  }
+  return `${window.location.origin}/api/v1`
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 const TOKEN_KEY = 'auth_token'
 
 const apiClient = axios.create({

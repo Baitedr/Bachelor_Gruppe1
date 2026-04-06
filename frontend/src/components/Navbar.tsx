@@ -3,9 +3,24 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Home, LogOut, MonitorPlay, User } from 'lucide-react'
+import { Check, Home, LogOut, MonitorPlay, Save, User } from 'lucide-react'
 // Lys/mørk-modus (next-themes + shadcn-knapper).
 import { ModeToggle } from '@/components/mode-toggle'
+import { cn, formatTime24h } from '@/lib/utils'
+
+// Innhold til toast-linjen midt i navbar (f.eks. angre etter sletting).
+export type NavbarCenterToast = {
+  message: string
+  actions?: React.ReactNode
+}
+
+// Lagre i editor: én rad (h-8), ikon venstre og tekst/tid høyre — samme som andre sm-knapper
+export type NavbarEditorSave = {
+  onSave: () => void
+  isSaving: boolean
+  lastSavedAt: Date | null
+  saveFlash: boolean
+}
 
 type NavbarProps = {
   currentPage: string
@@ -21,6 +36,10 @@ type NavbarProps = {
     password_confirmation: string
   }) => Promise<void> | void
   onLogout: () => void
+  // Kompakt melding midt i header (angre sletting osv.); styres fra App.
+  centerToast?: NavbarCenterToast | null
+  // Vises bare på redigersiden; plasseres rett ved «Logget inn som …»
+  editorSave?: NavbarEditorSave | null
 }
 
 export default function Navbar({
@@ -33,6 +52,8 @@ export default function Navbar({
   onUpdateProfileName,
   onChangePassword,
   onLogout,
+  centerToast = null,
+  editorSave = null,
 }: NavbarProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const [nameValue, setNameValue] = useState(userName || '')
@@ -132,33 +153,37 @@ export default function Navbar({
 
   return (
     <header className='sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur'>
-      <div className='mx-auto flex w-full flex-wrap items-center gap-2 px-4 py-3'>
+      {/* Fast høyde slik at toast kan ligge absolutt uten å utvide headeren */}
+      <div className='relative mx-auto flex h-14 w-full items-center justify-between gap-2 px-4'>
+        <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
         <h1
-          className='mr-2 cursor-pointer text-lg font-semibold transition-colors hover:text-primary'
+          className='mr-2 shrink-0 cursor-pointer text-lg font-semibold transition-colors hover:text-primary'
           onClick={onGoHome}
         >
           ProSlides
         </h1>
 
-        <div className='relative' ref={accountMenuRef}>
-          {/* Bruk samme lyse/outline uttrykk som andre handlingsknapper. */}
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='flex items-center gap-2 hover:bg-accent hover:text-accent-foreground'
-            aria-label='Åpne profilinnstillinger'
-            onClick={() => {
-              setIsAccountMenuOpen((previous) => !previous)
-              setAccountError(null)
-              setAccountMessage(null)
-            }}
-          >
-            <User className='h-4 w-4' />
-            <span className='max-w-44 truncate'>Logget inn som {accountLabel}</span>
-          </Button>
+        {/* Konto-meny (egen ref) + valgfri lagre-knapp for editor */}
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          <div className='relative' ref={accountMenuRef}>
+            {/* Bruk samme lyse/outline uttrykk som andre handlingsknapper. */}
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='flex items-center gap-2 hover:bg-accent hover:text-accent-foreground'
+              aria-label='Åpne profilinnstillinger'
+              onClick={() => {
+                setIsAccountMenuOpen((previous) => !previous)
+                setAccountError(null)
+                setAccountMessage(null)
+              }}
+            >
+              <User className='h-4 w-4' />
+              <span className='max-w-44 truncate'>Logget inn som {accountLabel}</span>
+            </Button>
 
-          {isAccountMenuOpen && (
+            {isAccountMenuOpen && (
             <Card className='absolute left-0 top-11 z-50 w-80 border-border/80 shadow-lg'>
               <CardHeader className='pb-3'>
                 <CardTitle className='text-sm'>Konto</CardTitle>
@@ -268,11 +293,63 @@ export default function Navbar({
                 {accountMessage && <p className='text-sm text-emerald-600'>{accountMessage}</p>}
               </CardContent>
             </Card>
-          )}
+            )}
+          </div>
+
+          {editorSave ? (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={editorSave.isSaving}
+              onClick={editorSave.onSave}
+              title={
+                editorSave.lastSavedAt
+                  ? `Sist lagret ${formatTime24h(editorSave.lastSavedAt)}`
+                  : 'Ikke lagret ennå'
+              }
+              className={cn(
+                'h-8 shrink-0 gap-2 border-emerald-500/30 bg-emerald-500/15 px-3 text-emerald-600 hover:border-input hover:bg-accent hover:text-accent-foreground',
+                editorSave.saveFlash &&
+                  'border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.35)] ring-2 ring-emerald-500/45'
+              )}
+            >
+              {editorSave.saveFlash ? (
+                <Check className='h-4 w-4 shrink-0' aria-hidden />
+              ) : (
+                <Save className='h-4 w-4 shrink-0' aria-hidden />
+              )}
+              <span className='flex min-w-0 items-center gap-2 text-xs leading-none'>
+                <span className='whitespace-nowrap'>
+                  {editorSave.isSaving ? 'Lagrer...' : editorSave.saveFlash ? 'Lagret' : 'Lagre'}
+                </span>
+                <span className='max-w-[4.5rem] min-w-0 truncate text-left text-[10px] font-normal text-muted-foreground sm:max-w-[6rem]'>
+                  {editorSave.lastSavedAt ? formatTime24h(editorSave.lastSavedAt) : '—'}
+                </span>
+              </span>
+            </Button>
+          ) : null}
+        </div>
         </div>
 
-        {/* Handlingsknapper holdes samlet på høyre side. */}
-        <div className='ml-auto flex flex-wrap items-center gap-2'>
+        {/* Toast midt i header: absolute = ingen ekstra høyde; stil som sm outline-knapper */}
+        {centerToast ? (
+          <div
+            className='pointer-events-none absolute left-1/2 top-1/2 z-50 flex max-w-[min(92vw,22rem)] -translate-x-1/2 -translate-y-1/2 justify-center max-sm:top-full max-sm:mt-1 max-sm:translate-y-0'
+            role='status'
+          >
+            {/* Kun selve boksen fanger klikk (ikke hele overlay-fladen) */}
+            <div className='pointer-events-auto inline-flex min-h-8 w-max max-w-[min(92vw,22rem)] items-center gap-2 rounded-md border border-input bg-background/95 px-3 py-0 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200'>
+              <span className='min-w-0 flex-1 truncate leading-none'>{centerToast.message}</span>
+              {centerToast.actions ? (
+                <span className='flex shrink-0 items-center gap-1'>{centerToast.actions}</span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Høyre: tema, hjem, live, logg ut. z-10 = under toast (z-50) ved overlapp */}
+        <div className='relative z-10 flex shrink-0 flex-wrap items-center justify-end gap-2'>
           {/* Tema: sol/måne-ikon som veksler lyst og mørkt. */}
           <ModeToggle />
           {currentPage !== 'home' && (

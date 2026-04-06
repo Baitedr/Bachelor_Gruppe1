@@ -11,7 +11,6 @@ import {
     Palette,
     Plus,
     Redo2,
-    Save,
     Square,
     Trash2,
     Type,
@@ -123,10 +122,12 @@ type PresentationEditorProps = {
     presentation?: PresentationData | null;
     onSavePresentation?: (payload: any) => Promise<any>;
     isSaving?: boolean;
+    /** Kalles etter vellykket lagring (navbar oppdaterer «sist lagret») */
+    onSaveComplete?: (savedAt: Date) => void;
 };
 
 const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(
-({ presentation, onSavePresentation, isSaving }, ref) => {
+({ presentation, onSavePresentation, isSaving, onSaveComplete }, ref) => {
     // Referanser og grunnstate for editoren.
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<Canvas | null>(null);
@@ -137,7 +138,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [presentationId, setPresentationId] = useState<string | number | null>(null);
     const [presentationTitle, setPresentationTitle] = useState('Uten navn'); // Untitled Presentation
     const [saveError, setSaveError] = useState<string | null>(null);
-    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const [undoStack, setUndoStack] = useState<CanvasSnapshot[]>([]);
     const [redoStack, setRedoStack] = useState<CanvasSnapshot[]>([]);
     const [slidePreviewImages, setSlidePreviewImages] = useState<Record<string, string | null>>({});
@@ -1045,8 +1045,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
       setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
     }
 
-    setLastSavedAt(new Date())
-    hasUnsavedChangesRef.current = false
+    const savedAt = new Date();
+    onSaveComplete?.(savedAt);
+    hasUnsavedChangesRef.current = false;
     return true
   } catch (err) {
     console.error('Save presentation failed:', err)
@@ -1192,7 +1193,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
     }));
 
     return (
-        <div className="flex h-screen items-stretch gap-2 overflow-hidden bg-background p-2">
+        <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
                 ref={imageUploadInputRef}
                 type="file"
@@ -1201,7 +1202,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 onChange={handleImageFileChange}
             />
 
-            <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_10px_rgba(0,0,0,0.2)] ring-1 ring-border/40 transition-all duration-200`}>
+            <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_14px_rgba(0,0,0,0.05)] ring-1 ring-border/30 transition-all duration-200`}>
                 <div className="flex items-center justify-between border-b border-border p-3">
                     {!isLeftSidebarCollapsed && <h3 className="text-lg text-foreground">Lysbilder</h3>}
                     <Button
@@ -1250,13 +1251,13 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 )}
 
                 {!isLeftSidebarCollapsed && (
-                    <>
-                        <div className="border-b border-border p-4">
+                    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                        <div className="mb-6">
                             <Button onClick={addSlide} size="sm" variant="outline" className="w-full flex items-center gap-1.5">
-                                <Plus className="h-3.5 w-3.5" /> Legg til
+                                <Plus className="h-3.5 w-3.5" /> Nytt lysbilde
                             </Button>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto">
+                        <div className="border-t border-border pt-4">
                             <SlideThumbnails
                                 slides={slides}
                                 slidePreviewImages={slidePreviewImages}
@@ -1266,16 +1267,17 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onSlideDuplicate={duplicateSlide}
                             />
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 overflow-auto p-4">
-                <div className="flex w-full max-w-225 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-6 py-4 shadow-[0_4px_6px_rgba(0,0,0,0.25)]">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-3 overflow-hidden bg-muted/22 p-2 sm:gap-4 sm:p-4 md:gap-6 dark:bg-transparent">
+                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+                    {/* Øverste rad: tittel + lysbilde-teller (lagre ligger i navbar) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
                             type="text"
-                            className="h-auto w-auto min-w-55 flex-1 basis-[320px] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
+                            className="h-auto min-w-0 flex-1 basis-[min(100%,280px)] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
                             value={presentationTitle}
                             onChange={(e) => {
                                 setPresentationTitle(e.target.value);
@@ -1283,13 +1285,14 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             }}
                             placeholder="Presentasjonstittel"
                         />
-                        <span className="ml-auto inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
-                            Lysbilde {currentSlideIndex + 1} av {slides.length}
-                        </span>
-                        {/* Shad-badge gjør auto-status mer synlig og konsistent i UI-et. */}
-                        {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                        <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+                            <span className="inline-flex whitespace-nowrap text-[1.1rem] font-semibold leading-none text-foreground">
+                                Lysbilde {currentSlideIndex + 1} av {slides.length}
+                            </span>
+                            {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                        </div>
                     </div>
-                    <div className="flex flex-wrap items-center justify-start gap-2">
+                    <div className="flex flex-wrap items-center justify-center gap-2">
                         <Button
                             onClick={handleUndo}
                             variant="secondary"
@@ -1307,15 +1310,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             disabled={!redoStack.length}
                         >
                             <Redo2 className="h-3.5 w-3.5" /> Gjør om
-                        </Button>
-                        <Button
-                            onClick={handleSavePresentation}
-                            variant="outline"
-                            size="sm"
-                            className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"
-                            disabled={isSaving}
-                        >
-                            <Save className="h-3.5 w-3.5" /> {isSaving ? 'Lagrer...' : 'Lagre'}
                         </Button>
                         <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
                         <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
@@ -1365,21 +1359,20 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     
                     </div>
                 </div>
-                {saveError && <div className="rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">{saveError}</div>}
-                {lastSavedAt && !saveError && (
-                    <div className="rounded-lg bg-[rgba(16,185,129,0.18)] px-4 py-2.5 text-sm font-semibold text-[#6ee7b7]">
-                        Sist lagret {lastSavedAt.toLocaleTimeString()}
+                {saveError && (
+                    <div className="shrink-0 rounded-lg bg-[rgba(239,68,68,0.18)] px-4 py-2.5 text-sm font-semibold text-[#fca5a5]">
+                        {saveError}
                     </div>
                 )}
 
-                <div className="flex h-full w-full flex-1 overflow-hidden">
+                <div className="flex min-h-0 w-full flex-1 overflow-hidden">
                     <div
                         ref={canvasViewportRef}
-                        className="relative flex min-h-100 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-8"
+                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-3 sm:p-6 md:p-8"
                     >
                         <div
                             ref={canvasScaleWrapperRef}
-                            className="h-135 w-240 origin-center [&_canvas]:rounded-lg"
+                            className="h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
                         >
                             <canvas ref={canvasRef} />
                         </div>
@@ -1387,7 +1380,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 </div>
             </div>
 
-            <div className={`${isRightSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[-2px_0_10px_rgba(0,0,0,0.15)] ring-1 ring-border/40 transition-all duration-200`}>
+            <div className={`${isRightSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[-2px_0_14px_rgba(0,0,0,0.05)] ring-1 ring-border/30 transition-all duration-200`}>
                 <div className="flex items-center gap-2 border-b border-border p-3">
                     <Button
                         onClick={() => setIsRightSidebarCollapsed((prev) => !prev)}
@@ -1451,7 +1444,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         ) : (
                             <div className="flex flex-col gap-3">
                                 {(slides[currentSlideIndex]?.questions || []).map((question, index) => (
-                                    <div key={question.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
+                                    <div key={question.id || index} className="border border-border rounded-xl p-3 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                                         <div className="mb-3">
                                             <div className="flex justify-between items-start gap-2 mb-1.5">
                                                 <strong className="text-sm font-medium leading-tight">{question.prompt}</strong>
@@ -1494,7 +1487,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                     const totalVotes = getPollTotalVotes(poll);
 
                                     return (
-                                        <div key={poll.id || index} className="border border-border rounded-xl p-3 bg-background shadow-sm">
+                                        <div key={poll.id || index} className="border border-border rounded-xl p-3 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                                             <div className="mb-3">
                                                 <div className="flex justify-between items-start gap-2 mb-3">
                                                     <strong className="text-sm font-medium leading-tight">{poll.question}</strong>
@@ -1557,7 +1550,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
             {questionToDeleteIndex !== null && (
                 <div className="fixed inset-0 z-9999 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-[0_12px_40px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-200">
                         <h3 className="text-lg font-semibold text-foreground text-left mb-2">Slett spørsmål?</h3>
                         <p className="text-[15px] text-muted-foreground text-left mb-8">
                             Er du sikker på at du vil slette dette spørsmålet? Dette kan ikke angres.
@@ -1596,7 +1589,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
             {pollToDeleteIndex !== null && (
                 <div className="fixed inset-0 z-9999 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-card border border-border p-6 rounded-2xl w-full max-w-105 shadow-[0_12px_40px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-200">
                         <h3 className="text-lg font-semibold text-foreground text-left mb-2">Slett poll?</h3>
                         <p className="text-[15px] text-muted-foreground text-left mb-8">
                             Er du sikker på at du vil slette denne pollen? Dette kan ikke angres.
