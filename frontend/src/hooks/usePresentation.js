@@ -19,6 +19,10 @@ export const usePresentation = (presentationId, token) => {
   useEffect(() => {
     if (!presentationId || !token) return
 
+    setSessionEnded(false)
+    setSessionStarted(false)
+    setParticipantCount(0)
+
     const wsBase =
       import.meta.env.VITE_WS_URL ||
       `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
@@ -48,8 +52,16 @@ export const usePresentation = (presentationId, token) => {
             case 'participant_joined':
               setParticipantCount(data.count || 0)
               break
+            case 'session_state':
+              setParticipantCount(data.participant_count || 0)
+              setSessionStarted(Boolean(data.session_started))
+              setSessionEnded(Boolean(data.session_ended))
+              break
             case 'session_started':
               setSessionStarted(true)
+              if (typeof data.participant_count === 'number') {
+                setParticipantCount(data.participant_count)
+              }
               break
             case 'session_ended':
               setSessionEnded(true)

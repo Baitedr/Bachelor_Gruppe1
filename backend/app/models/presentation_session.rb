@@ -7,6 +7,8 @@ class PresentationSession < ApplicationRecord
 
   before_create :generate_join_code
 
+  scope :active, -> { where(ended_at: nil) }
+
   private
 
   def generate_join_code

@@ -5,23 +5,34 @@ class PresentationChannel < ApplicationCable::Channel
 
     stream_for presentation
 
-    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    active_session = active_session_for_presentation(presentation)
     return unless active_session && presentation.is_live
 
-    if current_user.id == presentation.owner_id
-      count = active_session.session_participants.count
-      transmit({ type: 'participant_joined', count: count })
-    else
-      SessionParticipant.find_or_create_by(
+    participant_count = active_session.session_participants.count
+
+    if current_user.id != presentation.owner_id
+      participant = SessionParticipant.find_or_create_by(
         session_id: active_session.id,
         user_id: current_user.id
       )
-      count = active_session.session_participants.count
-      PresentationChannel.broadcast_to(
-        presentation,
-        { type: 'participant_joined', count: count }
-      )
+      participant_count = active_session.session_participants.count
+
+      if participant.previously_new_record?
+        PresentationChannel.broadcast_to(
+          presentation,
+          { type: 'participant_joined', count: participant_count }
+        )
+      end
     end
+
+    transmit(
+      {
+        type: 'session_state',
+        participant_count: participant_count,
+        session_started: active_session.started?,
+        session_ended: active_session.ended_at.present?
+      }
+    )
   end
 
   def unsubscribed
@@ -31,9 +42,18 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
+    active_session = active_session_for_presentation(presentation)
+    return unless active_session
+
+    active_session.update!(started: true)
+
     PresentationChannel.broadcast_to(
       presentation,
-      { type: 'session_started' }
+      {
+        type: 'session_started',
+        session_started: true,
+        participant_count: active_session.session_participants.count
+      }
     )
   end
 
@@ -59,13 +79,13 @@ class PresentationChannel < ApplicationCable::Channel
       { type: 'question_activated', question_id: question[:id], question: serialize_question(question) }
     )
 
-    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    active_session = active_session_for_presentation(presentation)
     broadcast_question_results(presentation, active_session, question) if active_session
   end
 
   def submit_question_response(data)
     presentation = Presentation.find(params[:presentation_id])
-    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    active_session = active_session_for_presentation(presentation)
     return unless active_session
 
     question = find_question_in_presentation(presentation, data['question_id'])
@@ -166,10 +186,14 @@ class PresentationChannel < ApplicationCable::Channel
 
     PresentationChannel.broadcast_to(
       presentation,
-      { type: 'poll_activated', poll_id: poll.id, poll: serialize_poll(poll) }
+      {
+        type: 'poll_activated',
+        poll_id: poll.id,
+        poll: serialize_poll(poll, active_session_for_presentation(presentation))
+      }
     )
 
-    broadcast_poll_results(poll)
+    broadcast_poll_results(poll, active_session_for_presentation(presentation))
   end
 
   def submit_poll_response(data)
@@ -177,7 +201,7 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = poll.slide&.presentation
     return unless presentation
 
-    active_session = presentation.presentation_sessions.find_by(ended_at: nil)
+    active_session = active_session_for_presentation(presentation)
     return unless active_session
 
     option = poll.poll_options.find_by(text: data['answer'])
@@ -197,14 +221,21 @@ class PresentationChannel < ApplicationCable::Channel
       answer: option.text
     )
 
-    broadcast_poll_results(poll)
+    broadcast_poll_results(poll, active_session)
   end
 
   private
 
-  def broadcast_poll_results(poll)
-    results = poll.poll_responses.group(:answer).count
-    total = poll.poll_responses.count
+  def active_session_for_presentation(presentation)
+    presentation.presentation_sessions.find_by(ended_at: nil)
+  end
+
+  def broadcast_poll_results(poll, active_session)
+    return unless active_session
+
+    scoped = poll.poll_responses.where(presentation_session_id: active_session.id)
+    results = scoped.group(:answer).count
+    total = scoped.count
 
     PresentationChannel.broadcast_to(
       poll.slide.presentation,
@@ -217,8 +248,12 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
-  def serialize_poll(poll)
-    counts = poll.poll_responses.group(:answer).count
+  def serialize_poll(poll, active_session)
+    counts = if active_session
+               poll.poll_responses.where(presentation_session_id: active_session.id).group(:answer).count
+             else
+               {}
+             end
 
     {
       id: poll.id,

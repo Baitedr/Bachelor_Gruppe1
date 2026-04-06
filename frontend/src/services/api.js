@@ -215,6 +215,9 @@ const api = {
       () => apiClient.post('/sessions/join_by_code', { code }),
       1
     )
+    if (response.data?.token) {
+      setToken(response.data.token)
+    }
     return response.data
   },
 

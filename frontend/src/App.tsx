@@ -70,6 +70,7 @@ type PersistedPageState = {
   activePresentationId: string | null
   livePresentationId: string | null
   liveJoinCode: string | null
+  liveIsPresenter: boolean
   guestMode: boolean
 }
 
@@ -104,6 +105,7 @@ function App() {
 
   const [livePresentationId, setLivePresentationId] = useState<string | null>(null)
   const [liveJoinCode, setLiveJoinCode] = useState<string | null>(null)
+  const [liveIsPresenter, setLiveIsPresenter] = useState(false)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
 
@@ -209,9 +211,10 @@ function App() {
     activePresentationId: activePresentation?.id ?? null,
     livePresentationId,
     liveJoinCode,
+    liveIsPresenter,
     guestMode,
   })
-}, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, guestMode, user])
+}, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, liveIsPresenter, guestMode, user])
 
   useEffect(() => {
     const loc = window.location
@@ -231,6 +234,7 @@ function App() {
 
   if (saved?.guestMode) {
     setLivePresentationId(saved.presentationId)
+    setLiveIsPresenter(false)
     setGuestMode(true)
     setCurrentPage(saved.page)
     setIsAuthChecking(false)
@@ -249,10 +253,12 @@ function App() {
     if (saved?.page === 'lobby' || saved?.page === 'live') {
       setLivePresentationId(saved.presentationId)
       setLiveJoinCode(saved.joinCode ?? null)
+      setLiveIsPresenter(Boolean(saved.isPresenter ?? saved.joinCode))
       setCurrentPage(saved.page)
     } else if (savedPage) {
       setLivePresentationId(savedPage.livePresentationId)
       setLiveJoinCode(savedPage.liveJoinCode)
+      setLiveIsPresenter(Boolean(savedPage.liveIsPresenter ?? savedPage.liveJoinCode))
       setGuestMode(savedPage.guestMode)
 
       if (savedPage.currentPage === 'editor' && savedPage.activePresentationId) {
@@ -539,11 +545,18 @@ function App() {
     page: Page,
     presentationId: string | null,
     joinCode: string | null,
-    isGuest: boolean
+    isGuest: boolean,
+    isPresenter: boolean
   ) => {
     sessionStorage.setItem(
       'proslides_session',
-      JSON.stringify({ page, presentationId, joinCode: joinCode ?? null, guestMode: isGuest })
+      JSON.stringify({
+        page,
+        presentationId,
+        joinCode: joinCode ?? null,
+        guestMode: isGuest,
+        isPresenter,
+      })
     )
   }
 
@@ -554,7 +567,8 @@ function App() {
       const data = await api.startSession(presentationId)
       setLivePresentationId(presentationId)
       setLiveJoinCode(data.join_code)
-      saveSessionState('lobby', presentationId, data.join_code, false)
+      setLiveIsPresenter(true)
+      saveSessionState('lobby', presentationId, data.join_code, false, true)
       setCurrentPage('lobby')
     } catch {
       setPresentationsError('Kunne ikke starte live-økt')
@@ -563,9 +577,10 @@ function App() {
 
   const handleGuestJoin = (presentationId: string | number) => {
     const normalizedPresentationId = String(presentationId)
-    saveSessionState('lobby', normalizedPresentationId, null, true)
+    saveSessionState('lobby', normalizedPresentationId, null, true, false)
     setLivePresentationId(normalizedPresentationId)
     setLiveJoinCode(null)
+    setLiveIsPresenter(false)
     setGuestMode(true)
     setCurrentPage('lobby')
   }
@@ -582,6 +597,7 @@ function App() {
     setPresentations([])
     setTrashedPresentations([])
     setActivePresentation(null)
+    setLiveIsPresenter(false)
     setIsNewPresentationSession(false)
     setHasSavedCurrentSession(false)
     setCurrentPage('login')
@@ -598,6 +614,7 @@ function App() {
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
+    setLiveIsPresenter(false)
     setCurrentPage('home')
   }
 
@@ -611,7 +628,10 @@ function App() {
     password: string
     password_confirmation: string
   }) => {
-    const data = await api.changePassword(payload)
+    const data = await api.changePassword({
+      ...payload,
+      current_password: payload.current_password ?? '',
+    })
     if (data?.user) {
       setUser((previous) => ({ ...(previous || {}), ...data.user }))
     }
@@ -668,6 +688,7 @@ function App() {
       clearSessionState()
       setGuestMode(false)
       setLivePresentationId(null)
+      setLiveIsPresenter(false)
       setCurrentPage('login')
       api.logout()
     }
@@ -692,7 +713,7 @@ function App() {
                 joinCode={null}
                 isPresenter={false}
                 onSessionStarted={() => {
-                  saveSessionState('live', livePresentationId, null, true)
+                  saveSessionState('live', livePresentationId, null, true, false)
                   setCurrentPage('live')
                 }}
                 onSessionEnd={leaveGuestSession}
@@ -951,9 +972,14 @@ function App() {
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>
             <PhoneInteraction
-              onJoined={(presentationId) => {
+              onJoined={(joined: { presentationId: string; sessionStarted: boolean }) => {
+                const { presentationId, sessionStarted } = joined
                 setLivePresentationId(presentationId)
-                setCurrentPage('live')
+                setLiveJoinCode(null)
+                setLiveIsPresenter(false)
+                const nextPage: Page = sessionStarted ? 'live' : 'lobby'
+                saveSessionState(nextPage, presentationId, null, false, false)
+                setCurrentPage(nextPage)
               }}
             />
           </div>
@@ -964,9 +990,9 @@ function App() {
             <SessionLobby
               presentationId={livePresentationId}
               joinCode={liveJoinCode}
-              isPresenter
+              isPresenter={liveIsPresenter}
               onSessionStarted={() => {
-                saveSessionState('live', livePresentationId, liveJoinCode, false)
+                saveSessionState('live', livePresentationId, liveJoinCode, false, liveIsPresenter)
                 setCurrentPage('live')
               }}
               onSessionEnd={handleGoHome}
@@ -1010,7 +1036,7 @@ function App() {
             )}
             <LivePresentation 
               presentationId={livePresentationId} 
-              isPresenter={Boolean(liveJoinCode)} 
+              isPresenter={liveIsPresenter} 
               onSessionEnd={handleGoHome}
             />
           </div>

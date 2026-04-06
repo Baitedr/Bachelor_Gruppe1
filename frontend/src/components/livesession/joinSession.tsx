@@ -26,9 +26,16 @@ interface JoinResponse {
     error?: string;
     presentation_id?: string;
     join_code?: string;
+    session_started?: boolean;
+    token?: string;
 }
 
-const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }> = ({ onJoined }) => {
+type JoinResult = {
+    presentationId: string;
+    sessionStarted: boolean;
+}
+
+const PhoneInteraction: React.FC<{ onJoined?: (payload: JoinResult) => void }> = ({ onJoined }) => {
     const [joinCode, setJoinCode] = useState<string>('');
     const [isJoining, setIsJoining] = useState<boolean>(false);
     const [joinStatus, setJoinStatus] = useState<JoinStatus>({
@@ -76,7 +83,16 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
         setJoinStatus({ type: null, title: '', message: '' });
 
         try {
-            const payload = await api.joinByCode(normalizedCode) as JoinResponse;
+            let payload: JoinResponse;
+            try {
+                payload = await api.joinByCode(normalizedCode) as JoinResponse;
+            } catch (innerError: unknown) {
+                const statusCode = (innerError as { response?: { status?: number } })?.response?.status;
+                if (statusCode !== 401) {
+                    throw innerError;
+                }
+                payload = await api.guestJoin(normalizedCode) as JoinResponse;
+            }
 
             setJoinStatus({
                 type: 'success',
@@ -86,7 +102,10 @@ const PhoneInteraction: React.FC<{ onJoined?: (presentationId: string) => void }
             setJoinCode('');
 
             if (payload.presentation_id && onJoined) {
-                onJoined(payload.presentation_id);
+                onJoined({
+                    presentationId: payload.presentation_id,
+                    sessionStarted: Boolean(payload.session_started),
+                });
             }
         } catch (err: unknown) {
             const backendMessage =

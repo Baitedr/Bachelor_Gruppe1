@@ -1,7 +1,8 @@
 module Api
     module V1
         class SessionsController < ApplicationController
-            before_action :authenticate_user!, except: [:guest_join]
+            before_action :authenticate_user!, only: [:join, :end_session, :participants]
+            before_action :load_current_user_from_token, only: [:join_by_code]
 
             # POST /api/v1/sessions/guest_join
             # No auth required – creates a temporary guest user and returns a JWT.
@@ -15,11 +16,7 @@ module Api
                     return render json: { error: 'Ingen aktiv sesjon funnet for denne koden.' }, status: :not_found
                 end
 
-                guest_user = User.create!(
-                    email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
-                    password: SecureRandom.hex(16),
-                    name: 'Gjest'
-                )
+                guest_user = create_guest_user!
 
                 SessionParticipant.create!(
                     session_id: session.id,
@@ -31,7 +28,10 @@ module Api
                 render json: {
                     token: token,
                     presentation_id: session.presentation_id,
-                    join_code: session.join_code
+                    join_code: session.join_code,
+                    session_started: session.started?,
+                    session_ended: session.ended_at.present?,
+                    participant_count: session.session_participants.count
                 }, status: :ok
             end
 
@@ -47,15 +47,18 @@ module Api
                     return render json: { error: 'Ingen aktiv sesjon funnet for denne koden.' }, status: :not_found
                 end
 
-                SessionParticipant.find_or_create_by!(
-                    session_id: session.id,
-                    user_id: @current_user.id
-                )
+                participant = @current_user || create_guest_user!
+                SessionParticipant.find_or_create_by!(session_id: session.id, user_id: participant.id)
+                token = @current_user ? nil : JsonWebToken.encode(user_id: participant.id, guest: true)
 
                 render json: {
                     message: 'Koblet til',
                     presentation_id: session.presentation_id,
-                    join_code: session.join_code
+                    join_code: session.join_code,
+                    session_started: session.started?,
+                    session_ended: session.ended_at.present?,
+                    participant_count: session.session_participants.count,
+                    token: token
                 }, status: :ok
             end
 
@@ -83,7 +86,10 @@ module Api
                             }
                         }
                     }),
-                    join_code: session.join_code
+                    join_code: session.join_code,
+                    session_started: session.started?,
+                    session_ended: session.ended_at.present?,
+                    participant_count: session.session_participants.count
                 }, status: :ok
             end
 
@@ -131,6 +137,27 @@ module Api
                 else
                     render json: { participants: [] }
                 end
+            end
+
+            private
+
+            def load_current_user_from_token
+                auth_header = request.headers['Authorization']
+                token = auth_header&.split(' ')&.last
+                return if token.blank?
+
+                decoded = JsonWebToken.decode(token)
+                return unless decoded&.dig(:user_id)
+
+                @current_user = User.find_by(id: decoded[:user_id])
+            end
+
+            def create_guest_user!
+                User.create!(
+                    email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
+                    password: SecureRandom.hex(16),
+                    name: 'Gjest'
+                )
             end
         end
     end
