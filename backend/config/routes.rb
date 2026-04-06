@@ -28,6 +28,7 @@ Rails.application.routes.draw do
           post 'end_session', to: 'presentations#end_session'
           post 'join', to: 'sessions#join'
           get 'participants', to: 'sessions#participants'
+          get 'session_state', to: 'sessions#session_state'
         end
       end
 

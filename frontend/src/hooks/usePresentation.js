@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { createConsumer } from '@rails/actioncable';
+import api from '../services/api';
 
 export const usePresentation = (presentationId, token) => {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -92,6 +93,35 @@ export const usePresentation = (presentationId, token) => {
     return () => {
       subscription.unsubscribe()
       consumer.disconnect()
+    }
+  }, [presentationId, token])
+
+  useEffect(() => {
+    if (!presentationId || !token) return
+
+    let cancelled = false
+
+    const syncSessionState = async () => {
+      try {
+        const state = await api.getSessionState(presentationId)
+        if (cancelled || !state) return
+
+        if (typeof state.participant_count === 'number') {
+          setParticipantCount(state.participant_count)
+        }
+        setSessionStarted(Boolean(state.session_started))
+        setSessionEnded(Boolean(state.session_ended))
+      } catch {
+        // Keep websocket as primary transport; polling is best-effort fallback.
+      }
+    }
+
+    void syncSessionState()
+    const intervalId = window.setInterval(syncSessionState, 2000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [presentationId, token])
 

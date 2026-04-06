@@ -1,7 +1,7 @@
 module Api
     module V1
         class SessionsController < ApplicationController
-            before_action :authenticate_user!, only: [:join, :end_session, :participants]
+            before_action :authenticate_user!, only: [:join, :end_session, :participants, :session_state]
             before_action :load_current_user_from_token, only: [:join_by_code]
 
             # POST /api/v1/sessions/guest_join
@@ -139,6 +139,27 @@ module Api
                     }
                 else
                     render json: { participants: [] }
+                end
+            end
+
+            def session_state
+                presentation = Presentation.find(params[:id])
+                session = presentation.presentation_sessions.find_by(ended_at: nil)
+
+                if session
+                    render json: {
+                        session_started: session.started?,
+                        session_ended: false,
+                        participant_count: session.session_participants.count,
+                        join_code: session.join_code
+                    }, status: :ok
+                else
+                    render json: {
+                        session_started: false,
+                        session_ended: true,
+                        participant_count: 0,
+                        join_code: nil
+                    }, status: :ok
                 end
             end
 

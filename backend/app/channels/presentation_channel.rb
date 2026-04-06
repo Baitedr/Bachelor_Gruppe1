@@ -11,18 +11,16 @@ class PresentationChannel < ApplicationCable::Channel
     participant_count = active_session.session_participants.count
 
     if current_user.id != presentation.owner_id
-      participant = SessionParticipant.find_or_create_by(
+      SessionParticipant.find_or_create_by(
         session_id: active_session.id,
         user_id: current_user.id
       )
       participant_count = active_session.session_participants.count
 
-      if participant.previously_new_record?
-        PresentationChannel.broadcast_to(
-          presentation,
-          { type: 'participant_joined', count: participant_count }
-        )
-      end
+      PresentationChannel.broadcast_to(
+        presentation,
+        { type: 'participant_joined', count: participant_count }
+      )
     end
 
     transmit(
@@ -53,6 +51,15 @@ class PresentationChannel < ApplicationCable::Channel
         type: 'session_started',
         session_started: true,
         participant_count: active_session.session_participants.count
+      }
+    )
+    PresentationChannel.broadcast_to(
+      presentation,
+      {
+        type: 'session_state',
+        participant_count: active_session.session_participants.count,
+        session_started: true,
+        session_ended: false
       }
     )
   end

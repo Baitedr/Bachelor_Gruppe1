@@ -239,6 +239,14 @@ const api = {
     return response.data
   },
 
+  getSessionState: async (presentationId) => {
+    const response = await axiosRetry(
+      () => apiClient.get(`/presentations/${presentationId}/session_state`),
+      1
+    )
+    return response.data
+  },
+
   // Polls
   getPolls: async () => {
     const response = await axiosRetry(() => apiClient.get('/polls'), 1)
