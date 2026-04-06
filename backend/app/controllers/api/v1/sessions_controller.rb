@@ -17,7 +17,7 @@ module Api
 
                 guest_user = User.create!(
                     email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
-                    password: SecureRandom.hex(16),
+                    password: build_guest_password,
                     name: 'Gjest'
                 )
 
@@ -131,6 +131,13 @@ module Api
                 else
                     render json: { participants: [] }
                 end
+            end
+
+            private
+
+            def build_guest_password
+                # Meets User complexity validation: lowercase, uppercase, and digit.
+                "Guest#{SecureRandom.alphanumeric(10)}1aA"
             end
         end
     end

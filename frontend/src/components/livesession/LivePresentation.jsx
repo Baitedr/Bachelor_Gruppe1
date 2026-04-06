@@ -98,14 +98,15 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   }, [activeQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
 
   const submitOpenQuestionAnswer = () => {
-    if (!activeQuestion) return
-
-    const trimmedAnswer = questionAnswer.trim()
-    if (!trimmedAnswer) return
-
-    submitQuestionAnswer(activeQuestion.id, trimmedAnswer)
-    setQuestionAnswer('')
-  }
+     if (!activeQuestion) return
+ 
+     const trimmedAnswer = questionAnswer.trim()
+     if (!trimmedAnswer) return
+ 
+     submitQuestionAnswer(activeQuestion.id, trimmedAnswer)
+     setQuestionAnswer('')
+   } 
+  
 
   if (loading) {
     return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
