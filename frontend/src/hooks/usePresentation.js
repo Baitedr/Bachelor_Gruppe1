@@ -117,7 +117,7 @@ export const usePresentation = (presentationId, token) => {
   }
 
   // Spørsmål-funksjonalitet til LivePresentation
-  const activateQuestion = (questionId, answer) => {
+  const activateQuestion = (questionId) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_question', { question_id: questionId })
     }

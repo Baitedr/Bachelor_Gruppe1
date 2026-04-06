@@ -3,6 +3,7 @@ import { usePresentation } from '../hooks/usePresentation'
 import api from '../services/api'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Textarea } from './ui/textarea'
 import LivePresentationCanvas from './LivePresentationCanvas'
 
 const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
@@ -19,7 +20,13 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
     submitPollAnswer,
     sessionEnded,
     submittedPollIds,
+    activeQuestion,
+    questionResults,
+    activateQuestion,
+    submitQuestionAnswer,
+    submittedQuestionIds,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
+  const [questionAnswer, setQuestionAnswer] = useState('')
 
   useEffect(() => {
     if (sessionEnded && onSessionEnd) onSessionEnd()
@@ -61,6 +68,10 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   const activePollResult = activePoll ? pollResults[activePoll.id] : null
   const totalVotes = activePollResult?.total || 0
   const hasAnsweredActivePoll = Boolean(activePoll && submittedPollIds?.[activePoll.id])
+  const activeQuestionResult = activeQuestion ? questionResults[activeQuestion.id] : null
+  const totalQuestionAnswers = activeQuestionResult?.total || 0
+  const activeQuestionType = activeQuestionResult?.question_type || activeQuestion?.type || 'open_text'
+  const hasAnsweredActiveQuestion = Boolean(activeQuestion && submittedQuestionIds?.[activeQuestion.id])
 
   const audienceResults = useMemo(() => {
     if (!activePoll) return []
@@ -70,6 +81,31 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
       return { id: option.id, text: option.text, votes, percent }
     })
   }, [activePoll, activePollResult, totalVotes])
+
+  const activeQuestionChoiceResults = useMemo(() => {
+    if (!activeQuestion || activeQuestionType !== 'single_choice') return []
+
+    return (activeQuestion.options || []).map((option) => {
+      const count = activeQuestionResult?.results?.[option.text] || 0
+      const percent = totalQuestionAnswers > 0 ? Math.round((count / totalQuestionAnswers) * 100) : 0
+      return {
+        id: option.id,
+        text: option.text,
+        count,
+        percent,
+      }
+    })
+  }, [activeQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
+
+  const submitOpenQuestionAnswer = () => {
+    if (!activeQuestion) return
+
+    const trimmedAnswer = questionAnswer.trim()
+    if (!trimmedAnswer) return
+
+    submitQuestionAnswer(activeQuestion.id, trimmedAnswer)
+    setQuestionAnswer('')
+  }
 
   if (loading) {
     return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
@@ -98,14 +134,14 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
         </CardHeader>
         <CardContent>
           <div
-            className='min-h-[420px] rounded-xl border border-border p-6 flex flex-col justify-center items-center'
+            className='min-h-105 rounded-xl border border-border p-6 flex flex-col justify-center items-center'
             style={{ backgroundColor: currentSlideData?.backgroundColor || 'hsl(var(--card))' }}
           >
             {currentSlideData ? (
               currentSlideData.fabricData ? (
                 <LivePresentationCanvas slideData={currentSlideData} />
               ) : (
-                <div className='w-full flex-grow text-center flex flex-col justify-center items-center'>
+                <div className='w-full grow text-center flex flex-col justify-center items-center'>
                   {currentSlideData.title && (
                     <h2 className='text-3xl font-bold mb-6 text-foreground'>{currentSlideData.title}</h2>
                   )}
@@ -157,53 +193,167 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
                 )}
               </div>
             ))}
+
+            {currentSlideData?.questions?.map((question) => {
+              const result = questionResults[question.id]
+              const total = result?.total || 0
+              const questionType = result?.question_type || question.type || 'open_text'
+
+              return (
+                <div key={question.id} className='space-y-2 rounded-lg border border-border p-3'>
+                  <Button onClick={() => activateQuestion(question.id)}>
+                    Aktiver spørsmål: {question.prompt}
+                  </Button>
+
+                  {result && (
+                    <div className='space-y-1 text-sm'>
+                      <p className='font-medium'>Resultater ({total} svar)</p>
+                      {questionType === 'single_choice' ? (
+                        (question.options || []).map((option) => {
+                          const count = result.results?.[option.text] || 0
+                          const percent = total > 0 ? Math.round((count / total) * 100) : 0
+
+                          return (
+                            <p key={option.id} className='text-muted-foreground'>
+                              {option.text}: {count} ({percent}%)
+                            </p>
+                          )
+                        })
+                      ) : (
+                        <>
+                          {(result.recent_answers || []).slice(-5).map((answer, index) => (
+                            <p key={`${question.id}-${index}`} className='text-muted-foreground'>
+                              {answer}
+                            </p>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       ) : (
-        activePoll && (
-          <Card>
-            <CardHeader className='pb-2'>
-              <CardTitle className='text-lg'>{activePoll.question}</CardTitle>
-            </CardHeader>
-            <CardContent className='space-y-3'>
-              {!hasAnsweredActivePoll ? (
-                activePoll.options.map((option) => (
-                  <Button
-                    key={option.id}
-                    className='w-full justify-start'
-                    variant='outline'
-                    onClick={() => submitPollAnswer(activePoll.id, option.text)}
-                  >
-                    {option.text}
-                  </Button>
-                ))
-              ) : (
-                <div className='space-y-2'>
-                  <p className='text-sm text-muted-foreground'>
-                    Stemmen din er registrert. Resultater oppdateres i sanntid:
-                  </p>
-                  {audienceResults.map((option) => (
-                    <div key={option.id} className='space-y-1'>
-                      <div className='flex justify-between text-sm'>
-                        <span>{option.text}</span>
-                        <span className='text-muted-foreground'>
-                          {option.votes} ({option.percent}%)
-                        </span>
+        <div className='space-y-4'>
+          {activePoll && (
+            <Card>
+              <CardHeader className='pb-2'>
+                <CardTitle className='text-lg'>{activePoll.question}</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-3'>
+                {!hasAnsweredActivePoll ? (
+                  activePoll.options.map((option) => (
+                    <Button
+                      key={option.id}
+                      className='w-full justify-start'
+                      variant='outline'
+                      onClick={() => submitPollAnswer(activePoll.id, option.text)}
+                    >
+                      {option.text}
+                    </Button>
+                  ))
+                ) : (
+                  <div className='space-y-2'>
+                    <p className='text-sm text-muted-foreground'>
+                      Stemmen din er registrert. Resultater oppdateres i sanntid:
+                    </p>
+                    {audienceResults.map((option) => (
+                      <div key={option.id} className='space-y-1'>
+                        <div className='flex justify-between text-sm'>
+                          <span>{option.text}</span>
+                          <span className='text-muted-foreground'>
+                            {option.votes} ({option.percent}%)
+                          </span>
+                        </div>
+                        <div className='h-2 w-full rounded bg-muted overflow-hidden'>
+                          <div
+                            className='h-full bg-primary transition-all duration-300'
+                            style={{ width: `${option.percent}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className='h-2 w-full rounded bg-muted overflow-hidden'>
-                        <div
-                          className='h-full bg-primary transition-all duration-300'
-                          style={{ width: `${option.percent}%` }}
-                        />
-                      </div>
+                    ))}
+                    <p className='text-xs text-muted-foreground'>Totalt antall stemmer: {totalVotes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeQuestion && (
+            <Card>
+              <CardHeader className='pb-2'>
+                <CardTitle className='text-lg'>{activeQuestion.prompt}</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-3'>
+                {!hasAnsweredActiveQuestion ? (
+                  activeQuestionType === 'single_choice' ? (
+                    (activeQuestion.options || []).map((option) => (
+                      <Button
+                        key={option.id}
+                        className='w-full justify-start'
+                        variant='outline'
+                        onClick={() => submitQuestionAnswer(activeQuestion.id, option.text)}
+                      >
+                        {option.text}
+                      </Button>
+                    ))
+                  ) : (
+                    <div className='space-y-2'>
+                      <Textarea
+                        value={questionAnswer}
+                        onChange={(event) => setQuestionAnswer(event.target.value)}
+                        placeholder='Skriv svaret ditt her...'
+                      />
+                      <Button onClick={submitOpenQuestionAnswer} disabled={!questionAnswer.trim()}>
+                        Send svar
+                      </Button>
                     </div>
-                  ))}
-                  <p className='text-xs text-muted-foreground'>Totalt antall stemmer: {totalVotes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )
+                  )
+                ) : (
+                  <div className='space-y-2'>
+                    <p className='text-sm text-muted-foreground'>
+                      Svaret ditt er registrert. Resultater oppdateres i sanntid:
+                    </p>
+
+                    {activeQuestionType === 'single_choice' ? (
+                      <>
+                        {activeQuestionChoiceResults.map((option) => (
+                          <div key={option.id} className='space-y-1'>
+                            <div className='flex justify-between text-sm'>
+                              <span>{option.text}</span>
+                              <span className='text-muted-foreground'>
+                                {option.count} ({option.percent}%)
+                              </span>
+                            </div>
+                            <div className='h-2 w-full rounded bg-muted overflow-hidden'>
+                              <div
+                                className='h-full bg-primary transition-all duration-300'
+                                style={{ width: `${option.percent}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        <p className='text-xs text-muted-foreground'>Totalt antall svar: {totalQuestionAnswers}</p>
+                      </>
+                    ) : (
+                      <div className='space-y-1'>
+                        {(activeQuestionResult?.recent_answers || []).slice(-5).map((answer, index) => (
+                          <p key={`answer-${index}`} className='text-sm text-muted-foreground'>
+                            {answer}
+                          </p>
+                        ))}
+                        <p className='text-xs text-muted-foreground'>Totalt antall svar: {totalQuestionAnswers}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
     </div>
   )

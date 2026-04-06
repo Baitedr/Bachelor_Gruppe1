@@ -74,7 +74,7 @@ class PresentationChannel < ApplicationCable::Channel
     answer = data['answer'].to_s.strip
     return if answer.blank?
 
-    if question[:question_type] == 'single_choice'
+    if question[:type] == 'single_choice'
       valid = (question[:options] || []).map { |o| o[:text] }.include?(answer)
       return unless valid
     end

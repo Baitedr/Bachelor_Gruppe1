@@ -1014,6 +1014,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
+                questions: Array.isArray(slide?.questions) ? slide.questions : [],
       })),
     }
 
@@ -1037,6 +1038,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.previewImage || null,
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
+            questions: Array.isArray(slide?.questions) ? slide.questions : [],
       }))
 
       setSlides(normalizedSlides)
