@@ -6,6 +6,18 @@
 /* Mørke Tailwind-varianter når et overordnet element har klassen .dark (next-themes legger den på <html>). */
 @custom-variant dark (&:is(.dark *));
 
+/* Registrerte farger: nettleseren kan interpolere dem ved temabytte (myk «lysstyrke»-følelse). */
+@property --background {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(0.99 0.003 268);
+}
+@property --foreground {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(0.22 0.02 268);
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -156,6 +168,10 @@ body {
   }
   html {
     @apply font-sans;
+    /* Enkel overgang lyst ↔ mørkt på hovedflate (arv til body via bg-background / text-foreground). */
+    transition:
+      --background 280ms ease,
+      --foreground 280ms ease;
   }
   button {
     @apply cursor-pointer;
