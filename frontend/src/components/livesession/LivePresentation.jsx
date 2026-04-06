@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { usePresentation } from '../hooks/usePresentation'
-import api from '../services/api'
-import { Button } from './ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Textarea } from './ui/textarea'
+import { usePresentation } from '../../hooks/usePresentation'
+import api from '../../services/api'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Textarea } from '../ui/textarea'
 import LivePresentationCanvas from './LivePresentationCanvas'
 
 const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {

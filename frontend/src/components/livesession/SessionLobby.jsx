@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react'
-import { usePresentation } from '../hooks/usePresentation'
-import { Badge } from './ui/badge'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { usePresentation } from '../../hooks/usePresentation'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 
 const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted, onSessionEnd }) => {
   const { participantCount, sessionStarted, startSession, sessionEnded } = usePresentation(

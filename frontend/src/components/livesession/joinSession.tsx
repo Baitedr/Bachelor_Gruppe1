@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import api from '../services/api';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import api from '../../services/api';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { LogIn } from "lucide-react";
 
 function sanitizeLiveCodeSuffix(raw: string): string {
