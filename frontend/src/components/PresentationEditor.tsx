@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import {
     BarChart3,
@@ -19,7 +19,7 @@ import {
     X,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
-import PollCreator from './PollComponents/PollCreator';
+import PollCreator from './polls/PollCreator';
 import Question from './Question';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
