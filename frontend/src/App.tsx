@@ -815,10 +815,14 @@ function App() {
                   {presentations.map((presentation) => (
                     <Card
                       key={presentation.id}
-                      className='border-border/70 hover:border-primary/40 hover:bg-accent/30 hover:shadow-lg'
+                      className='group relative overflow-hidden border border-border bg-transparent text-card-foreground shadow-none transition-[border-color] duration-200 hover:border-primary/55 dark:border-white/20 dark:hover:border-primary/75'
                     >
+                      <div
+                        aria-hidden
+                        className='pointer-events-none absolute inset-0 z-0 rounded-xl bg-card shadow-sm transition-[box-shadow,background-color] duration-200 dark:bg-[oklch(0.235_0.022_268)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.07),0_2px_10px_rgba(0,0,0,0.28)] group-hover:bg-accent/45 group-hover:shadow-lg dark:group-hover:bg-[oklch(0.28_0.035_277)] dark:group-hover:shadow-[0_0_0_1px_rgba(167,139,250,0.4),0_6px_22px_rgba(0,0,0,0.38),0_0_28px_rgba(124,58,237,0.18)]'
+                      />
                       <CardContent
-                        className='space-y-4 rounded-lg p-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+                        className='relative z-10 space-y-4 rounded-lg p-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
                         role='button'
                         tabIndex={0}
                         aria-label={`Rediger ${presentation.title}`}
@@ -833,7 +837,7 @@ function App() {
                         }}
                       >
                         {presentation.first_slide?.previewImage ? (
-                          <div className='aspect-video w-full overflow-hidden rounded-md border border-border bg-muted/20'>
+                          <div className='aspect-video w-full overflow-hidden rounded-md border border-border bg-muted/20 dark:border-white/15'>
                             <img
                               src={presentation.first_slide.previewImage}
                               alt={`${presentation.title} forhåndsvisning`}
@@ -841,7 +845,7 @@ function App() {
                             />
                           </div>
                         ) : (
-                          <div className='aspect-video w-full rounded-md border border-border bg-muted/40 p-3'>
+                          <div className='aspect-video w-full rounded-md border border-border bg-muted/40 p-3 dark:border-white/15'>
                             <p className='line-clamp-1 text-sm font-medium'>
                               {presentation.first_slide?.title || 'Lysbilde 1'}
                             </p>
@@ -863,7 +867,7 @@ function App() {
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 hover:bg-accent hover:text-accent-foreground'
+                            className='flex items-center justify-center gap-1.5 transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground dark:hover:bg-muted/35'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleOpenPresentation(presentation.id)}
                           >
@@ -873,7 +877,7 @@ function App() {
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+                            className='flex items-center justify-center gap-1.5 border-emerald-500/30 bg-emerald-500/15 text-emerald-500 transition-colors hover:border-emerald-500/45 hover:bg-emerald-500/22 hover:text-emerald-600 dark:hover:bg-emerald-500/14 dark:hover:text-emerald-300'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleStartLive(presentation.id)}
                           >
@@ -883,7 +887,7 @@ function App() {
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+                            className='flex items-center justify-center gap-1.5 border-destructive/30 bg-destructive/15 text-destructive transition-colors hover:border-destructive/45 hover:bg-destructive/22 hover:text-destructive'
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleDeletePresentation(presentation.id)}
                           >
