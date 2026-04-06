@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import { ThemeProvider } from './components/theme-provider'
+import { ThemeProvider } from './components/ui/theme-provider'
 import './index.css'
 
 // Tema: klassen "dark" på <html> styrer Tailwind/shadcn-variabler.

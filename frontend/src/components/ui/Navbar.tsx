@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Check, Home, LogOut, MonitorPlay, Save, User } from 'lucide-react'
 // Lys/mørk-modus (next-themes + shadcn-knapper).
-import { ModeToggle } from '@/components/mode-toggle'
+import { ModeToggle } from '@/components/ui/mode-toggle'
 import { cn, formatTime24h } from '@/lib/utils'
 
 // Innhold til toast-linjen midt i navbar (f.eks. angre etter sletting).
