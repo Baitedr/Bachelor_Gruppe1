@@ -40,6 +40,7 @@ type UserRecord = {
 type SlidePreview = {
   title?: string
   content?: string
+  notes?: string
   backgroundColor?: string
   previewImage?: string
 }
@@ -53,6 +54,7 @@ type PresentationSummary = {
   slides?: Array<{
     title?: string
     content?: string
+    notes?: string
     backgroundColor?: string
     fabricData?: unknown
     previewImage?: string
@@ -190,6 +192,7 @@ function App() {
     slides: (presentation?.slides || []).map((slide, index) => ({
       title: slide?.title || `Lysbilde ${index + 1}`,
       content: slide?.content || '',
+      notes: slide?.notes || '',
       backgroundColor: slide?.backgroundColor || '#ffffff',
       fabricData: slide?.fabricData || null,
       previewImage: slide?.previewImage || (index === 0 ? presentation?.first_slide?.previewImage : null),
@@ -353,6 +356,7 @@ function App() {
       {
         title: 'Lysbilde 1',
         content: '',
+        notes: '',
         backgroundColor: '#ffffff',
         fabricData: createDefaultSlideFabricData(),
       },
@@ -741,7 +745,7 @@ function App() {
         currentPage === 'editor'
           ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
           : isLiveSessionPage
-            ? 'h-dvh max-h-dvh overflow-hidden'
+            ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
             : 'min-h-screen',
       )}
     >
@@ -778,7 +782,7 @@ function App() {
           currentPage === 'editor'
             ? 'mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden'
             : isLiveSessionPage
-              ? 'mx-auto h-full w-full overflow-hidden px-4 py-6'
+              ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden py-3'
               : 'mx-auto w-full px-4 py-6',
         )}
       >
@@ -1012,9 +1016,9 @@ function App() {
         )}
 
         {currentPage === 'live' && (
-          <div className='mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col gap-4'>
+          <div className='flex h-full w-full min-h-0 flex-col gap-3 px-3'>
             {liveJoinCode && (
-              <Card className='mx-auto w-full max-w-3xl border-border/70'>
+              <Card className='w-full border-border/70'>
                 <CardContent className='flex flex-wrap items-center gap-3 p-4'>
                   <div className='text-sm text-muted-foreground'>
                     Live-kode:{' '}

@@ -25,6 +25,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 
 const CANVAS_WIDTH = 960;
@@ -80,6 +81,7 @@ type Slide = {
     id: string;
     title: string;
     content: string;
+    notes: string;
     backgroundColor: string;
     fabricData: unknown;
     polls: Poll[];
@@ -107,6 +109,7 @@ const defaultSlide = (index = 1): Slide => ({
     id: `local-${Date.now()}`,
     title: `Lysbilde ${index}`, // Slide
     content: '',
+    notes: '',
     backgroundColor: '#ffffff',
     fabricData: createDefaultSlideFabricData(),
     polls: [],
@@ -297,6 +300,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: slide.id || `local-${Date.now()}-${index}`,
             title: slide.title || `Lysbilde ${index + 1}`,
             content: slide.content || '',
+            notes: slide.notes || '',
             backgroundColor: slide.backgroundColor || '#ffffff',
             fabricData: slide.fabricData || null,
             polls: Array.isArray(slide.polls)
@@ -611,6 +615,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: `local-${Date.now()}`,
             title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
+            notes: '',
             backgroundColor: '#ffffff',
             fabricData: createDefaultSlideFabricData(),
             polls: [],
@@ -1010,6 +1015,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
       slides: slidesToSave.map((slide, index) => ({
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
+        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
@@ -1034,6 +1040,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         id: slide?.id ?? `local-${Date.now()}-${index}`,
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
+        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.previewImage || null,
@@ -1377,6 +1384,36 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             <canvas ref={canvasRef} />
                         </div>
                     </div>
+                </div>
+                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col gap-2 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6">
+                    <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="slide-notes" className="text-sm font-semibold text-foreground">
+                            Notater for presentatør
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                            Vises kun i presentatørvisning
+                        </span>
+                    </div>
+                    <Textarea
+                        id="slide-notes"
+                        value={slides[currentSlideIndex]?.notes || ''}
+                        onChange={(event) => {
+                            const value = event.target.value;
+                            setSlides((previousSlides) => {
+                                const nextSlides = [...previousSlides];
+                                if (!nextSlides[currentSlideIndex]) return previousSlides;
+
+                                nextSlides[currentSlideIndex] = {
+                                    ...nextSlides[currentSlideIndex],
+                                    notes: value,
+                                };
+                                return nextSlides;
+                            });
+                            markDirty();
+                        }}
+                        placeholder="Legg til stikkord, manus eller påminnelser for dette lysbildet..."
+                        className="min-h-24 resize-y"
+                    />
                 </div>
             </div>
 

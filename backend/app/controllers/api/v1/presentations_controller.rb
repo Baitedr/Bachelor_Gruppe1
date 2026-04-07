@@ -101,8 +101,10 @@ module Api
           presentation.slides.destroy_all
 
           normalized_slides.each_with_index do |slide_data, index|
+            source = slide_data.is_a?(ActionController::Parameters) ? slide_data.to_unsafe_h : slide_data
             slide = presentation.slides.create!(
               slide_index: index,
+              notes: normalize_slide_notes(source),
               background: normalize_slide_background(slide_data, index)
             )
 
@@ -140,6 +142,7 @@ module Api
         {
           'title' => 'Slide 1',
           'content' => '',
+          'notes' => '',
           'backgroundColor' => '#ffffff',
           'fabricData' => nil,
           'questions' => []
@@ -157,6 +160,10 @@ module Api
           previewImage: source['previewImage'] || source[:previewImage],
           questions: normalize_slide_questions(source['questions'] || source[:questions])
         }
+      end
+
+      def normalize_slide_notes(source)
+        (source['notes'] || source[:notes]).to_s
       end
 
       def normalize_slide_questions(questions)
@@ -248,6 +255,7 @@ module Api
           slideIndex: slide.slide_index,
           title: payload['title'] || "Slide #{slide.slide_index + 1}",
           content: payload['content'] || '',
+          notes: slide.notes.presence || payload_value(payload, 'notes') || '',
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
           previewImage: payload_value(payload, 'previewImage'),
