@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -10,17 +10,27 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted,
     localStorage.getItem('auth_token')
   )
 
-  useEffect(() => {
-    if (sessionStarted) {
-      onSessionStarted()
-    }
-  }, [sessionStarted, onSessionStarted])
+  //URL brukere kan dele for å bli med i økten
+  const joinUrl = useMemo(() => {
+    if (!joinCode) return ''
+    if (typeof window === 'undefined') return ''
+    return `${window.location.origin}/live/join/${joinCode}`
+  }, [joinCode])
+
+  //API kommando: Lager QR-kode
+  const qrCodeUrl = useMemo(() => {
+    if (!joinUrl) return ''
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`
+  }, [joinUrl])
+
 
   useEffect(() => {
-    if (sessionEnded && onSessionEnd) {
-      onSessionEnd()
-    }
-  }, [sessionEnded, onSessionEnd])
+    if (sessionStarted)  onSessionStarted()
+    }, [sessionStarted, onSessionStarted])
+
+  useEffect(() => {
+    if (sessionEnded && onSessionEnd) onSessionEnd() 
+    }, [sessionEnded, onSessionEnd])
 
   return (
     <Card className='mx-auto w-full max-w-2xl'>
@@ -54,6 +64,20 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted,
           </Button>
         ) : (
           <p className='text-sm text-muted-foreground'>Venter på at presentatør skal starte...</p>
+        )}
+
+        {/*qr kode*/}
+        {isPresenter && qrCodeUrl && (
+          <div className='pt-4'>
+            <p className='mb-2 text-sm text-muted-foreground'>Skann QR-koden for å bli med</p>
+            <img
+            src={qrCodeUrl}
+            alt='QR-kode for å bli med i live presentasjon'
+            width={180}
+            height={180}
+            className='mx-auto rounded-md border border-border bg-white p-2'
+            />
+          </div>
         )}
       </CardContent>
     </Card>
