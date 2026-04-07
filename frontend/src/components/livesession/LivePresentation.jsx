@@ -98,15 +98,14 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   }, [activeQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
 
   const submitOpenQuestionAnswer = () => {
-     if (!activeQuestion) return
- 
-     const trimmedAnswer = questionAnswer.trim()
-     if (!trimmedAnswer) return
- 
-     submitQuestionAnswer(activeQuestion.id, trimmedAnswer)
-     setQuestionAnswer('')
-   } 
-  
+    if (!activeQuestion) return
+
+    const trimmedAnswer = questionAnswer.trim()
+    if (!trimmedAnswer) return
+
+    submitQuestionAnswer(activeQuestion.id, trimmedAnswer)
+    setQuestionAnswer('')
+  }
 
   if (loading) {
     return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
@@ -117,8 +116,8 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   }
 
   return (
-    <div className='space-y-4'>
-      <Card>
+    <div className={isPresenter ? 'flex h-full min-h-0 flex-col gap-3 overflow-hidden' : 'space-y-4'}>
+      <Card className={isPresenter ? 'flex min-h-0 flex-1 flex-col' : ''}>
         <CardHeader className='pb-4 flex flex-row items-center justify-between'>
           <div>
             <CardTitle className='text-xl'>{presentation.title}</CardTitle>
@@ -133,10 +132,13 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
             </span>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={isPresenter ? 'flex min-h-0 flex-1 flex-col' : ''}>
           <div
-            className='min-h-105 rounded-xl border border-border p-6 flex flex-col justify-center items-center'
-            style={{ backgroundColor: currentSlideData?.backgroundColor || 'hsl(var(--card))' }}
+            className={
+              isPresenter
+                ? 'flex min-h-0 flex-1 rounded-xl border border-border p-2 items-center justify-center bg-transparent'
+                : 'min-h-105 rounded-xl border border-border p-2 flex flex-col justify-center items-center bg-transparent'
+            }
           >
             {currentSlideData ? (
               currentSlideData.fabricData ? (
@@ -160,13 +162,8 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
               <p className='text-sm text-muted-foreground'>Ingen data for dette lysbildet.</p>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      {isPresenter ? (
-        <Card>
-          <CardContent className='space-y-4 p-4'>
-            <div className='flex flex-wrap gap-2'>
+          {isPresenter && (
+            <div className='mt-3 flex flex-wrap gap-2'>
               <Button onClick={handlePrevSlide} disabled={currentSlide === 0} variant='outline'>
                 Forrige
               </Button>
@@ -178,7 +175,13 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
                 Neste
               </Button>
             </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {isPresenter ? (
+        <Card className='shrink-0'>
+          <CardContent className='space-y-4 p-4 max-h-[30vh] overflow-y-auto'>
             {currentSlideData?.polls?.map((poll) => (
               <div key={poll.id} className='space-y-2 rounded-lg border border-border p-3'>
                 <Button onClick={() => activatePoll(poll.id)}>Aktiver poll: {poll.question}</Button>

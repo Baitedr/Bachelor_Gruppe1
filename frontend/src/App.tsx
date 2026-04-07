@@ -731,13 +731,18 @@ function App() {
     )
   }
 
+  const isLiveSessionPage =
+    currentPage === 'phoneinteraction' || currentPage === 'lobby' || currentPage === 'live'
+
   return (
     <div
       className={cn(
         'bg-background text-foreground',
         currentPage === 'editor'
           ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
-          : 'min-h-screen',
+          : isLiveSessionPage
+            ? 'h-dvh max-h-dvh overflow-hidden'
+            : 'min-h-screen',
       )}
     >
       <Navbar
@@ -772,7 +777,9 @@ function App() {
         className={cn(
           currentPage === 'editor'
             ? 'mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden'
-            : 'mx-auto w-full px-4 py-6',
+            : isLiveSessionPage
+              ? 'mx-auto h-full w-full overflow-hidden px-4 py-6'
+              : 'mx-auto w-full px-4 py-6',
         )}
       >
         {currentPage === 'home' && (
@@ -1005,7 +1012,7 @@ function App() {
         )}
 
         {currentPage === 'live' && (
-          <div className='mx-auto w-full max-w-7xl space-y-4'>
+          <div className='mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col gap-4'>
             {liveJoinCode && (
               <Card className='mx-auto w-full max-w-3xl border-border/70'>
                 <CardContent className='flex flex-wrap items-center gap-3 p-4'>
@@ -1038,9 +1045,9 @@ function App() {
                 </CardContent>
               </Card>
             )}
-            <LivePresentation 
-              presentationId={livePresentationId} 
-              isPresenter={liveIsPresenter} 
+            <LivePresentation
+              presentationId={livePresentationId}
+              isPresenter={liveIsPresenter}
               onSessionEnd={handleGoHome}
             />
           </div>
