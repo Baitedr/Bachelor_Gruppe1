@@ -58,7 +58,7 @@ module Api
         @presentation.update!(is_live: false)
         active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
         active_session&.update!(ended_at: Time.current)
-        PresentationChannel.broadcast_to(@presentation, { type: 'session_ended' })
+        safe_broadcast(@presentation, { type: 'session_ended' })
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
 
@@ -308,6 +308,15 @@ module Api
             }
           end
         }
+      end
+
+      def safe_broadcast(presentation, payload)
+        PresentationChannel.broadcast_to(presentation, payload)
+      rescue StandardError => e
+        Rails.logger.warn(
+          "[presentations#safe_broadcast] failed presentation_id=#{presentation.id} " \
+          "event=#{payload[:type] || payload['type']} error=#{e.class}: #{e.message}"
+        )
       end
     end
   end

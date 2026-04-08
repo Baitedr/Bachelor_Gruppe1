@@ -167,6 +167,8 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.1-x64-mingw-ucrt)
       racc (~> 1.4)
+    nokogiri (1.19.1-x86_64-linux-gnu)
+      racc (~> 1.4)
     oauth2 (2.0.18)
       faraday (>= 0.17.3, < 4.0)
       jwt (>= 1.0, < 4.0)
@@ -197,6 +199,7 @@ GEM
     ostruct (0.6.3)
     pg (1.6.3)
     pg (1.6.3-x64-mingw-ucrt)
+    pg (1.6.3-x86_64-linux)
     pp (0.6.3)
       prettyprint
     prettyprint (0.2.0)
@@ -257,6 +260,10 @@ GEM
       erb
       psych (>= 4.0.0)
       tsort
+    redis (5.4.1)
+      redis-client (>= 0.22.0)
+    redis-client (0.28.0)
+      connection_pool
     reline (0.6.3)
       io-console (~> 0.5)
     rspec-core (3.13.6)
@@ -309,6 +316,7 @@ PLATFORMS
   ruby
   x64-mingw-ucrt
   x86-mingw32
+  x86_64-linux
 
 DEPENDENCIES
   bcrypt (~> 3.1.7)
@@ -324,6 +332,7 @@ DEPENDENCIES
   puma (~> 6.0)
   rack-cors
   rails (~> 8.1.2)
+  redis (~> 5.4)
   rspec-rails (~> 6.0)
   spring
   tzinfo-data
