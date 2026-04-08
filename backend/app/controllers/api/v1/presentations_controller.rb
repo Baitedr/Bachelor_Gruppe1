@@ -58,7 +58,7 @@ module Api
         @presentation.update!(is_live: false)
         active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
         active_session&.update!(ended_at: Time.current)
-        PresentationChannel.broadcast_to(@presentation, { type: 'session_ended' })
+        safe_broadcast(@presentation, { type: 'session_ended' })
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
 
@@ -101,8 +101,10 @@ module Api
           presentation.slides.destroy_all
 
           normalized_slides.each_with_index do |slide_data, index|
+            source = slide_data.is_a?(ActionController::Parameters) ? slide_data.to_unsafe_h : slide_data
             slide = presentation.slides.create!(
               slide_index: index,
+              notes: normalize_slide_notes(source),
               background: normalize_slide_background(slide_data, index)
             )
 
@@ -140,6 +142,7 @@ module Api
         {
           'title' => 'Slide 1',
           'content' => '',
+          'notes' => '',
           'backgroundColor' => '#ffffff',
           'fabricData' => nil,
           'questions' => []
@@ -157,6 +160,10 @@ module Api
           previewImage: source['previewImage'] || source[:previewImage],
           questions: normalize_slide_questions(source['questions'] || source[:questions])
         }
+      end
+
+      def normalize_slide_notes(source)
+        (source['notes'] || source[:notes]).to_s
       end
 
       def normalize_slide_questions(questions)
@@ -248,6 +255,7 @@ module Api
           slideIndex: slide.slide_index,
           title: payload['title'] || "Slide #{slide.slide_index + 1}",
           content: payload['content'] || '',
+          notes: slide.notes.presence || payload_value(payload, 'notes') || '',
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
           previewImage: payload_value(payload, 'previewImage'),
@@ -300,6 +308,15 @@ module Api
             }
           end
         }
+      end
+
+      def safe_broadcast(presentation, payload)
+        PresentationChannel.broadcast_to(presentation, payload)
+      rescue StandardError => e
+        Rails.logger.warn(
+          "[presentations#safe_broadcast] failed presentation_id=#{presentation.id} " \
+          "event=#{payload[:type] || payload['type']} error=#{e.class}: #{e.message}"
+        )
       end
     end
   end

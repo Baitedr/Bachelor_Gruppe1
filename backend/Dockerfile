@@ -22,7 +22,8 @@ RUN apt-get update -qq && \
 ENV RAILS_ENV="production" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
-    BUNDLE_WITHOUT="development:test"
+    BUNDLE_WITHOUT="development:test" \
+    BUNDLE_JOBS="1"
 
 FROM base AS build
 

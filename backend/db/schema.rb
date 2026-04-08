@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_06_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -102,6 +102,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_06_000100) do
   create_table "slides", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
     t.jsonb "background"
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
+    t.text "notes", default: "", null: false
     t.uuid "presentation_id"
     t.integer "slide_index", null: false
     t.index ["presentation_id"], name: "idx_slides_presentation_id"

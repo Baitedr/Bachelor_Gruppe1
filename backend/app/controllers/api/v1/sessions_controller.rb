@@ -197,13 +197,16 @@ module Api
                     session_ended: session.ended_at.present?
                 }
 
-                PresentationChannel.broadcast_to(
-                    session.presentation,
-                    { type: 'participant_joined', count: count }
-                )
-                PresentationChannel.broadcast_to(
-                    session.presentation,
-                    { type: 'session_state' }.merge(payload)
+                safe_broadcast(session.presentation, { type: 'participant_joined', count: count })
+                safe_broadcast(session.presentation, { type: 'session_state' }.merge(payload))
+            end
+
+            def safe_broadcast(presentation, payload)
+                PresentationChannel.broadcast_to(presentation, payload)
+            rescue StandardError => e
+                Rails.logger.warn(
+                    "[sessions#safe_broadcast] failed presentation_id=#{presentation.id} " \
+                    "event=#{payload[:type] || payload['type']} error=#{e.class}: #{e.message}"
                 )
             end
         end

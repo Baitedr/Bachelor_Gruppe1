@@ -18,6 +18,11 @@ servers:
   web:
     - 204.168.207.248
 
+ssh:
+  user: root
+  keys:
+    - ~/.ssh/id_ed25519
+
 proxy:
   ssl: true
   host: slides.rubynor.com
