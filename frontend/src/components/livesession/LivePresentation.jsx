@@ -5,6 +5,7 @@ import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Textarea } from '../ui/textarea'
 import LivePresentationCanvas from './LivePresentationCanvas'
+import LiveResultsBoard from './LiveResultsBoard'
 
 const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   const [presentation, setPresentation] = useState(null)
@@ -73,6 +74,25 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
   const activeQuestionType = activeQuestionResult?.question_type || activeQuestion?.type || 'open_text'
   const hasAnsweredActiveQuestion = Boolean(activeQuestion && submittedQuestionIds?.[activeQuestion.id])
 
+  const hasActivePoll = Boolean(activePoll)
+  const hasActiveQuestion = Boolean(activeQuestion)
+  const hasActiveInteraction = hasActivePoll || hasActiveQuestion
+
+  const resultsBoardType =
+  hasActivePoll && hasActiveQuestion
+    ? 'both'
+    : hasActivePoll
+    ? 'poll'
+    : hasActiveQuestion
+    ? 'question'
+    : null
+    const resultsBoardItemId =
+    resultsBoardType === 'poll'
+    ? activePoll?.id
+    : resultsBoardType === 'question'
+    ? activeQuestion?.id
+    : null
+
   const audienceResults = useMemo(() => {
     if (!activePoll) return []
     return activePoll.options.map((option) => {
@@ -115,6 +135,14 @@ const LivePresentation = ({ presentationId, isPresenter, onSessionEnd }) => {
 
   if (!presentation) {
     return <div className='text-sm text-muted-foreground'>Presentasjon ikke funnet.</div>
+  }
+
+  if (!isPresenter && hasActiveInteraction && resultsBoardType) {
+  return (
+    <div className='flex h-full min-h-0 w-full flex-col gap-3'>
+    <LiveResultsBoard presentationId={presentationId} initialType={resultsBoardType} initialItemId={resultsBoardItemId} />
+    </div>
+    )
   }
 
   return (
