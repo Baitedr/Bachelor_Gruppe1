@@ -39,7 +39,9 @@ const LivePresentationAudience = ({
   hasActiveInteraction,
   activePoll,
   activeQuestion,
+  pollResults,
   questionResults,
+  sessionEnded,
   submitPollAnswer,
   submitQuestionAnswer,
   audienceResults,
@@ -321,7 +323,9 @@ const LivePresentationAudience = ({
                 {participantCount}
               </span>
             </div>
-            {isFullscreen && onLeaveSession ? (
+            {/* Fullskjerm: rekkefølge som gjesteheader (ModeToggle → Forlat økt). I vanlig visning: kun Forlat (tema i Navbar). */}
+            {isFullscreen ? <ModeToggle /> : null}
+            {onLeaveSession ? (
               <Button
                 type='button'
                 variant='outline'
@@ -330,11 +334,10 @@ const LivePresentationAudience = ({
                 onClick={onLeaveSession}
                 aria-label='Forlat økt'
               >
-                <LogOut className='h-4 w-4 shrink-0' aria-hidden />
-                <span className='hidden sm:inline'>Forlat økt</span>
+                <LogOut className='h-4 w-4' aria-hidden />
+                Forlat økt
               </Button>
             ) : null}
-            {isFullscreen ? <ModeToggle /> : null}
             <Button
               type='button'
               variant='secondary'
@@ -384,17 +387,23 @@ const LivePresentationAudience = ({
                     {(liveboardSlideData?.polls || []).map((poll) => (
                       <LiveResultsBoard
                         key={`lb-poll-${poll.id}`}
-                        presentationId={presentation.id}
                         initialType='poll'
                         initialItemId={poll.id}
+                        pollMeta={poll}
+                        pollResults={pollResults}
+                        questionResults={questionResults}
+                        sessionEnded={sessionEnded}
                       />
                     ))}
                     {(liveboardSlideData?.questions || []).map((question) => (
                       <LiveResultsBoard
                         key={`lb-q-${question.id}`}
-                        presentationId={presentation.id}
                         initialType='question'
                         initialItemId={question.id}
+                        questionMeta={question}
+                        pollResults={pollResults}
+                        questionResults={questionResults}
+                        sessionEnded={sessionEnded}
                       />
                     ))}
                   </div>

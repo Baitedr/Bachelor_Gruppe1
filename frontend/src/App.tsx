@@ -10,7 +10,7 @@ import Navbar from './components/ui/Navbar'
 import { ModeToggle } from '@/components/ui/mode-toggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { LogOut, MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
+import { Loader2, LogOut, MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -109,6 +109,8 @@ function App() {
   const [livePresentationId, setLivePresentationId] = useState<string | null>(null)
   const [liveJoinCode, setLiveJoinCode] = useState<string | null>(null)
   const [liveIsPresenter, setLiveIsPresenter] = useState(false)
+  /** Hvilken presentasjon som akkurat nå starter live (API-kall pågår). */
+  const [startingLivePresentationId, setStartingLivePresentationId] = useState<string | null>(null)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
 
@@ -568,6 +570,8 @@ function App() {
   const clearSessionState = () => sessionStorage.removeItem('proslides_session')
 
   const handleStartLive = async (presentationId: string) => {
+    setStartingLivePresentationId(presentationId)
+    setPresentationsError(null)
     try {
       const data = await api.startSession(presentationId)
       setLivePresentationId(presentationId)
@@ -577,6 +581,8 @@ function App() {
       setCurrentPage('lobby')
     } catch {
       setPresentationsError('Kunne ikke starte live-økt')
+    } finally {
+      setStartingLivePresentationId(null)
     }
   }
 
@@ -916,11 +922,19 @@ function App() {
                             size='sm'
                             variant='outline'
                             className='flex items-center justify-center gap-1.5 border-emerald-500/30 bg-emerald-500/15 text-emerald-500 transition-colors hover:border-emerald-500/45 hover:bg-emerald-500/22 hover:text-emerald-600 dark:hover:bg-emerald-500/14 dark:hover:text-emerald-300'
-                            disabled={deletingPresentationIds[presentation.id]}
-                            onClick={() => handleStartLive(presentation.id)}
+                            disabled={
+                              deletingPresentationIds[presentation.id] ||
+                              startingLivePresentationId !== null
+                            }
+                            aria-busy={startingLivePresentationId === presentation.id}
+                            onClick={() => void handleStartLive(presentation.id)}
                           >
-                            <MonitorPlay className="h-3.5 w-3.5" />
-                            Start live
+                            {startingLivePresentationId === presentation.id ? (
+                              <Loader2 className='h-3.5 w-3.5 shrink-0 animate-spin' aria-hidden />
+                            ) : (
+                              <MonitorPlay className='h-3.5 w-3.5 shrink-0' aria-hidden />
+                            )}
+                            {startingLivePresentationId === presentation.id ? 'Starter live…' : 'Start live'}
                           </Button>
                           <Button
                             size='sm'

@@ -136,7 +136,9 @@ const LivePresentation = ({
           hasActiveInteraction={hasActiveInteraction}
           activePoll={activePoll}
           activeQuestion={activeQuestion}
+          pollResults={pollResults}
           questionResults={questionResults}
+          sessionEnded={sessionEnded}
           submitPollAnswer={submitPollAnswer}
           submitQuestionAnswer={submitQuestionAnswer}
           audienceResults={audienceResults}
@@ -173,6 +175,7 @@ const LivePresentation = ({
       activateQuestion={activateQuestion}
       pollResults={pollResults}
       questionResults={questionResults}
+      sessionEnded={sessionEnded}
     />
   )
 }

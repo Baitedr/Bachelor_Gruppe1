@@ -64,27 +64,41 @@ const slideHasEngagement = (slideData, pollResults, questionResults, activePoll,
 }
 
 /**
- * LiveResultsBoard bruker egen usePresentation; type poll/question + initialItemId fordi «both» krever aktiv poll/spørsmål.
- * Ytre beholder uten ekstra tema — kortet i LiveResultsBoard styrer utseendet.
+ * Live resultater: samme poll-/spørsmålsaggregater som hovedhook (ett WebSocket per økt).
  */
-const PresenterLiveboardPanel = ({ presentationId, currentSlideData, onPrev, onNext, canPrev, canNext }) => (
+const PresenterLiveboardPanel = ({
+  currentSlideData,
+  pollResults,
+  questionResults,
+  sessionEnded,
+  onPrev,
+  onNext,
+  canPrev,
+  canNext,
+}) => (
   <div className='relative flex h-full min-h-0 w-full flex-col'>
     <div className='min-h-0 flex-1 overflow-y-auto p-4'>
       <div className='flex w-full flex-col gap-4'>
         {(currentSlideData?.polls || []).map((poll) => (
           <LiveResultsBoard
             key={`lb-poll-${poll.id}`}
-            presentationId={presentationId}
             initialType='poll'
             initialItemId={poll.id}
+            pollMeta={poll}
+            pollResults={pollResults}
+            questionResults={questionResults}
+            sessionEnded={sessionEnded}
           />
         ))}
         {(currentSlideData?.questions || []).map((question) => (
           <LiveResultsBoard
             key={`lb-q-${question.id}`}
-            presentationId={presentationId}
             initialType='question'
             initialItemId={question.id}
+            questionMeta={question}
+            pollResults={pollResults}
+            questionResults={questionResults}
+            sessionEnded={sessionEnded}
           />
         ))}
       </div>
@@ -120,6 +134,7 @@ const LivePresentationPresenter = ({
   activateQuestion,
   pollResults,
   questionResults,
+  sessionEnded,
 }) => {
   const [notesZoomPercent, setNotesZoomPercent] = useState(100)
   /** Lysbildeindekser brukeren har forlatt via «neste» fra resultatsiden — da skal tilbake fra neste lysbilde åpne liveboard igjen. */
@@ -284,8 +299,10 @@ const LivePresentationPresenter = ({
                 inLiveboardPhase ? (
                   <div className='min-h-0 w-full min-w-0 flex-1 overflow-hidden rounded-lg bg-card shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'>
                     <PresenterLiveboardPanel
-                      presentationId={presentation.id}
                       currentSlideData={currentSlideData}
+                      pollResults={pollResults}
+                      questionResults={questionResults}
+                      sessionEnded={sessionEnded}
                       onPrev={handlePrevSlide}
                       onNext={handleNextSlide}
                       canPrev={navCanGoPrev}

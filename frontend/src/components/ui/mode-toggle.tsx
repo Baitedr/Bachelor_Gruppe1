@@ -62,8 +62,9 @@ export function ModeToggle() {
 
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       const startVt = document.startViewTransition?.bind(document)
+      const useViewTransition = !reduceMotion && Boolean(startVt)
 
-      if (reduceMotion || !startVt) {
+      if (reduceMotion || !useViewTransition) {
         setTheme(next)
         clearVt()
         return

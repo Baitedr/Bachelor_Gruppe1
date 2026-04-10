@@ -50,8 +50,8 @@ env:
     ALLOWED_ORIGINS: https://slides.rubynor.com
     # OAuth redirect target (must match public site URL)
     FRONTEND_URL: https://slides.rubynor.com
-    # Optional: if OmniAuth builds wrong callback URL behind proxy, set e.g. https://slides.rubynor.com
-    # OMNIAUTH_FULL_HOST: https://slides.rubynor.com
+    # Callback-URL mot Google/GitHub må bruke offentlig https (Kamal-proxy).
+    OMNIAUTH_FULL_HOST: https://slides.rubynor.com
   # Include GOOGLE_* and/or GITHUB_* in backend/.env (empty values = that provider is disabled in omniauth.rb).
   secret:
     - SECRET_KEY_BASE

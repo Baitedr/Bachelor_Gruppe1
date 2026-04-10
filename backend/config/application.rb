@@ -21,7 +21,11 @@ module Backend
     end
 
     # Required for OmniAuth in API-only mode
-    config.session_store :cookie_store, key: '_proslides_session'
+    config.session_store :cookie_store,
+      key: '_proslides_session',
+      same_site: :lax,
+      secure: Rails.env.production?,
+      httponly: true
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use config.session_store, config.session_options
 
