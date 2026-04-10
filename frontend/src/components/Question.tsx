@@ -96,7 +96,7 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
           className="w-full rounded-md border border-input bg-background p-2"
         >
           <option value="open_text">Åpent svar</option>
-          <option value="single_choice">Single choice</option>
+          {/* <option value="single_choice">Single choice</option> */}
         </select>
       </div>
 
