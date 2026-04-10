@@ -4,7 +4,7 @@ import { StaticCanvas } from 'fabric'
 const BASE_WIDTH = 960
 const BASE_HEIGHT = 540
 
-const LivePresentationCanvas = ({ slideData }) => {
+const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
   const canvasRef = useRef(null)
   const fabricRef = useRef(null)
   const containerRef = useRef(null)
@@ -86,8 +86,9 @@ const LivePresentationCanvas = ({ slideData }) => {
 
   return (
     <div ref={containerRef} className='flex h-full w-full items-center justify-center overflow-hidden'>
-      <div ref={wrapperRef} className='overflow-hidden rounded-lg'>
+      <div ref={wrapperRef} className='relative overflow-hidden rounded-lg'>
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {presenterToolbar}
       </div>
     </div>
   )

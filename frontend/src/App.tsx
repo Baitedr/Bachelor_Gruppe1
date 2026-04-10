@@ -622,6 +622,20 @@ function App() {
     setCurrentPage('home')
   }
 
+  const handleEndLiveSession = async () => {
+    if (livePresentationId) {
+      try {
+        await api.endSession(livePresentationId)
+      } catch (e) {
+        console.error('Failed to end session on server:', e)
+      }
+    }
+    clearSessionState()
+    setCurrentPage('home')
+    setLiveJoinCode(null)
+    setLivePresentationId(null)
+  }
+
   const handleUpdateProfileName = async (name: string) => {
     const data = await api.updateProfile({ name })
     setUser((previous) => ({ ...(previous || {}), ...(data?.user || {}), name }))
@@ -724,9 +738,11 @@ function App() {
               />
             </div>
           ) : (
-            <LivePresentation 
-              presentationId={livePresentationId} 
-              isPresenter={false} 
+            <LivePresentation
+              presentationId={livePresentationId}
+              isPresenter={false}
+              joinCode={null}
+              onEndLiveSession={undefined}
               onSessionEnd={leaveGuestSession}
             />
           )}
@@ -1016,42 +1032,12 @@ function App() {
         )}
 
         {currentPage === 'live' && (
-          <div className='flex h-full w-full min-h-0 flex-col gap-3 px-3'>
-            {liveJoinCode && (
-              <Card className='w-full border-border/70'>
-                <CardContent className='flex flex-wrap items-center gap-3 p-4'>
-                  <div className='text-sm text-muted-foreground'>
-                    Live-kode:{' '}
-                    <span className='font-mono text-base font-semibold tracking-wider text-foreground'>
-                      {liveJoinCode}
-                    </span>
-                  </div>
-                  <Button
-                    className='ml-auto'
-                    size='sm'
-                    variant='destructive'
-                    onClick={async () => {
-                      if (livePresentationId) {
-                        try {
-                          await api.endSession(livePresentationId)
-                        } catch (e) {
-                          console.error('Failed to end session on server:', e)
-                        }
-                      }
-                      clearSessionState()
-                      setCurrentPage('home')
-                      setLiveJoinCode(null)
-                      setLivePresentationId(null)
-                    }}
-                  >
-                    Avslutt økt
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+          <div className='flex h-full w-full min-h-0 flex-col px-2 sm:px-3'>
             <LivePresentation
               presentationId={livePresentationId}
               isPresenter={liveIsPresenter}
+              joinCode={liveJoinCode}
+              onEndLiveSession={handleEndLiveSession}
               onSessionEnd={handleGoHome}
             />
           </div>
