@@ -6,16 +6,16 @@
 /* Mørke Tailwind-varianter når et overordnet element har klassen .dark (next-themes legger den på <html>). */
 @custom-variant dark (&:is(.dark *));
 
-/* Registrerte farger: nettleseren kan interpolere dem ved temabytte (myk «lysstyrke»-følelse). */
+/* Registrerte farger (brukes bl.a. av Tailwind/shadcn); lys modus er varm «papir»-tone, ikke reint hvitt. */
 @property --background {
   syntax: '<color>';
   inherits: true;
-  initial-value: oklch(0.99 0.003 268);
+  initial-value: oklch(0.965 0.012 95);
 }
 @property --foreground {
   syntax: '<color>';
   inherits: true;
-  initial-value: oklch(0.22 0.02 268);
+  initial-value: oklch(0.28 0.022 95);
 }
 
 :root {
@@ -27,25 +27,25 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Lyst standardtema; samme lilla primary som i mørk modus. */
-  --background: oklch(0.99 0.003 268);
-  --foreground: oklch(0.22 0.02 268);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 268);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 268);
+  /* Lyst tema: myk, varm bakgrunn (lav metning) for mindre anstrengelse for øynene. */
+  --background: oklch(0.965 0.012 95);
+  --foreground: oklch(0.28 0.022 95);
+  --card: oklch(0.985 0.009 95);
+  --card-foreground: oklch(0.28 0.022 95);
+  --popover: oklch(0.99 0.008 95);
+  --popover-foreground: oklch(0.28 0.022 95);
   --primary: oklch(0.55 0.21 277);
   --primary-foreground: oklch(0.98 0.005 0);
-  --secondary: oklch(0.96 0.012 268);
-  --secondary-foreground: oklch(0.28 0.02 268);
-  --muted: oklch(0.96 0.012 268);
-  --muted-foreground: oklch(0.48 0.02 268);
-  --accent: oklch(0.94 0.015 268);
-  --accent-foreground: oklch(0.28 0.02 268);
+  --secondary: oklch(0.94 0.016 95);
+  --secondary-foreground: oklch(0.3 0.022 95);
+  --muted: oklch(0.935 0.014 95);
+  --muted-foreground: oklch(0.46 0.024 95);
+  --accent: oklch(0.925 0.018 95);
+  --accent-foreground: oklch(0.3 0.022 95);
   --destructive: oklch(0.58 0.22 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.9 0.015 268);
-  --input: oklch(0.9 0.015 268);
+  --border: oklch(0.88 0.018 95);
+  --input: oklch(0.88 0.018 95);
   --ring: oklch(0.55 0.21 277);
   --chart-1: oklch(0.785 0.115 274.713);
   --chart-2: oklch(0.585 0.233 277.117);
@@ -53,13 +53,13 @@
   --chart-4: oklch(0.55 0.21 277);
   --chart-5: oklch(0.398 0.195 277.366);
   --radius: 0.875rem;
-  --sidebar: oklch(0.98 0.005 268);
-  --sidebar-foreground: oklch(0.22 0.02 268);
+  --sidebar: oklch(0.958 0.013 95);
+  --sidebar-foreground: oklch(0.28 0.022 95);
   --sidebar-primary: oklch(0.55 0.21 277);
   --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.94 0.015 268);
-  --sidebar-accent-foreground: oklch(0.28 0.02 268);
-  --sidebar-border: oklch(0.9 0.015 268);
+  --sidebar-accent: oklch(0.918 0.02 95);
+  --sidebar-accent-foreground: oklch(0.3 0.022 95);
+  --sidebar-border: oklch(0.88 0.018 95);
   --sidebar-ring: oklch(0.55 0.21 277);
 }
 
@@ -168,12 +168,56 @@ body {
   }
   html {
     @apply font-sans;
-    /* Enkel overgang lyst ↔ mørkt på hovedflate (arv til body via bg-background / text-foreground). */
-    transition:
-      --background 280ms ease,
-      --foreground 280ms ease;
+    /* view-transition-name: root — trengs for dokumentvide View Transitions (sirkulært temabytte, se nedenfor). */
+    view-transition-name: root;
   }
   button {
     @apply cursor-pointer;
+  }
+}
+
+/*
+ * Temabytte (Telegram-inspirert): kun clip-path-sirkel fra knappen — ingen blur, scale eller bounce.
+ * Tempo og kurve styres av --theme-vt-dur (ModeToggle) + easing under; rolig «ease-out» på lys,
+ * litt mer innhenting mot slutten på mørk.
+ */
+@keyframes theme-vt-expand {
+  from {
+    clip-path: circle(0% at var(--theme-orig-x, 50%) var(--theme-orig-y, 50%));
+  }
+  to {
+    clip-path: circle(150% at var(--theme-orig-x, 50%) var(--theme-orig-y, 50%));
+  }
+}
+
+@keyframes theme-vt-implode {
+  from {
+    clip-path: circle(150% at var(--theme-orig-x, 50%) var(--theme-orig-y, 50%));
+  }
+  to {
+    clip-path: circle(0% at var(--theme-orig-x, 50%) var(--theme-orig-y, 50%));
+  }
+}
+
+::view-transition-new(root) {
+  animation-name: var(--theme-vt-new-name, none);
+  animation-duration: var(--theme-vt-dur, 0s);
+  animation-timing-function: cubic-bezier(0.33, 0.86, 0.2, 1);
+  animation-fill-mode: both;
+  z-index: var(--theme-vt-new-z, 1);
+}
+
+::view-transition-old(root) {
+  animation-name: var(--theme-vt-old-name, none);
+  animation-duration: var(--theme-vt-dur, 0s);
+  animation-timing-function: cubic-bezier(0.4, 0, 0.75, 1);
+  animation-fill-mode: both;
+  z-index: var(--theme-vt-old-z, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.001ms !important;
   }
 }

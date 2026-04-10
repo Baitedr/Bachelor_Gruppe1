@@ -157,8 +157,8 @@ const LiveResultsBoard = ({ presentationId, initialType, initialItemId }: LiveRe
 
 
     return (
-        <Card className='w-full'>
-            <CardHeader className='pb-3'>
+        <Card className='w-full border-2 border-border shadow-sm dark:border-border dark:shadow-md'>
+            <CardHeader className='border-b border-border/80 pb-3 dark:border-border/60'>
                 <CardTitle className='text-xl'>Live resultater</CardTitle>
                 {sessionEnded ? (
                     <p className='text-sm text-muted-foreground'>Økten er avsluttet. Viser siste registrerte resultater.</p>
@@ -171,14 +171,14 @@ const LiveResultsBoard = ({ presentationId, initialType, initialItemId }: LiveRe
                 {showPoll && (
                     <section className='space-y-3'>
                         <div className='flex items-center justify-between'>
-                            <h3 className='text-base font-semibold'>Poll</h3>
+                            <h3 className='text-base font-semibold'>Avstemning</h3>
                             <span className='text-xs text-muted-foreground'>
                                 Totalt antall stemmer: {pollResult?.total ?? 0}
                             </span>
                         </div>
 
                         {!pollId && !hasPollData && (
-                            <p className='text-sm text-muted-foreground'>Ingen svar registrert enda.</p>
+                            <p className='text-sm text-muted-foreground'>Ingen svar registrert ennå.</p>
                         )}
 
                         {pollRows.map((row) => (
@@ -210,7 +210,7 @@ const LiveResultsBoard = ({ presentationId, initialType, initialItemId }: LiveRe
                         </div>
 
                         {!questionId && questionType === 'single_choice' && !hasQuestionData && (
-                            <p className='text-sm text-muted-foreground'>Ingen svar registrert enda.</p>
+                            <p className='text-sm text-muted-foreground'>Ingen svar registrert ennå.</p>
                         )}
 
                         {questionId && questionType === 'single_choice' && questionChoiceRows.map((row) => (
@@ -231,14 +231,17 @@ const LiveResultsBoard = ({ presentationId, initialType, initialItemId }: LiveRe
                         ))}
 
                         {questionId && questionType !== 'single_choice' && (
-                            <div className='space-y-1'>
+                            <div className='space-y-2'>
                                 {(questionResult?.recent_answers ?? []).slice(-8).map((answer, index) => (
-                                    <p key={`open-answer-${index}`} className='text-sm text-muted-foreground'>
+                                    <p
+                                        key={`open-answer-${index}`}
+                                        className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
+                                    >
                                         {answer}
                                     </p>
                                 ))}
                                 {!hasQuestionData && (
-                                    <p className='text-sm text-muted-foreground'>Ingen tekstsvar registrert enda.</p>
+                                    <p className='text-sm text-muted-foreground'>Ingen tekstsvar registrert ennå.</p>
                                 )}
                             </div>
                         )}

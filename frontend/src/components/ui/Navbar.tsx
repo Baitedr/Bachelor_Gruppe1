@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Check, Home, LogOut, MonitorPlay, Save, User } from 'lucide-react'
 // Lys/mørk-modus (next-themes + shadcn-knapper).
 import { ModeToggle } from '@/components/ui/mode-toggle'
-import { cn, formatTime24h } from '@/lib/utils'
+import { cn, formatTime24h, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
 
 // Innhold til toast-linjen midt i navbar (f.eks. angre etter sletting).
 export type NavbarCenterToast = {
@@ -369,13 +369,8 @@ export default function Navbar({
               Bli med live
             </Button>
           )}
-          <Button
-            onClick={onLogout}
-            variant='outline'
-            size='sm'
-            className='flex items-center justify-center gap-1.5 border-destructive/30 bg-destructive/15 text-destructive transition-colors hover:border-input hover:bg-accent hover:text-accent-foreground'
-          >
-            <LogOut className='mr-2 h-4 w-4' />
+          <Button onClick={onLogout} variant='outline' size='sm' className={logoutStyleDestructiveButtonClassName}>
+            <LogOut className='h-4 w-4' />
             Logg ut
           </Button>
         </div>

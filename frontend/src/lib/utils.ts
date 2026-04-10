@@ -14,3 +14,10 @@ export function formatTime24h(date: Date): string {
     hourCycle: 'h23',
   })
 }
+
+/**
+ * Myk destruktiv knapp (samme uttrykk som «Logg ut» i navbar): outline + røde toner, hover → accent.
+ * Bruk med `variant="outline"` på Button — for Forlat/Avslutt økt, Slett på forsiden osv.
+ */
+export const logoutStyleDestructiveButtonClassName =
+  'flex items-center justify-center gap-1.5 border-destructive/30 bg-destructive/15 text-destructive transition-colors hover:border-input hover:bg-accent hover:text-accent-foreground'

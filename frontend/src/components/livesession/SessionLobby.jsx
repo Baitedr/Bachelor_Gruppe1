@@ -53,9 +53,9 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted,
           </div>
         )}
 
-        <div className='mx-auto w-full max-w-sm rounded-xl border border-border bg-muted/30 px-4 py-3'>
-          <p className='text-sm text-muted-foreground'>Deltakere i lobbyen</p>
-          <p className='text-3xl font-semibold'>{participantCount}</p>
+        <div className='mx-auto w-full max-w-sm rounded-xl border-2 border-border bg-muted/50 px-4 py-4 shadow-sm dark:border-border dark:bg-muted/30 dark:shadow-none'>
+          <p className='text-sm font-medium text-foreground'>Deltakere i lobbyen</p>
+          <p className='mt-1 text-3xl font-bold tabular-nums text-foreground'>{participantCount}</p>
         </div>
 
         {isPresenter ? (

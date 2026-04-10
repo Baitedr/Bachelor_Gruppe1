@@ -68,9 +68,70 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
+    raw = data['slide_index']
+    raw = data[:slide_index] if raw.nil?
+    slide_index = Integer(raw)
+    return if slide_index.negative?
+
+    # Slik at gjenåpning av lysbilde ikke beholder gammel aktiv poll i DB.
+    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+
+    resume_raw = data['resume_liveboard']
+    resume_raw = data[:resume_liveboard] if resume_raw.nil?
+    resume_liveboard = resume_raw == true || resume_raw.to_s == 'true'
+
+    payload = { type: 'slide_change', slide_index: slide_index }
+    payload[:resume_liveboard] = true if resume_liveboard
+
+    PresentationChannel.broadcast_to(presentation, payload)
+  end
+
+  # Før neste lysbilde: nullstiller aktive interaksjoner for alle klienter (publikum ser sliden tydelig).
+  def clear_live_interactions(_data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+
     PresentationChannel.broadcast_to(
       presentation,
-      { type: 'slide_change', slide_index: data['slide_index'] }
+      { type: 'interactions_cleared' }
+    )
+  end
+
+  # Menti-lignende steg 2: alle ser liveboard-resultater for gjeldende lysbilde (slide_index fra klient).
+  def show_liveboard(data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    raw = data['slide_index']
+    raw = data[:slide_index] if raw.nil?
+    return if raw.nil?
+
+    slide_index = Integer(raw)
+    return if slide_index.negative?
+
+    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+
+    # Én melding: unngår at klienter prosesserer to WS-events i feil rekkefølge.
+    PresentationChannel.broadcast_to(
+      presentation,
+      {
+        type: 'liveboard_started',
+        slide_index: slide_index,
+        clear_interactions: true
+      }
+    )
+  end
+
+  # Presentatør går tilbake fra resultatvisning uten å bytte lysbilde.
+  def dismiss_liveboard(_data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    PresentationChannel.broadcast_to(
+      presentation,
+      { type: 'liveboard_dismissed' }
     )
   end
 

@@ -1,43 +1,101 @@
-import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, LogOut, ZoomIn, ZoomOut } from 'lucide-react'
+import { logoutStyleDestructiveButtonClassName } from '@/lib/utils'
 import { Badge } from '../../ui/badge'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import LivePresentationCanvas from '../LivePresentationCanvas'
+import LiveResultsBoard from './LiveResultsBoard'
 
 const NOTES_ZOOM_MIN = 75
 const NOTES_ZOOM_MAX = 160
 const NOTES_ZOOM_STEP = 10
 
-/** Sits inside the slide bounds (canvas wrapper or text slide box), not the full grid cell. */
-const PresenterSlideNavToolbar = ({ onPrev, onNext, canPrev, canNext }) => (
-  <div
-    role='toolbar'
-    aria-label='Lysbilde navigasjon'
-    className='absolute bottom-2 left-2 z-10 flex items-center gap-px rounded-full border border-white/20 bg-black/55 p-0.5 shadow-md backdrop-blur-md dark:border-white/25 dark:bg-black/65'
-  >
-    <Button
-      type='button'
-      variant='ghost'
-      size='icon'
-      className='h-8 w-8 shrink-0 rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-30'
-      onClick={onPrev}
-      disabled={!canPrev}
-      aria-label='Forrige lysbilde'
+/** Ligger over lysbilde/liveboard; variant «liveboard» = annen tekst (samme steg som «hopp over resultat»). */
+const PresenterSlideNavToolbar = ({ onPrev, onNext, canPrev, canNext, variant = 'slide' }) => {
+  const prevLabel = variant === 'liveboard' ? 'Tilbake til lysbilde' : 'Forrige lysbilde'
+  const nextLabel = 'Neste lysbilde'
+  return (
+    <div
+      role='toolbar'
+      aria-label='Lysbilde navigasjon'
+      className='absolute bottom-2 left-2 z-10 flex items-center gap-px rounded-full border border-white/20 bg-black/55 p-0.5 shadow-md backdrop-blur-md dark:border-white/25 dark:bg-black/65'
     >
-      <ChevronLeft className='h-4.5 w-4.5' strokeWidth={2} aria-hidden />
-    </Button>
-    <Button
-      type='button'
-      variant='ghost'
-      size='icon'
-      className='h-8 w-8 shrink-0 rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-30'
-      onClick={onNext}
-      disabled={!canNext}
-      aria-label='Neste lysbilde'
-    >
-      <ChevronRight className='h-4.5 w-4.5' strokeWidth={2} aria-hidden />
-    </Button>
+      <Button
+        type='button'
+        variant='ghost'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-30'
+        onClick={onPrev}
+        disabled={!canPrev}
+        aria-label={prevLabel}
+      >
+        <ChevronLeft className='h-4.5 w-4.5' strokeWidth={2} aria-hidden />
+      </Button>
+      <Button
+        type='button'
+        variant='ghost'
+        size='icon'
+        className='h-8 w-8 shrink-0 rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-30'
+        onClick={onNext}
+        disabled={!canNext}
+        aria-label={nextLabel}
+      >
+        <ChevronRight className='h-4.5 w-4.5' strokeWidth={2} aria-hidden />
+      </Button>
+    </div>
+  )
+}
+
+const slideHasInteractiveTools = (slideData) =>
+  Boolean(slideData && ((slideData.polls?.length || 0) > 0 || (slideData.questions?.length || 0) > 0))
+
+/** Sant hvis noe er aktivert eller det finnes minst ett svar på dette lysbildet. */
+const slideHasEngagement = (slideData, pollResults, questionResults, activePoll, activeQuestion) => {
+  if (activePoll || activeQuestion) return true
+  if (!slideData) return false
+  for (const p of slideData.polls || []) {
+    if ((pollResults[p.id]?.total || 0) > 0) return true
+  }
+  for (const q of slideData.questions || []) {
+    if ((questionResults[q.id]?.total || 0) > 0) return true
+  }
+  return false
+}
+
+/**
+ * LiveResultsBoard bruker egen usePresentation; type poll/question + initialItemId fordi «both» krever aktiv poll/spørsmål.
+ * Ytre beholder uten ekstra tema — kortet i LiveResultsBoard styrer utseendet.
+ */
+const PresenterLiveboardPanel = ({ presentationId, currentSlideData, onPrev, onNext, canPrev, canNext }) => (
+  <div className='relative flex h-full min-h-0 w-full flex-col'>
+    <div className='min-h-0 flex-1 overflow-y-auto p-4'>
+      <div className='flex w-full flex-col gap-4'>
+        {(currentSlideData?.polls || []).map((poll) => (
+          <LiveResultsBoard
+            key={`lb-poll-${poll.id}`}
+            presentationId={presentationId}
+            initialType='poll'
+            initialItemId={poll.id}
+          />
+        ))}
+        {(currentSlideData?.questions || []).map((question) => (
+          <LiveResultsBoard
+            key={`lb-q-${question.id}`}
+            presentationId={presentationId}
+            initialType='question'
+            initialItemId={question.id}
+          />
+        ))}
+      </div>
+    </div>
+    <PresenterSlideNavToolbar
+      variant='liveboard'
+      onPrev={onPrev}
+      onNext={onNext}
+      canPrev={canPrev}
+      canNext={canNext}
+    />
   </div>
 )
 
@@ -53,24 +111,82 @@ const LivePresentationPresenter = ({
   currentSlide,
   currentSlideData,
   navigateSlide,
+  liveboardForSlideIndex,
+  showLiveboard,
+  dismissLiveboard,
+  activePoll,
+  activeQuestion,
   activatePoll,
   activateQuestion,
   pollResults,
   questionResults,
 }) => {
   const [notesZoomPercent, setNotesZoomPercent] = useState(100)
+  /** Lysbildeindekser brukeren har forlatt via «neste» fra resultatsiden — da skal tilbake fra neste lysbilde åpne liveboard igjen. */
+  const slidesAdvancedFromLiveboardRef = useRef(new Set())
 
-  const handleNextSlide = () => {
-    if (presentation && currentSlide < presentation.slides.length - 1) {
+  const slideCount = presentation.slides.length
+  /** Synket med publikum via ActionCable (samme som liveboardForSlideIndex i hook). */
+  const inLiveboardPhase =
+    liveboardForSlideIndex != null && Number(liveboardForSlideIndex) === Number(currentSlide)
+
+  const offerLiveboard = useMemo(
+    () =>
+      slideHasInteractiveTools(currentSlideData) &&
+      slideHasEngagement(currentSlideData, pollResults, questionResults, activePoll, activeQuestion),
+    [currentSlideData, pollResults, questionResults, activePoll, activeQuestion],
+  )
+
+  const handleNextSlide = useCallback(() => {
+    if (!presentation) return
+
+    // På siste lysbilde: etter resultatside (liveboard) finnes ingen «neste lysbilde».
+    if (currentSlide >= slideCount - 1 && inLiveboardPhase) return
+
+    if (inLiveboardPhase) {
+      slidesAdvancedFromLiveboardRef.current.add(Number(currentSlide))
+      navigateSlide(currentSlide + 1)
+      return
+    }
+
+    if (offerLiveboard) {
+      showLiveboard(currentSlide)
+      return
+    }
+
+    if (currentSlide < slideCount - 1) {
       navigateSlide(currentSlide + 1)
     }
-  }
+  }, [
+    presentation,
+    slideCount,
+    currentSlide,
+    inLiveboardPhase,
+    offerLiveboard,
+    navigateSlide,
+    showLiveboard,
+  ])
 
-  const handlePrevSlide = () => {
-    if (currentSlide > 0) {
-      navigateSlide(currentSlide - 1)
+  const handlePrevSlide = useCallback(() => {
+    if (inLiveboardPhase) {
+      slidesAdvancedFromLiveboardRef.current.delete(Number(currentSlide))
+      dismissLiveboard()
+      return
     }
-  }
+    if (currentSlide > 0) {
+      const prevIdx = currentSlide - 1
+      if (slidesAdvancedFromLiveboardRef.current.has(prevIdx)) {
+        navigateSlide(prevIdx, { resumeLiveboard: true })
+      } else {
+        navigateSlide(prevIdx)
+      }
+    }
+  }, [inLiveboardPhase, currentSlide, navigateSlide, dismissLiveboard])
+
+  const navCanGoNext =
+    currentSlide < slideCount - 1 ||
+    (currentSlide === slideCount - 1 && !inLiveboardPhase && offerLiveboard)
+  const navCanGoPrev = inLiveboardPhase || currentSlide > 0
 
   useEffect(() => {
     if (!presentation) return
@@ -86,33 +202,46 @@ const LivePresentationPresenter = ({
 
     const onKeyDown = (e) => {
       if (isTypingTarget(e.target)) return
+      // Unngår dobbel navigasjon når tasten holdes inne (gjentakelse).
+      if (e.repeat && (e.code === 'ArrowRight' || e.code === 'ArrowLeft' || e.code === 'Space')) return
 
       if (e.code === 'ArrowRight' || e.code === 'Space') {
-        if (presentation && currentSlide < presentation.slides.length - 1) {
+        const canAdvance =
+          presentation &&
+          (currentSlide < slideCount - 1 ||
+            (currentSlide === slideCount - 1 && !inLiveboardPhase && offerLiveboard))
+        if (canAdvance) {
           e.preventDefault()
-          navigateSlide(currentSlide + 1)
+          handleNextSlide()
         }
       } else if (e.code === 'ArrowLeft') {
-        if (currentSlide > 0) {
+        if (inLiveboardPhase || currentSlide > 0) {
           e.preventDefault()
-          navigateSlide(currentSlide - 1)
+          handlePrevSlide()
         }
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [presentation, currentSlide, navigateSlide])
+  }, [
+    presentation,
+    currentSlide,
+    slideCount,
+    inLiveboardPhase,
+    offerLiveboard,
+    handleNextSlide,
+    handlePrevSlide,
+  ])
 
   const presenterNotes = (currentSlideData?.notes || '').trim()
-  const slideCount = presentation.slides.length
 
   return (
-    <div className='flex h-full min-h-0 flex-col gap-3 overflow-hidden'>
-      <Card className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+    <div className='flex h-full min-h-0 min-w-0 flex-col gap-3'>
+      <Card className='flex min-h-0 flex-1 flex-col overflow-visible'>
         <CardHeader
           className={
-            'px-3 pb-2 pt-3 sm:px-4 ' +
+            'border-b-2 border-border bg-card/85 px-3 pb-2 pt-3 shadow-sm backdrop-blur-[2px] sm:px-4 dark:border-border dark:bg-transparent dark:shadow-none dark:backdrop-blur-none ' +
             (joinCode
               ? 'grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] lg:items-center lg:gap-x-4'
               : 'flex flex-row flex-wrap items-center justify-between gap-3 pb-2')
@@ -125,46 +254,61 @@ const LivePresentationPresenter = ({
             </p>
           </div>
           {joinCode && (
-            <p className='flex min-w-0 items-center justify-center gap-1.5 text-center text-sm leading-none text-muted-foreground lg:px-2'>
-              <span className='shrink-0'>Live-kode:</span>
-              <span className='truncate font-mono text-sm font-semibold tracking-wide text-foreground'>
+            <p className='flex min-w-0 items-center justify-center gap-1.5 text-center text-sm leading-none lg:px-2'>
+              <span className='shrink-0 font-medium text-foreground/85'>Live-kode:</span>
+              <span className='truncate rounded-md bg-muted/70 px-2 py-0.5 font-mono text-sm font-semibold tracking-wide text-foreground ring-1 ring-border dark:bg-muted/50'>
                 {joinCode}
               </span>
             </p>
           )}
+          {/* Deltakertelling: tydelig kant og kontrast i lyst modus (ikke bare bg-secondary). */}
           <div className='flex flex-shrink-0 flex-wrap items-center gap-2 lg:justify-self-end'>
-            <span className='text-sm font-medium'>Deltakere:</span>
-            <span className='rounded-md bg-secondary px-2 py-1 font-bold text-secondary-foreground'>
-              {participantCount}
-            </span>
+            <div className='inline-flex items-center gap-2 rounded-lg border border-border bg-muted/55 px-2.5 py-1 shadow-sm dark:bg-muted/35'>
+              <span className='text-sm font-semibold text-foreground'>Deltakere</span>
+              <span className='min-w-[1.5rem] rounded-md bg-background px-2 py-0.5 text-center text-sm font-bold tabular-nums text-foreground ring-1 ring-border dark:bg-card'>
+                {participantCount}
+              </span>
+            </div>
             {joinCode && onEndLiveSession && (
-              <Button variant='destructive' size='sm' onClick={() => onEndLiveSession()}>
+              <Button variant='outline' size='sm' className={logoutStyleDestructiveButtonClassName} onClick={() => onEndLiveSession()}>
+                <LogOut className='h-4 w-4' aria-hidden />
                 Avslutt økt
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className='flex min-h-0 flex-1 flex-col px-2 pb-2 pt-0 sm:px-3 sm:pb-3'>
-          <div className='grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-1 rounded-lg bg-transparent p-0 sm:p-0.5 lg:grid-cols-[minmax(0,1fr)_clamp(272px,28vw,400px)] lg:gap-4 xl:gap-5'>
-            <div className='relative flex min-h-0 h-full min-w-0 flex-col'>
+        <CardContent className='flex min-h-0 flex-1 flex-col px-2 pb-2 pt-3 sm:px-3 sm:pb-3 sm:pt-4'>
+          <div className='grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_clamp(272px,28vw,400px)] lg:gap-5 xl:gap-6'>
+            <div className='relative flex min-h-0 h-full min-w-0 flex-col overflow-visible'>
               {currentSlideData ? (
-                currentSlideData.fabricData ? (
-                  <div className='min-h-0 w-full min-w-0 flex-1'>
+                inLiveboardPhase ? (
+                  <div className='min-h-0 w-full min-w-0 flex-1 overflow-hidden rounded-lg bg-card shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'>
+                    <PresenterLiveboardPanel
+                      presentationId={presentation.id}
+                      currentSlideData={currentSlideData}
+                      onPrev={handlePrevSlide}
+                      onNext={handleNextSlide}
+                      canPrev={navCanGoPrev}
+                      canNext={navCanGoNext}
+                    />
+                  </div>
+                ) : currentSlideData.fabricData ? (
+                  <div className='flex min-h-0 h-full min-w-0 flex-1 flex-col overflow-visible'>
                     <LivePresentationCanvas
                       slideData={currentSlideData}
                       presenterToolbar={
                         <PresenterSlideNavToolbar
                           onPrev={handlePrevSlide}
                           onNext={handleNextSlide}
-                          canPrev={currentSlide > 0}
-                          canNext={currentSlide < slideCount - 1}
+                          canPrev={navCanGoPrev}
+                          canNext={navCanGoNext}
                         />
                       }
                     />
                   </div>
                 ) : (
                   <div className='flex w-full min-h-0 flex-1 flex-col items-center justify-center'>
-                    <div className='relative w-full max-w-3xl px-4 text-center'>
+                    <div className='relative w-full max-w-3xl rounded-lg bg-card px-4 py-8 text-center shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'>
                       {currentSlideData.title && (
                         <h2 className='text-3xl font-bold mb-6 text-foreground'>{currentSlideData.title}</h2>
                       )}
@@ -177,33 +321,38 @@ const LivePresentationPresenter = ({
                       <PresenterSlideNavToolbar
                         onPrev={handlePrevSlide}
                         onNext={handleNextSlide}
-                        canPrev={currentSlide > 0}
-                        canNext={currentSlide < slideCount - 1}
+                        canPrev={navCanGoPrev}
+                        canNext={navCanGoNext}
                       />
                     </div>
                   </div>
                 )
               ) : (
-                <p className='text-sm text-muted-foreground'>Ingen data for dette lysbildet.</p>
+                <div className='flex h-full min-h-[12rem] w-full items-center justify-center rounded-lg border border-dashed border-border/60 p-6'>
+                  <p className='text-sm text-muted-foreground'>Ingen data for dette lysbildet.</p>
+                </div>
               )}
             </div>
-            <aside className='flex h-full min-h-0 w-full min-w-0 flex-col gap-2 rounded-lg bg-gradient-to-b from-card via-card/90 to-card/60 p-2 sm:gap-2.5 sm:p-2.5 lg:gap-3 lg:p-3'>
-              <div className='max-h-[min(50%,22rem)] shrink-0 overflow-y-auto rounded-lg border border-border bg-background/50 p-3'>
+            <aside className='flex h-full min-h-0 w-full min-w-0 flex-col gap-3 sm:gap-3.5 lg:gap-4'>
+              <div className='max-h-[min(50%,22rem)] shrink-0 overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-sm'>
                 <div className='mb-2 flex items-center justify-between'>
-                  <h3 className='text-sm font-semibold text-foreground'>Sporsmal og verktoy</h3>
+                  <h3 className='text-sm font-semibold text-foreground'>Spørsmål og verktøy</h3>
                   <span className='rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary'>
                     Live
                   </span>
                 </div>
                 <div className='space-y-2 pr-1'>
                   {currentSlideData?.polls?.map((poll) => (
-                    <div key={poll.id} className='space-y-2 rounded-lg bg-card/90 p-2.5'>
+                    <div
+                      key={poll.id}
+                      className='space-y-2 rounded-lg border border-border bg-muted/45 p-2.5 shadow-sm dark:border-border dark:bg-muted/25 dark:shadow-none'
+                    >
                       <Button
                         className='h-auto w-full justify-start whitespace-normal break-words py-2 text-left leading-snug bg-primary/10 text-primary hover:bg-primary/20'
                         variant='ghost'
                         onClick={() => activatePoll(poll.id)}
                       >
-                        Aktiver poll: {poll.question}
+                        Aktiver avstemning: {poll.question}
                       </Button>
                       {pollResults[poll.id] && (
                         <div className='space-y-1 text-sm'>
@@ -224,13 +373,16 @@ const LivePresentationPresenter = ({
                     const questionType = result?.question_type || question.type || 'open_text'
 
                     return (
-                      <div key={question.id} className='space-y-2 rounded-lg bg-card/90 p-2.5'>
+                      <div
+                        key={question.id}
+                        className='space-y-2 rounded-lg border border-border bg-muted/45 p-2.5 shadow-sm dark:border-border dark:bg-muted/25 dark:shadow-none'
+                      >
                         <Button
                           className='h-auto w-full justify-start whitespace-normal break-words py-2 text-left leading-snug bg-primary/10 text-primary hover:bg-primary/20'
                           variant='ghost'
                           onClick={() => activateQuestion(question.id)}
                         >
-                          Aktiver sporsmal: {question.prompt}
+                          Aktiver spørsmål: {question.prompt}
                         </Button>
 
                         {result && (
@@ -248,13 +400,16 @@ const LivePresentationPresenter = ({
                                 )
                               })
                             ) : (
-                              <>
+                              <div className='space-y-2'>
                                 {(result.recent_answers || []).slice(-5).map((answer, index) => (
-                                  <p key={`${question.id}-${index}`} className='text-muted-foreground'>
+                                  <p
+                                    key={`${question.id}-${index}`}
+                                    className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
+                                  >
                                     {answer}
                                   </p>
                                 ))}
-                              </>
+                              </div>
                             )}
                           </div>
                         )}
@@ -262,12 +417,12 @@ const LivePresentationPresenter = ({
                     )
                   })}
                   {!currentSlideData?.polls?.length && !currentSlideData?.questions?.length && (
-                    <p className='text-sm text-muted-foreground'>Ingen sporsmal eller polls pa dette lysbildet.</p>
+                    <p className='text-sm text-muted-foreground'>Ingen spørsmål eller avstemninger på dette lysbildet.</p>
                   )}
                 </div>
               </div>
-              <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card/40 shadow-sm'>
-                <div className='shrink-0 border-b border-border/80 bg-muted/30 px-3 py-2.5'>
+              <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm'>
+                <div className='shrink-0 border-b border-border px-3 py-2.5'>
                   <div className='flex items-center justify-between gap-2'>
                     <h3 className='min-w-0 text-base font-bold leading-tight tracking-tight text-foreground'>
                       Notater
@@ -312,7 +467,7 @@ const LivePresentationPresenter = ({
                     </div>
                   </div>
                 </div>
-                <div className='min-h-0 flex-1 overflow-y-auto bg-muted/20 p-3 text-sm'>
+                <div className='min-h-0 flex-1 overflow-y-auto p-3 text-sm'>
                   {presenterNotes ? (
                     <p
                       className='whitespace-pre-wrap leading-relaxed text-foreground dark:text-white'

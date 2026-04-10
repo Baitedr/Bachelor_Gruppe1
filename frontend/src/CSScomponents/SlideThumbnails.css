@@ -57,6 +57,7 @@
 }
 
 .thumbnail-preview {
+  position: relative;
   aspect-ratio: 16 / 9;
   width: 100%;
   box-sizing: border-box;
@@ -64,6 +65,47 @@
   font-size: 0.7rem;
   overflow: hidden;
   background-color: white;
+}
+
+.thumbnail-interaction-badges {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 12px);
+}
+
+.thumbnail-interaction-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.82);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dark .thumbnail-interaction-badge {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(129, 140, 248, 0.35);
+  color: rgba(226, 232, 240, 0.98);
+}
+
+.thumbnail.active .thumbnail-interaction-badge {
+  border-color: rgba(129, 140, 248, 0.55);
+}
+
+.thumbnail-interaction-badge-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .thumbnail-preview-image {

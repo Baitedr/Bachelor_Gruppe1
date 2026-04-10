@@ -5,8 +5,8 @@ import LivePresentationAudience from './ui/LivePresentationAudience'
 import LivePresentationPresenter from './ui/LivePresentationPresenter'
 
 /**
- * Live session entry: loads presentation, subscribes via `usePresentation` (ActionCable),
- * and renders either presenter or audience UI. App routing still uses this single component.
+ * Inngang for live-økt: laster presentasjon, kobler til kanal via `usePresentation` (ActionCable),
+ * og rendrer enten presentatør- eller publikumsvisning. App.tsx bruker denne én komponent for begge roller.
  */
 const LivePresentation = ({
   presentationId,
@@ -14,6 +14,8 @@ const LivePresentation = ({
   joinCode,
   onEndLiveSession,
   onSessionEnd,
+  /** Publikum: kalles fra fullskjerm-verktøylinje («Forlat økt»). */
+  onLeaveSession,
 }) => {
   const [presentation, setPresentation] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -24,6 +26,9 @@ const LivePresentation = ({
     pollResults,
     participantCount,
     navigateSlide,
+    liveboardForSlideIndex,
+    showLiveboard,
+    dismissLiveboard,
     activatePoll,
     submitPollAnswer,
     sessionEnded,
@@ -56,6 +61,7 @@ const LivePresentation = ({
   }, [presentationId])
 
   const rawSlideData = presentation?.slides?.[currentSlide]
+  // Slides kan ha bakgrunnsfelter i `background`; flates ut slik at canvas/tekst får samme form som i editoren.
   const currentSlideData = rawSlideData?.background
     ? { ...rawSlideData, ...rawSlideData.background }
     : rawSlideData
@@ -70,23 +76,10 @@ const LivePresentation = ({
 
   const hasActivePoll = Boolean(activePoll)
   const hasActiveQuestion = Boolean(activeQuestion)
+  // Publikum viser fullskjerms-overlay med stemme/svar når minst én av disse er aktiv fra presentatør.
   const hasActiveInteraction = hasActivePoll || hasActiveQuestion
 
-  const resultsBoardType =
-    hasActivePoll && hasActiveQuestion
-      ? 'both'
-      : hasActivePoll
-        ? 'poll'
-        : hasActiveQuestion
-          ? 'question'
-          : null
-  const resultsBoardItemId =
-    resultsBoardType === 'poll'
-      ? activePoll?.id
-      : resultsBoardType === 'question'
-        ? activeQuestion?.id
-        : null
-
+  // Prosentandeler per svaralternativ for poll (brukes i gjestevisning etter at brukeren har stemt).
   const audienceResults = useMemo(() => {
     if (!activePoll) return []
     return activePoll.options.map((option) => {
@@ -96,6 +89,7 @@ const LivePresentation = ({
     })
   }, [activePoll, activePollResult, totalVotes])
 
+  // Samme idé for flervalgsspørsmål: tellinger fra kanalen mappet til søyler.
   const activeQuestionChoiceResults = useMemo(() => {
     if (!activeQuestion || activeQuestionType !== 'single_choice') return []
 
@@ -130,32 +124,34 @@ const LivePresentation = ({
   }
 
   if (!isPresenter) {
+    // Ytre wrapper: sikrer at gjestevisningen får definert høyde nedover flex-kjeden (min-h-0 er kritisk for canvas).
     return (
-      <LivePresentationAudience
-        presentationId={presentationId}
-        presentation={presentation}
-        currentSlide={currentSlide}
-        currentSlideData={currentSlideData}
-        participantCount={participantCount}
-        hasActiveInteraction={hasActiveInteraction}
-        resultsBoardType={resultsBoardType}
-        resultsBoardItemId={resultsBoardItemId}
-        activePoll={activePoll}
-        activeQuestion={activeQuestion}
-        questionResults={questionResults}
-        submitPollAnswer={submitPollAnswer}
-        submitQuestionAnswer={submitQuestionAnswer}
-        audienceResults={audienceResults}
-        activeQuestionChoiceResults={activeQuestionChoiceResults}
-        activeQuestionType={activeQuestionType}
-        hasAnsweredActivePoll={hasAnsweredActivePoll}
-        hasAnsweredActiveQuestion={hasAnsweredActiveQuestion}
-        totalVotes={totalVotes}
-        totalQuestionAnswers={totalQuestionAnswers}
-        questionAnswer={questionAnswer}
-        setQuestionAnswer={setQuestionAnswer}
-        submitOpenQuestionAnswer={submitOpenQuestionAnswer}
-      />
+      <div className='flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden'>
+        <LivePresentationAudience
+          presentation={presentation}
+          currentSlide={currentSlide}
+          currentSlideData={currentSlideData}
+          participantCount={participantCount}
+          liveboardForSlideIndex={liveboardForSlideIndex}
+          hasActiveInteraction={hasActiveInteraction}
+          activePoll={activePoll}
+          activeQuestion={activeQuestion}
+          questionResults={questionResults}
+          submitPollAnswer={submitPollAnswer}
+          submitQuestionAnswer={submitQuestionAnswer}
+          audienceResults={audienceResults}
+          activeQuestionChoiceResults={activeQuestionChoiceResults}
+          activeQuestionType={activeQuestionType}
+          hasAnsweredActivePoll={hasAnsweredActivePoll}
+          hasAnsweredActiveQuestion={hasAnsweredActiveQuestion}
+          totalVotes={totalVotes}
+          totalQuestionAnswers={totalQuestionAnswers}
+          questionAnswer={questionAnswer}
+          setQuestionAnswer={setQuestionAnswer}
+          submitOpenQuestionAnswer={submitOpenQuestionAnswer}
+          onLeaveSession={onLeaveSession}
+        />
+      </div>
     )
   }
 
@@ -168,6 +164,11 @@ const LivePresentation = ({
       currentSlide={currentSlide}
       currentSlideData={currentSlideData}
       navigateSlide={navigateSlide}
+      liveboardForSlideIndex={liveboardForSlideIndex}
+      showLiveboard={showLiveboard}
+      dismissLiveboard={dismissLiveboard}
+      activePoll={activePoll}
+      activeQuestion={activeQuestion}
       activatePoll={activatePoll}
       activateQuestion={activateQuestion}
       pollResults={pollResults}

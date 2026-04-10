@@ -97,7 +97,7 @@ const PhoneInteraction: React.FC<{ onJoined?: (payload: JoinResult) => void }> =
             setJoinStatus({
                 type: 'success',
                 title: 'Tilkoblet',
-                message: payload?.message || 'Du er nå koblet til live interaction.',
+                message: payload?.message || 'Du er nå koblet til liveøkten.',
             });
             setJoinCode('');
 

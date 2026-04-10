@@ -1323,7 +1323,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
                         <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
                         <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
-                        <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
+                        <Button onClick={deleteSelected} variant="destructive" size="sm" className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
                             <Palette className="h-3.5 w-3.5" /> Bakgrunn
                             <Input
@@ -1495,7 +1495,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                             <Button variant="secondary" size="sm" onClick={() => openEditQuestion(index)} className="flex-1 h-8 text-xs">
                                                 Rediger
                                             </Button>
-                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
+                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs">
                                                 Slett
                                             </Button>
                                         </div>
@@ -1560,7 +1560,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                                 <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
                                                     Rediger
                                                 </Button>
-                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
+                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs">
                                                     Slett
                                                 </Button>
                                             </div>
@@ -1601,9 +1601,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="outline"
+                                variant="destructive"
                                 onClick={confirmDeleteQuestion}
-                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
+                                className="flex items-center gap-1.5"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
@@ -1640,9 +1640,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="outline"
+                                variant="destructive"
                                 onClick={confirmDeletePoll}
-                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
+                                className="flex items-center gap-1.5"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>

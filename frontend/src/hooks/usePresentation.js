@@ -2,6 +2,13 @@ import { useEffect, useState, useRef } from 'react';
 import { createConsumer } from '@rails/actioncable';
 import api from '../services/api';
 
+/** Kanal/JSON kan gi indeks som tall eller streng; må matche strengt mellom liveboard og currentSlide. */
+const normalizeSlideIndex = (value) => {
+  if (value === null || value === undefined) return null
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
 export const usePresentation = (presentationId, token) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [activePoll, setActivePoll] = useState(null);
@@ -13,6 +20,8 @@ export const usePresentation = (presentationId, token) => {
   const [activeQuestion, setActiveQuestion] = useState(null);
   const [questionResults, setQuestionResults] = useState({});
   const [submittedQuestionIds, setSubmittedQuestionIds] = useState({});
+  /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
+  const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState(null);
 
   const cableRef = useRef(null);
   const subscriptionRef = useRef(null);
@@ -35,8 +44,39 @@ export const usePresentation = (presentationId, token) => {
       {
         received(data) {
           switch (data.type) {
-            case 'slide_change':
-              setCurrentSlide(data.slide_index)
+            case 'slide_change': {
+              const idx = normalizeSlideIndex(data.slide_index)
+              if (idx !== null) setCurrentSlide(idx)
+              // Nytt lysbilde: fjern aktive poll/spørsmål slik at publikum ser sliden uten overlay.
+              setActivePoll(null)
+              setActiveQuestion(null)
+              // Én melding med resume_liveboard: tilbake fra neste lysbilde til resultatside (unngår race med to WS-kall).
+              const resume =
+                data.resume_liveboard === true ||
+                data.resume_liveboard === 'true'
+              if (resume && idx !== null) {
+                setLiveboardForSlideIndex(idx)
+              } else {
+                setLiveboardForSlideIndex(null)
+              }
+              break
+            }
+            case 'liveboard_started': {
+              // Eldre server sendte interactions_cleared separat; uten flag antar vi fortsatt at poll/spørsmål skal bort.
+              if (data.clear_interactions !== false) {
+                setActivePoll(null)
+                setActiveQuestion(null)
+              }
+              const lbIdx = normalizeSlideIndex(data.slide_index)
+              if (lbIdx !== null) setLiveboardForSlideIndex(lbIdx)
+              break
+            }
+            case 'liveboard_dismissed':
+              setLiveboardForSlideIndex(null)
+              break
+            case 'interactions_cleared':
+              setActivePoll(null)
+              setActiveQuestion(null)
               break
             case 'poll_activated':
               setActivePoll(data.poll)
@@ -67,8 +107,6 @@ export const usePresentation = (presentationId, token) => {
             case 'session_ended':
               setSessionEnded(true)
               break
-            default:
-              break
             case 'question_activated':
               setActiveQuestion(data.question || null)
               break
@@ -82,6 +120,8 @@ export const usePresentation = (presentationId, token) => {
                   question_type: data.question_type || 'open_text',
                 },
               }))
+              break
+            default:
               break
           }
         },
@@ -125,9 +165,33 @@ export const usePresentation = (presentationId, token) => {
     }
   }, [presentationId, token])
 
-  const navigateSlide = (slideIndex) => {
+  /** options.resumeLiveboard: gå til indeks og åpne liveboard i samme broadcast (kun presentatør «tilbake til resultat»). */
+  const navigateSlide = (slideIndex, options = {}) => {
     if (subscriptionRef.current) {
-      subscriptionRef.current.perform('navigate_slide', { slide_index: slideIndex })
+      subscriptionRef.current.perform('navigate_slide', {
+        slide_index: slideIndex,
+        resume_liveboard: Boolean(options.resumeLiveboard),
+      })
+    }
+  }
+
+  /** Kall fra presentatør før «liveboard»-steget: publikum mister overlay, samme lysbilde. */
+  const clearLiveInteractions = () => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('clear_live_interactions', {})
+    }
+  }
+
+  /** Synkron liveboard for alle (steg etter spørsmål, før faktisk neste lysbilde). */
+  const showLiveboard = (slideIndex) => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('show_liveboard', { slide_index: slideIndex })
+    }
+  }
+
+  const dismissLiveboard = () => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('dismiss_liveboard', {})
     }
   }
 
@@ -179,6 +243,10 @@ export const usePresentation = (presentationId, token) => {
     activePoll,
     pollResults,
     navigateSlide,
+    clearLiveInteractions,
+    liveboardForSlideIndex,
+    showLiveboard,
+    dismissLiveboard,
     activatePoll,
     submitPollAnswer,
     participantCount,

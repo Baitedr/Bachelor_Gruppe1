@@ -1,9 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { StaticCanvas } from 'fabric'
 
+/** Standard lysbildestørrelse når JSON mangler eksplisitte mål (16:9). */
 const BASE_WIDTH = 960
 const BASE_HEIGHT = 540
 
+/**
+ * Statisk Fabric-visning av ett lysbilde under live (presentatør eller publikum).
+ * Skalerer proporsjonalt til foreldrens bredde/høyde via ResizeObserver.
+ */
 const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
   const canvasRef = useRef(null)
   const fabricRef = useRef(null)
@@ -11,6 +16,7 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
   const wrapperRef = useRef(null)
   const baseSizeRef = useRef({ width: BASE_WIDTH, height: BASE_HEIGHT })
 
+  /** Leser «logisk» slide-bredde/høyde fra fabricData, ellers fallback til BASE_*. */
   const resolveBaseSize = () => {
     const rawWidth = Number(slideData?.fabricData?.width)
     const rawHeight = Number(slideData?.fabricData?.height)
@@ -20,6 +26,7 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     return baseSizeRef.current
   }
 
+  /** Uniform skalering som «letterboxer» sliden innenfor beholderen (bevarer sideforhold). */
   const fitToContainer = () => {
     if (!containerRef.current || !wrapperRef.current || !fabricRef.current) return
 
@@ -35,7 +42,7 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     wrapperRef.current.style.width = `${targetWidth}px`
     wrapperRef.current.style.height = `${targetHeight}px`
 
-    // Render base slide coordinates scaled to fitted viewport size.
+    // Tegner i basis-koordinater, skalert med viewportTransform (samme innhold, annen pikselstørrelse).
     fabricRef.current.setDimensions({ width: targetWidth, height: targetHeight })
     fabricRef.current.setViewportTransform([scale, 0, 0, scale, 0, 0])
     fabricRef.current.requestRenderAll()
@@ -77,6 +84,7 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     renderData()
   }, [slideData])
 
+  // Oppdaterer skalering ved vindusendring eller når forelderen får ny høyde (f.eks. flex-layout).
   useEffect(() => {
     const observer = new ResizeObserver(() => fitToContainer())
     if (containerRef.current) observer.observe(containerRef.current)
@@ -85,8 +93,14 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
   }, [])
 
   return (
-    <div ref={containerRef} className='flex h-full w-full items-center justify-center overflow-hidden'>
-      <div ref={wrapperRef} className='relative overflow-hidden rounded-lg'>
+    <div
+      ref={containerRef}
+      className='box-border flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-visible p-4 sm:p-5'
+    >
+      <div
+        ref={wrapperRef}
+        className='relative overflow-hidden rounded-lg shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'
+      >
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
         {presenterToolbar}
       </div>

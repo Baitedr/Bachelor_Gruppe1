@@ -7,9 +7,10 @@ import PresentationEditor from './components/PresentationEditor'
 import type { PresentationEditorHandle } from './components/PresentationEditor'
 import SessionLobby from './components/livesession/SessionLobby'
 import Navbar from './components/ui/Navbar'
+import { ModeToggle } from '@/components/ui/mode-toggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
+import { LogOut, MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -19,7 +20,7 @@ import {
 } from '@/components/ui/card'
 import api from './services/api'
 import { createDefaultSlideFabricData } from './lib/fabricDefaults'
-import { cn } from '@/lib/utils'
+import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
 
 type Page =
   | 'login'
@@ -711,19 +712,25 @@ function App() {
       api.logout()
     }
 
+    // Gjestemodus: låst viewport-høyde (som innlogget live) slik at flex-1 og canvas får reell høyde å skalere i.
     return (
-      <div className='min-h-screen bg-background text-foreground'>
-        <header className='border-b border-border/70 bg-card/80'>
-          <div className='mx-auto flex w-full items-center gap-3 px-4 py-3'>
+      <div className='flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground'>
+        <header className='shrink-0 border-b border-border/70 bg-card/80'>
+          <div className='mx-auto flex w-full flex-wrap items-center gap-3 px-4 py-3'>
             <Badge variant='secondary'>Gjest</Badge>
-            <span className='text-sm text-muted-foreground'>ProSlides gjestemodus</span>
-            <Button className='ml-auto' variant='destructive' size='sm' onClick={leaveGuestSession}>
-              Forlat sesjon
-            </Button>
+            <span className='min-w-0 flex-1 text-sm text-muted-foreground'>ProSlides gjestemodus</span>
+            <div className='ml-auto flex flex-shrink-0 items-center gap-2'>
+              <ModeToggle />
+              <Button variant='outline' size='sm' className={logoutStyleDestructiveButtonClassName} onClick={leaveGuestSession}>
+                <LogOut className='h-4 w-4' />
+                Forlat økt
+              </Button>
+            </div>
           </div>
         </header>
 
-        <main className='mx-auto w-full px-4 py-6'>
+        {/* flex-1 + min-h-0: gir LivePresentation en reell høydebegrensning under live (ikke bare innholdshøyde). */}
+        <main className='mx-auto flex min-h-0 w-full flex-1 flex-col px-4 py-4 sm:py-6'>
           {currentPage === 'lobby' ? (
             <div className='mx-auto w-full max-w-4xl'>
               <SessionLobby
@@ -738,13 +745,17 @@ function App() {
               />
             </div>
           ) : (
-            <LivePresentation
-              presentationId={livePresentationId}
-              isPresenter={false}
-              joinCode={null}
-              onEndLiveSession={undefined}
-              onSessionEnd={leaveGuestSession}
-            />
+            <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+              {/* Ekstra flex-beholder slik at høyde arves helt ned til LivePresentationCanvas */}
+              <LivePresentation
+                presentationId={livePresentationId}
+                isPresenter={false}
+                joinCode={null}
+                onEndLiveSession={undefined}
+                onSessionEnd={leaveGuestSession}
+                onLeaveSession={leaveGuestSession}
+              />
+            </div>
           )}
         </main>
       </div>
@@ -914,7 +925,7 @@ function App() {
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 border-destructive/30 bg-destructive/15 text-destructive transition-colors hover:border-destructive/45 hover:bg-destructive/22 hover:text-destructive'
+                            className={logoutStyleDestructiveButtonClassName}
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleDeletePresentation(presentation.id)}
                           >
@@ -980,8 +991,8 @@ function App() {
                             </Button>
                             <Button
                               size='sm'
-                              variant='destructive'
-                              className='flex items-center gap-1.5'
+                              variant='outline'
+                              className={logoutStyleDestructiveButtonClassName}
                               onClick={() => handleDeletePermanently(trashedItem.id)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -1039,6 +1050,7 @@ function App() {
               joinCode={liveJoinCode}
               onEndLiveSession={handleEndLiveSession}
               onSessionEnd={handleGoHome}
+              onLeaveSession={liveIsPresenter ? undefined : handleGoHome}
             />
           </div>
         )}
@@ -1071,10 +1083,10 @@ function App() {
                 Avbryt
               </Button>
               <Button
-                variant='outline'
+                variant='destructive'
                 onClick={handleDiscardAndGoHome}
                 disabled={isSavingPresentation || isDiscardingPresentation}
-                className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
+                className='flex items-center justify-center gap-1.5'
               >
                 <X className="h-4 w-4" />
                 {isDiscardingPresentation ? 'Forkaster...' : 'Forkast'}
@@ -1106,11 +1118,7 @@ function App() {
               <Button variant='outline' onClick={() => setPermanentDeleteDialog(null)}>
                 Avbryt
               </Button>
-              <Button 
-                variant='outline' 
-                onClick={confirmDeletePermanently}
-                className='flex items-center justify-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors'
-              >
+              <Button variant='outline' onClick={confirmDeletePermanently} className={logoutStyleDestructiveButtonClassName}>
                 <Trash2 className="h-4 w-4" />
                 Ja, slett
               </Button>
