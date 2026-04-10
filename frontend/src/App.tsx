@@ -101,6 +101,7 @@ function App() {
   const [isSavingPresentation, setIsSavingPresentation] = useState(false)
   const [isCreatingPresentation, setIsCreatingPresentation] = useState(false)
   const [currentPage, setCurrentPage] = useState<Page>('login')
+  const [openingPresentationId, setOpeningPresentationId] = useState<string | null>(null)
 
   const [user, setUser] = useState<UserRecord | null>(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
@@ -385,6 +386,11 @@ function App() {
   }
 
   const handleOpenPresentation = async (presentationId: string) => {
+    if (openingPresentationId !== null) return
+
+    setOpeningPresentationId(presentationId)
+    setPresentationsError(null)
+    
     try {
       const data = await api.getPresentation(presentationId)
       setActivePresentation(data.presentation)
@@ -393,8 +399,10 @@ function App() {
       setCurrentPage('editor')
     } catch {
       setPresentationsError('Kunne ikke åpne presentasjon')
-    }
+    } finally {
+      setOpeningPresentationId(null)
   }
+}
 
   const handleSavePresentation = async (payload: Record<string, unknown>) => {
     setIsSavingPresentation(true)
@@ -912,11 +920,16 @@ function App() {
                             size='sm'
                             variant='outline'
                             className='flex items-center justify-center gap-1.5 transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground dark:hover:bg-muted/35'
-                            disabled={deletingPresentationIds[presentation.id]}
-                            onClick={() => handleOpenPresentation(presentation.id)}
+                            disabled={deletingPresentationIds[presentation.id] || openingPresentationId !== null}
+                            aria-busy={openingPresentationId === presentation.id}
+                            onClick={() => void handleOpenPresentation(presentation.id)}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Rediger
+                            {openingPresentationId === presentation.id ? (
+                              <Loader2 className='h-3.5 w-3.5 shrink-0 animate-spin' aria-hidden />
+                            ) : (
+                              <Pencil className='h-3.5 w-3.5 shrink-0' aria-hidden />
+                            )}
+                            {openingPresentationId === presentation.id ? 'Redigerer…' : 'Rediger'}
                           </Button>
                           <Button
                             size='sm'
