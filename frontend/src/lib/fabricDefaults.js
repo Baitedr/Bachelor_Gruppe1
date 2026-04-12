@@ -69,10 +69,25 @@ export const createDefaultSlideFabricData = () => {
         lineHeight: 1.2,
     });
 
+    const bulletList = new IText('• \n• \n• ', {
+        left: 80,
+        top: 230,
+        originX: 'left',
+        originY: 'top',
+        fontSize: 24,
+        fontWeight: 'normal',
+        fontFamily: 'Arial',
+        fill: '#333333',
+        textAlign: 'left',
+        lineHeight: 1.35,
+    });
+    bulletList.set('listStyleType', 'bullet');
+
     // Add then clamp to make sure defaults always stay visible within slide bounds.
-    canvas.add(title, text);
+    canvas.add(title, text, bulletList);
     keepObjectInsideCanvas(title);
     keepObjectInsideCanvas(text);
+    keepObjectInsideCanvas(bulletList);
     canvas.renderAll();
 
     // Serialize objects to JSON

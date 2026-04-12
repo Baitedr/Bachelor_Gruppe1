@@ -3,7 +3,11 @@ import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import {
     BarChart3,
     Circle as CircleIcon,
+    ArrowRight,
+    ChevronDown,
     Image as ImageIcon,
+    List,
+    Minus,
     PanelLeftClose,
     PanelLeftOpen,
     PanelRightClose,
@@ -76,6 +80,7 @@ type QuestionItem = {
     options: QuestionOption[];
     createdAt: string;
 };
+type ListStyleType = 'bullet' | 'dash' | 'arrow';
 
 type Slide = {
     id: string;
@@ -154,6 +159,8 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
     const [hasSelectedText, setHasSelectedText] = useState(false);
+    const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
+    const [isListMenuOpen, setIsListMenuOpen] = useState(false);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
@@ -163,8 +170,8 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     // Referanser/tilstand for responsiv skalering av canvas.
     const canvasViewportRef = useRef<HTMLDivElement | null>(null);
     const canvasScaleWrapperRef = useRef<HTMLDivElement | null>(null);
+    const listMenuRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
-
     const hasUnsavedChangesRef = useRef(false);
 
     // Regner ut hvor mye 16:9-canvas kan skaleres innenfor tilgjengelig plass.
@@ -195,6 +202,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             quality: 0.9,
             multiplier: 0.8,
         });
+    };
+
+    const serializeCanvasData = () => {
+        if (!fabricCanvasRef.current) return null;
+
+        return (fabricCanvasRef.current as any).toJSON(['listStyleType']);
     };
 
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
@@ -237,7 +250,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         return {
             backgroundColor: typeof canvasBackgroundColor === 'string' ? canvasBackgroundColor : '#ffffff',
-            fabricData: fabricCanvasRef.current.toJSON(),
+            fabricData: serializeCanvasData(),
         };
     };
 
@@ -460,10 +473,15 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             updatePreview();
         };
 
+        const handleTextChange = () => {
+            markDirty();
+            updatePreview();
+        };
+
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
-        canvas.on('text:changed', updatePreview);
+        canvas.on('text:changed', handleTextChange);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
         canvas.on('selection:cleared', syncHasSelectedShape);
@@ -474,7 +492,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
-            canvas.off('text:changed', updatePreview);
+            canvas.off('text:changed', handleTextChange);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
             canvas.off('selection:cleared', syncHasSelectedShape);
@@ -496,7 +514,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         newSlides[currentSlideIndex] = {
             ...currentSlide,
             backgroundColor,
-            fabricData: fabricCanvasRef.current.toJSON(),
+            fabricData: serializeCanvasData(),
         };
 
         return newSlides;
@@ -568,6 +586,49 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Enter') {
+                const canvas = fabricCanvasRef.current;
+                if (!canvas) return;
+
+                const activeObject = canvas.getActiveObject() as any;
+                const activeListStyle =
+                    activeObject?.listStyleType ||
+                    (typeof activeObject?.text === 'string' ? getListStyleFromText(activeObject.text) : null);
+
+                if (activeObject && activeObject.isEditing && isTextObject(activeObject) && activeListStyle) {
+                    event.preventDefault();
+
+                    const marker = getListMarker(activeListStyle as ListStyleType);
+                    const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
+                    const selectionStart = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
+                    const selectionEnd = typeof activeObject.selectionEnd === 'number' ? activeObject.selectionEnd : currentText.length;
+                    const nextText = `${currentText.slice(0, selectionStart)}\n${marker} ${currentText.slice(selectionEnd)}`;
+                    const nextCursorPosition = selectionStart + 1 + marker.length + 1;
+
+                    activeObject.set('text', nextText);
+                    activeObject.selectionStart = nextCursorPosition;
+                    activeObject.selectionEnd = nextCursorPosition;
+                    activeObject.setCoords();
+                    canvas.requestRenderAll();
+
+                    markDirty();
+                    pushHistorySnapshot(createCanvasSnapshot());
+
+                    const currentId = currentSlideIdRef.current;
+                    if (currentId) {
+                        const dataUrl = captureCanvasPreview();
+                        if (dataUrl) {
+                            setSlidePreviewImages((prev) => ({
+                                ...prev,
+                                [currentId]: dataUrl,
+                            }));
+                        }
+                    }
+
+                    return;
+                }
+            }
+
             if (event.key !== 'Delete' && event.key !== 'Backspace') return;
 
             const target = event.target as HTMLElement | null;
@@ -767,6 +828,100 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         text.enterEditing();
         text.selectAll();
     };
+    const getListMarker = (styleType: ListStyleType) => {
+        switch (styleType) {
+            case 'dash':
+                return '-';
+            case 'arrow':
+                return '->';
+            case 'bullet':
+            default:
+                return '•';
+        }
+    };
+
+    const getListStyleFromText = (text: string): ListStyleType | null => {
+        const firstContentLine = text
+            .split(/\r?\n/)
+            .map((line) => line.trimStart())
+            .find((line) => line.length > 0);
+
+        if (!firstContentLine) return null;
+        if (firstContentLine.startsWith('• ')) return 'bullet';
+        if (firstContentLine.startsWith('-> ')) return 'arrow';
+        if (firstContentLine.startsWith('- ')) return 'dash';
+        return null;
+    };
+
+    const normalizeListText = (text: string, styleType: ListStyleType) => {
+        const marker = getListMarker(styleType);
+
+        return text
+            .split(/\r?\n/)
+            .map((line) => {
+                const trimmedLine = line.trimStart();
+
+                if (!trimmedLine) {
+                    return `${marker} `;
+                }
+
+                if (trimmedLine.startsWith(`${marker} `)) {
+                    return trimmedLine;
+                }
+
+                return `${marker} ${trimmedLine}`;
+            })
+            .join('\n');
+    };
+
+    const addBulletList = (styleType: ListStyleType = listStyleType) => {
+        if (!fabricCanvasRef.current) return;
+
+        const pos = getSafePosition(80, 150, 320, 120);
+        const marker = getListMarker(styleType);
+        const text = new IText(`${marker} \n${marker} \n${marker} `, {
+            left: pos.left,
+            top: pos.top,
+            originX: 'left',
+            originY: 'top',
+            fontSize: 24,
+            fill: textColor,
+            fontFamily: 'Arial',
+            lineHeight: 1.35,
+        });
+        text.set('listStyleType', styleType);
+
+        fabricCanvasRef.current.add(text);
+        fabricCanvasRef.current.setActiveObject(text);
+        fabricCanvasRef.current.renderAll();
+        text.enterEditing();
+        text.selectAll();
+    };
+
+    useEffect(() => {
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (!isListMenuOpen) return;
+
+            const target = event.target as Node | null;
+            if (listMenuRef.current && target && !listMenuRef.current.contains(target)) {
+                setIsListMenuOpen(false);
+            }
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsListMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [isListMenuOpen]);
 
     const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -1320,6 +1475,59 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         </Button>
                         <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
                         <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
+                        <div ref={listMenuRef} className="relative">
+                            <Button
+                                onClick={() => setIsListMenuOpen((prev) => !prev)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-1.5"
+                                aria-haspopup="menu"
+                                aria-expanded={isListMenuOpen}
+                            >
+                                <List className="h-3.5 w-3.5" /> Liste
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            {isListMenuOpen && (
+                                <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setListStyleType('bullet');
+                                            addBulletList('bullet');
+                                            setIsListMenuOpen(false);
+                                        }}
+                                    >
+                                        <List className="h-4 w-4" />
+                                        <span>Punkt</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setListStyleType('dash');
+                                            addBulletList('dash');
+                                            setIsListMenuOpen(false);
+                                        }}
+                                    >
+                                        <Minus className="h-4 w-4" />
+                                        <span>Bindestrek</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setListStyleType('arrow');
+                                            addBulletList('arrow');
+                                            setIsListMenuOpen(false);
+                                        }}
+                                    >
+                                        <ArrowRight className="h-4 w-4" />
+                                        <span>Pil</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
                         <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
                         <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
