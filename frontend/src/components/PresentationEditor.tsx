@@ -1203,6 +1203,24 @@ const handleSavePresentation = async (): Promise<boolean> => {
         hasUnsavedChanges: () => hasUnsavedChangesRef.current,
     }));
 
+    const handleSlideReorder = (fromIndex: number, toIndex: number) => {
+        const currentSlides = saveCurrentSlide();
+        const reordered = [...currentSlides];
+        const [moved] = reordered.splice(fromIndex, 1);
+        reordered.splice(toIndex, 0, moved);
+        markDirty();
+        setSlides(reordered);
+
+        if (currentSlideIndex === fromIndex) {
+            setCurrentSlideIndex(toIndex);
+        } else if (fromIndex < currentSlideIndex && toIndex >= currentSlideIndex) {
+            setCurrentSlideIndex(currentSlideIndex - 1);
+        } else if (fromIndex > currentSlideIndex && toIndex <= currentSlideIndex) {
+            setCurrentSlideIndex(currentSlideIndex + 1);
+        }
+    };
+
+
     return (
         <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
@@ -1276,6 +1294,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onSlideSelect={handleSlideSelect}
                                 onSlideDelete={deleteSlide}
                                 onSlideDuplicate={duplicateSlide}
+                                onSlideReorder={handleSlideReorder}
                             />
                         </div>
                     </div>
