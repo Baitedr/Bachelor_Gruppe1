@@ -25,7 +25,6 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 
 const CANVAS_WIDTH = 960;
@@ -81,7 +80,6 @@ type Slide = {
     id: string;
     title: string;
     content: string;
-    notes: string;
     backgroundColor: string;
     fabricData: unknown;
     polls: Poll[];
@@ -109,7 +107,6 @@ const defaultSlide = (index = 1): Slide => ({
     id: `local-${Date.now()}`,
     title: `Lysbilde ${index}`, // Slide
     content: '',
-    notes: '',
     backgroundColor: '#ffffff',
     fabricData: createDefaultSlideFabricData(),
     polls: [],
@@ -166,6 +163,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [canvasScale, setCanvasScale] = useState(1);
 
     const hasUnsavedChangesRef = useRef(false);
+
+    
+    
 
     // Regner ut hvor mye 16:9-canvas kan skaleres innenfor tilgjengelig plass.
     const updateCanvasScale = useCallback(() => {
@@ -300,7 +300,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: slide.id || `local-${Date.now()}-${index}`,
             title: slide.title || `Lysbilde ${index + 1}`,
             content: slide.content || '',
-            notes: slide.notes || '',
             backgroundColor: slide.backgroundColor || '#ffffff',
             fabricData: slide.fabricData || null,
             polls: Array.isArray(slide.polls)
@@ -456,10 +455,18 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         };
 
         const handleCanvasChangeWithPreview = () => {
-            handleCanvasChange();
+            if (isApplyingCanvasStateRef.current) return
+            markDirty();
             updatePreview();
-        };
+        }
 
+        const handleTextChange = () => {
+            if (isApplyingCanvasStateRef.current) return;
+            markDirty();
+            updatePreview();
+        }
+
+        canvas.on('text:changed', handleTextChange);
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
@@ -615,7 +622,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: `local-${Date.now()}`,
             title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
-            notes: '',
             backgroundColor: '#ffffff',
             fabricData: createDefaultSlideFabricData(),
             polls: [],
@@ -1015,7 +1021,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
       slides: slidesToSave.map((slide, index) => ({
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
-        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
@@ -1040,7 +1045,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
         id: slide?.id ?? `local-${Date.now()}-${index}`,
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
-        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.previewImage || null,
@@ -1323,7 +1327,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
                         <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
                         <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
-                        <Button onClick={deleteSelected} variant="destructive" size="sm" className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
+                        <Button onClick={deleteSelected} variant="outline" size="sm" className="flex items-center gap-1.5 bg-destructive/15 text-destructive border-destructive/30 hover:bg-accent hover:text-accent-foreground hover:border-input transition-colors"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
                             <Palette className="h-3.5 w-3.5" /> Bakgrunn
                             <Input
@@ -1384,36 +1388,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             <canvas ref={canvasRef} />
                         </div>
                     </div>
-                </div>
-                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col gap-2 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6">
-                    <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor="slide-notes" className="text-sm font-semibold text-foreground">
-                            Notater for presentatør
-                        </Label>
-                        <span className="text-xs text-muted-foreground">
-                            Vises kun i presentatørvisning
-                        </span>
-                    </div>
-                    <Textarea
-                        id="slide-notes"
-                        value={slides[currentSlideIndex]?.notes || ''}
-                        onChange={(event) => {
-                            const value = event.target.value;
-                            setSlides((previousSlides) => {
-                                const nextSlides = [...previousSlides];
-                                if (!nextSlides[currentSlideIndex]) return previousSlides;
-
-                                nextSlides[currentSlideIndex] = {
-                                    ...nextSlides[currentSlideIndex],
-                                    notes: value,
-                                };
-                                return nextSlides;
-                            });
-                            markDirty();
-                        }}
-                        placeholder="Legg til stikkord, manus eller påminnelser for dette lysbildet..."
-                        className="min-h-24 resize-y"
-                    />
                 </div>
             </div>
 
@@ -1495,7 +1469,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                             <Button variant="secondary" size="sm" onClick={() => openEditQuestion(index)} className="flex-1 h-8 text-xs">
                                                 Rediger
                                             </Button>
-                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs">
+                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
                                                 Slett
                                             </Button>
                                         </div>
@@ -1560,7 +1534,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                                 <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
                                                     Rediger
                                                 </Button>
-                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs">
+                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
                                                     Slett
                                                 </Button>
                                             </div>
@@ -1601,9 +1575,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="destructive"
+                                variant="outline"
                                 onClick={confirmDeleteQuestion}
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
@@ -1640,9 +1614,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="destructive"
+                                variant="outline"
                                 onClick={confirmDeletePoll}
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
