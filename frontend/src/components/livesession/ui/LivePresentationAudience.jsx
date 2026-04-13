@@ -323,9 +323,9 @@ const LivePresentationAudience = ({
                 {participantCount}
               </span>
             </div>
-            {/* Fullskjerm: rekkefølge som gjesteheader (ModeToggle → Forlat økt). I vanlig visning: kun Forlat (tema i Navbar). */}
+            {/* Fullskjerm: app-header er skjult — ModeToggle + Forlat økt her. Vanlig visning: Forlat økt i app-header (gjest) / Hjem (innlogget), ikke duplikat under. */}
             {isFullscreen ? <ModeToggle /> : null}
-            {onLeaveSession ? (
+            {onLeaveSession && isFullscreen ? (
               <Button
                 type='button'
                 variant='outline'
