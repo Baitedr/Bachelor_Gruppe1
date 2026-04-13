@@ -622,20 +622,25 @@ function App() {
     setCurrentPage('login')
   }
 
-  const handleGoHome = async () => {
-    if (currentPage === 'editor') {
+  const handleGoHome =  () => {
+    if (isSavingPresentation || isDiscardingPresentation) return
+
+    const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+        
+    if (currentPage === 'editor' && hasUnsavedChanges) {
       setIsExitEditorDialogOpen(true)
       return
-        
     }
-
+    
     //Eksisterende presentasjon, ingen endringer - bare gå hjem
+    setIsExitEditorDialogOpen(false)
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
     setLiveIsPresenter(false)
     setCurrentPage('home')
   }
+
 
   const handleEndLiveSession = async () => {
     if (livePresentationId) {
