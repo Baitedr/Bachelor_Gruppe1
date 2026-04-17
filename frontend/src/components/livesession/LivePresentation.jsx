@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import api from '../../services/api'
+import { resolveTextWithVariables } from '../../lib/utils'
 import LivePresentationAudience from './ui/LivePresentationAudience'
 import LivePresentationPresenter from './ui/LivePresentationPresenter'
 
@@ -61,10 +62,23 @@ const LivePresentation = ({
   }, [presentationId])
 
   const rawSlideData = presentation?.slides?.[currentSlide]
-  // Slides kan ha bakgrunnsfelter i `background`; flates ut slik at canvas/tekst får samme form som i editoren.
-  const currentSlideData = rawSlideData?.background
-    ? { ...rawSlideData, ...rawSlideData.background }
-    : rawSlideData
+  // Slides kan ha bakgrunnsfelter i background; flates ut slik at canvas/tekst får samme form som i editoren.
+  const currentSlideData = useMemo(() => {
+    if (!rawSlideData) return rawSlideData
+
+    const merged = rawSlideData?.background
+      ? { ...rawSlideData, ...rawSlideData.background }
+      : rawSlideData
+    // Variabler kan være definert på presentasjonsnivå eller slide-nivå; slide-variabler har forrang.
+    const variables = merged?.variables || presentation?.variables || []
+
+    return {
+      ...merged,
+      title: resolveTextWithVariables(merged?.title || '', variables),
+      content: resolveTextWithVariables(merged?.content || '', variables),
+      variables,
+    }
+  }, [presentation?.variables, rawSlideData])
 
   const activePollResult = activePoll ? pollResults[activePoll.id] : null
   const totalVotes = activePollResult?.total || 0

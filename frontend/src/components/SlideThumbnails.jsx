@@ -1,4 +1,5 @@
 import '../CSScomponents/SlideThumbnails.css'
+import { resolveTextWithVariables } from '../lib/utils'
 import { Button } from './ui/button'
 import { BarChart2, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
 import {
@@ -25,7 +26,7 @@ const getSlidePreviewContent = (slide) => {
   if (!slide) return 'Ingen innhold enda'
 
   if (slide.content && slide.content.trim()) {
-    return slide.content
+    return resolveTextWithVariables(slide.content, slide.variables || [])
   }
 
   const objects = slide.fabricData?.objects
@@ -33,10 +34,13 @@ const getSlidePreviewContent = (slide) => {
     return 'Ingen innhold enda'
   }
 
+  // Henter ut tekst fra alle objekter, erstatter variabler, og viser en kort forhåndsvisning.
   const textValues = objects
     .map((objectItem) => {
-      const text = objectItem?.text
-      return typeof text === 'string' ? text.trim() : ''
+      const text = objectItem?.templateText || objectItem?.text
+      return typeof text === 'string'
+        ? resolveTextWithVariables(text, slide.variables || []).trim()
+        : ''
     })
     .filter(Boolean)
 

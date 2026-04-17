@@ -88,12 +88,18 @@ module Api
         payload
       end
 
+      # Hjelpefunksjon for å normalisere og validere presentasjonsvariabler som kan brukes i tekstobjekter på lysbildene.
+      def presentation_variables_payload
+        normalize_presentation_variables(params.dig(:presentation, :variables))
+      end
+
       def replace_slides!(presentation, slides)
         normalized_slides = if slides.empty?
                               [default_slide_payload]
                             else
                               slides
                             end
+        shared_variables = presentation_variables_payload
 
         Presentation.transaction do
           existing_slide_ids = presentation.slides.pluck(:id)
@@ -105,7 +111,7 @@ module Api
             slide = presentation.slides.create!(
               slide_index: index,
               notes: normalize_slide_notes(source),
-              background: normalize_slide_background(slide_data, index)
+              background: normalize_slide_background(slide_data, index, shared_variables)
             )
 
             create_slide_polls!(slide, slide_data)
@@ -145,11 +151,12 @@ module Api
           'notes' => '',
           'backgroundColor' => '#ffffff',
           'fabricData' => nil,
-          'questions' => []
+          'questions' => [],
+          'variables' => []
         }
       end
 
-      def normalize_slide_background(slide_data, index)
+      def normalize_slide_background(slide_data, index, shared_variables = [])
         source = slide_data.is_a?(ActionController::Parameters) ? slide_data.to_unsafe_h : slide_data
 
         {
@@ -158,8 +165,26 @@ module Api
           backgroundColor: source['backgroundColor'].presence || source[:backgroundColor].presence || '#ffffff',
           fabricData: source['fabricData'] || source[:fabricData],
           previewImage: source['previewImage'] || source[:previewImage],
-          questions: normalize_slide_questions(source['questions'] || source[:questions])
+          questions: normalize_slide_questions(source['questions'] || source[:questions]),
+          variables: normalize_presentation_variables(source['variables'] || source[:variables] || shared_variables)
         }
+      end
+      # Normaliserer og validerer presentasjonsvariabler, som kan være definert på presentasjonsnivå eller slide-nivå. 
+      # Variabler må ha et gyldig navn for å inkluderes, og får en unik ID hvis den ikke er spesifisert.
+      def normalize_presentation_variables(variables)
+        return [] unless variables.is_a?(Array)
+
+        variables.filter_map do |variable_data|
+          source = variable_data.is_a?(ActionController::Parameters) ? variable_data.to_unsafe_h : variable_data
+          name = (source['name'] || source[:name]).to_s.strip
+          next if name.blank?
+
+          {
+            id: (source['id'] || source[:id] || "var-#{SecureRandom.hex(6)}").to_s,
+            name: name,
+            value: (source['value'] || source[:value]).to_s
+          }
+        end
       end
 
       def normalize_slide_notes(source)
@@ -240,8 +265,18 @@ module Api
           user_email: presentation.user_email,
           created_at: presentation.created_at,
           is_live: presentation.is_live,
+          variables: presentation_variables_for(presentation),
           slides: presentation.slides.order(:slide_index).map { |slide| slide_payload(slide) }
         }
+      end
+
+      # Hjelpefunksjon for å hente og normalisere presentasjonsvariabler for en gitt presentasjon.
+      def presentation_variables_for(presentation)
+        first_slide = presentation.slides.order(:slide_index).first
+        return [] unless first_slide
+
+        payload = first_slide.background.is_a?(Hash) ? first_slide.background : {}
+        normalize_presentation_variables(payload['variables'] || payload[:variables])
       end
 
       def slide_payload(slide)
@@ -259,6 +294,7 @@ module Api
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
           previewImage: payload_value(payload, 'previewImage'),
+          variables: normalize_presentation_variables(payload['variables'] || payload[:variables]),
           questions: normalize_slide_questions(payload['questions']),
           polls: polls.map { |poll| poll_payload_for_editor(poll, latest_session, sessions) }
         }

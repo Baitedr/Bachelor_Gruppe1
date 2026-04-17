@@ -26,6 +26,13 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
+// hjelpefunksjoner for å normalisere og håndtere presentasjonsvariabler
+import {
+    normalizePresentationVariables,
+    normalizeVariableName,
+    resolveFabricDataWithVariables,
+    type PresentationVariable,
+} from '../lib/utils';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -90,13 +97,25 @@ type Slide = {
 type PresentationData = {
     id?: string | number | null;
     title?: string;
-    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[] }>;
+    variables?: PresentationVariable[];
+    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[]; variables?: unknown[] }>;
+};
+
+type SaveSlidePayload = {
+    title: string;
+    content: string;
+    backgroundColor: string;
+    fabricData: unknown;
+    previewImage?: string | null;
+    polls: Poll[];
+    questions: QuestionItem[];
 };
 
 type SavePresentationPayload = {
     id: string | number | null;
     title: string;
-    slides: Slide[];
+    variables: PresentationVariable[];
+    slides: SaveSlidePayload[];
 };
 
 type SavePresentationResult = {
@@ -151,6 +170,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
     const [hasSelectedText, setHasSelectedText] = useState(false);
+    const [presentationVariables, setPresentationVariables] = useState<PresentationVariable[]>([]);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
@@ -196,9 +216,43 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             multiplier: 0.8,
         });
     };
+    
+    const serializeCanvasWithTemplateText = () => {
+        if (!fabricCanvasRef.current) return null;
+        return (fabricCanvasRef.current as any).toJSON(['templateText']);
+    };
 
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
     const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
+    // Når variabler oppdateres, må vi sørge for at alle tekstobjekter på lerretet oppdateres med de nye verdiene. 
+    // Dette gjør at endringer i variabler ses med engang i forhåndsvisningen.
+    const syncCurrentCanvasVariableText = useCallback(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        let changed = false;
+
+        canvas.getObjects().forEach((obj: any) => {
+            if (!isTextObject(obj)) return;
+
+            const templateText =
+                typeof obj.templateText === 'string'
+                    ? obj.templateText
+                    : (typeof obj.text === 'string' ? obj.text : '');
+
+            obj.set('templateText', templateText);
+
+            if (!obj.isEditing && obj.text !== templateText) {
+                obj.set('text', templateText);
+                obj.setCoords?.();
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            canvas.renderAll();
+        }
+    }, []);
 
     const syncHasSelectedShape = () => {
         const canvas = fabricCanvasRef.current;
@@ -237,7 +291,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         return {
             backgroundColor: typeof canvasBackgroundColor === 'string' ? canvasBackgroundColor : '#ffffff',
-            fabricData: fabricCanvasRef.current.toJSON(),
+            fabricData: serializeCanvasWithTemplateText(),
         };
     };
 
@@ -291,10 +345,15 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             setPresentationId(null);
             setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
+            setPresentationVariables([]);
             setCurrentSlideIndex(0);
             hasUnsavedChangesRef.current = false;
             return;
         }
+
+        const normalizedVariables = normalizePresentationVariables(
+            presentation.variables || presentation.slides?.[0]?.variables || []
+        );
 
         const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
             id: slide.id || `local-${Date.now()}-${index}`,
@@ -312,6 +371,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         setPresentationId(presentation.id || null);
         setPresentationTitle(presentation.title || 'Uten navn');
+        setPresentationVariables(normalizedVariables);
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
@@ -410,6 +470,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                    syncCurrentCanvasVariableText();
                     clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
@@ -427,7 +488,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             setUndoStack([]);
             setRedoStack([]);
         }
-    }, [currentSlideIndex, slides]);
+    }, [currentSlideIndex, slides, syncCurrentCanvasVariableText]);
 
     // Lyttere for endringer på lerretet (legge til, flytte eller fjerne objekter) for å bygge opp angre-historikken
     useEffect(() => {
@@ -459,14 +520,41 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             markDirty();
             updatePreview();
         }
-
-        const handleTextChange = () => {
+        // For tekstobjekter må vi også oppdatere templateText for å kunne bevare variabelplaceholder og oppdatere dem dynamisk senere hvis variablene endres. 
+        // Derfor har vi egne lyttere for tekstendringer og redigeringsmodus.
+        const handleTextChange = (event: any) => {
             if (isApplyingCanvasStateRef.current) return;
+            if (isTextObject(event?.target)) {
+                event.target.set('templateText', typeof event.target.text === 'string' ? event.target.text : '');
+            }
             markDirty();
             updatePreview();
         }
 
+        const handleTextEditingEntered = (event: any) => {
+            if (!isTextObject(event?.target)) return;
+
+            const templateText = typeof event.target.templateText === 'string'
+                ? event.target.templateText
+                : (typeof event.target.text === 'string' ? event.target.text : '');
+
+            event.target.set('text', templateText);
+            canvas.renderAll();
+        }
+
+        const handleTextEditingExited = (event: any) => {
+            if (!isTextObject(event?.target)) return;
+
+            const templateText = typeof event.target.text === 'string' ? event.target.text : '';
+            event.target.set('templateText', templateText);
+            event.target.set('text', templateText);
+            canvas.renderAll();
+            updatePreview();
+        }
+
         canvas.on('text:changed', handleTextChange);
+        canvas.on('text:editing:entered', handleTextEditingEntered);
+        canvas.on('text:editing:exited', handleTextEditingExited);
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
@@ -481,7 +569,10 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
+            canvas.off('text:changed', handleTextChange);
             canvas.off('text:changed', updatePreview);
+            canvas.off('text:editing:entered', handleTextEditingEntered);
+            canvas.off('text:editing:exited', handleTextEditingExited);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
             canvas.off('selection:cleared', syncHasSelectedShape);
@@ -503,7 +594,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         newSlides[currentSlideIndex] = {
             ...currentSlide,
             backgroundColor,
-            fabricData: fabricCanvasRef.current.toJSON(),
+            fabricData: serializeCanvasWithTemplateText(),
         };
 
         return newSlides;
@@ -523,7 +614,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         try {
             if (slide?.fabricData) {
-                await tempFabricCanvas.loadFromJSON(slide.fabricData);
+                await tempFabricCanvas.loadFromJSON(resolveFabricDataWithVariables(slide.fabricData, presentationVariables));
             }
 
             tempFabricCanvas.backgroundColor = slide?.backgroundColor || '#ffffff';
@@ -570,7 +661,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         return () => {
             isCancelled = true;
         };
-    }, [slides]);
+    }, [slides, presentationVariables]);
 
     // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
     useEffect(() => {
@@ -607,6 +698,43 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+    
+    // Håndterer opprettelse, oppdatering og sletting av presentasjonsvariabler som kan brukes i tekstobjekter på lysbildene.
+    const addVariable = () => {
+        markDirty();
+        setPresentationVariables((previous) => ([
+            ...previous,
+            {
+                id: `variable-${Date.now()}-${previous.length}`,
+                name: `tall_${previous.length + 1}`,
+                value: '0',
+            },
+        ]));
+    };
+
+    const updateVariable = (variableId: string, field: 'name' | 'value', value: string) => {
+        markDirty();
+        setPresentationVariables((previous) => previous.map((variable) => {
+            if (variable.id !== variableId) return variable;
+
+            if (field === 'name') {
+                return {
+                    ...variable,
+                    name: normalizeVariableName(value),
+                };
+            }
+
+            return {
+                ...variable,
+                value,
+            };
+        }));
+    };
+
+    const deleteVariable = (variableId: string) => {
+        markDirty();
+        setPresentationVariables((previous) => previous.filter((variable) => variable.id !== variableId));
+    };
 
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
     const saveCurrentSlide = () => {
@@ -742,6 +870,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             fill: textColor,
             fontFamily: 'Arial',
             lineHeight: 1.2,
+            templateText: 'Klikk for å redigere',
         });
         
         fabricCanvasRef.current.add(text);
@@ -765,6 +894,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             fontFamily: 'Arial',
             fontWeight: 'bold',
             lineHeight: 1.16,
+            templateText: 'Tittel',
         });
         
         fabricCanvasRef.current.add(text);
@@ -1015,9 +1145,10 @@ const handleSavePresentation = async (): Promise<boolean> => {
             slidePreviewsById[currentSlide.id] = currentSlidePreview
         }
 
-    const payload = {
+    const payload: SavePresentationPayload = {
       id: presentationId ?? undefined,
       title: (presentationTitle || 'Untitled Presentation').trim() || 'Untitled Presentation',
+      variables: normalizePresentationVariables(presentationVariables),
       slides: slidesToSave.map((slide, index) => ({
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
@@ -1038,6 +1169,10 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
     if (typeof savedPresentation?.title === 'string') {
       setPresentationTitle(savedPresentation.title)
+    }
+
+    if (savedPresentation?.variables) {
+      setPresentationVariables(normalizePresentationVariables(savedPresentation.variables))
     }
 
     if (Array.isArray(savedPresentation?.slides) && savedPresentation.slides.length > 0) {
@@ -1456,8 +1591,65 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         </Badge>
                     </div>
                 )}
-
+                {/* Utvidet modus viser full oversikt og redigering av spørsmål og polls knyttet til lysbildet. 
+                Her kan man også legge til og redigere "variabler" som kan brukes som plassholdere i tekstfelter på lysbildene, for eksempel {{omsetning}}. */}
                 {!isRightSidebarCollapsed && <div className="flex-1 overflow-y-auto p-4">
+                    <div className="mb-6 rounded-xl border border-border bg-background p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                        <div className="mb-3 flex items-start justify-between gap-2">
+                            <div>
+                                <h4 className="text-sm font-semibold">Variabler</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    {'Bruk plassholdere som {{omsetning}} i tekstfelter.'}
+                                </p>
+                            </div>
+                            <Button onClick={addVariable} size="sm" variant="outline" className="h-8 flex items-center justify-center gap-1.5">
+                                <Plus className="h-3.5 w-3.5" /> Ny
+                            </Button>
+                        </div>
+
+                        {presentationVariables.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                                {'Ingen variabler enda. Lag en variabel og skriv den inn i slidet som {{navn}}.'}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                {presentationVariables.map((variable) => (
+                                    <div key={variable.id} className="rounded-lg border border-border p-2.5">
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <span className="text-xs font-medium text-muted-foreground">Delt verdi</span>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => deleteVariable(variable.id)}
+                                                className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Input
+                                                value={variable.name}
+                                                onChange={(e) => updateVariable(variable.id, 'name', e.target.value)}
+                                                placeholder="f.eks. omsetning"
+                                                className="h-8"
+                                            />
+                                            <Input
+                                                type="number"
+                                                value={String(variable.value ?? '')}
+                                                onChange={(e) => updateVariable(variable.id, 'value', e.target.value)}
+                                                placeholder="Verdi"
+                                                className="h-8"
+                                            />
+                                            <p className="text-[11px] text-muted-foreground">
+                                                {'Bruk: {{'}{variable.name || 'navn'}{'}}'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-sm font-semibold">Spørsmål</h4>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { StaticCanvas } from 'fabric'
+import { resolveFabricDataWithVariables } from '../../lib/utils'
 
 /** Standard lysbildestørrelse når JSON mangler eksplisitte mål (16:9). */
 const BASE_WIDTH = 960
@@ -63,13 +64,19 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     }
   }, [])
 
+  // Når slideData endres (nytt lysbilde, eller oppdaterte variabler), renderes fabric-objektene på nytt.
   useEffect(() => {
     if (!fabricRef.current) return
 
     const renderData = async () => {
       const { width, height } = resolveBaseSize()
-      if (slideData?.fabricData) {
-        await fabricRef.current.loadFromJSON(slideData.fabricData)
+      const resolvedFabricData = resolveFabricDataWithVariables(
+        slideData?.fabricData,
+        slideData?.variables || [],
+      )
+
+      if (resolvedFabricData) {
+        await fabricRef.current.loadFromJSON(resolvedFabricData)
       } else {
         fabricRef.current.clear()
       }
