@@ -114,6 +114,7 @@ function App() {
   const [startingLivePresentationId, setStartingLivePresentationId] = useState<string | null>(null)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
+  const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
 
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
@@ -210,6 +211,22 @@ function App() {
     const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     return hasSmallViewport || isTouchDevice || userAgentIsMobile
   }
+
+  useEffect(() => {
+    if(!isAutosaveEnabled) return
+    if(currentPage !== 'editor') return
+
+    const timerId = window.setInterval(() =>{
+      if (isSavingPresentation) return
+
+      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false 
+      if (!hasUnsavedChanges) return
+
+      void presentationEditorRef.current?.savePresentation?.()
+    }, 1000)
+
+    return () => window.clearInterval(timerId)
+  }, [isAutosaveEnabled, currentPage, isSavingPresentation])
 
   useEffect(() => {
   if (!user && !guestMode) return
@@ -818,6 +835,8 @@ function App() {
                 isSaving: isSavingPresentation,
                 lastSavedAt: editorLastSavedAt,
                 saveFlash: editorSaveFlash,
+                autosaveEnabled: isAutosaveEnabled,
+                onToggleAutosave: () => setIsAutosaveEnabled((prev) => !prev),
               }
             : null
         }
