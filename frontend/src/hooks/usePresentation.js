@@ -9,6 +9,23 @@ const normalizeSlideIndex = (value) => {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
+/** Én stabil deltaker-ID per nettleserfane, slik at flere deltakere ikke blokkerer hverandre selv med samme bruker. */
+const getLiveClientId = () => {
+  if (typeof window === 'undefined') return 'server'
+
+  const storageKey = 'live_client_id'
+  let clientId = window.sessionStorage.getItem(storageKey)
+
+  if (!clientId) {
+    clientId =
+      window.crypto?.randomUUID?.() ||
+      `live-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    window.sessionStorage.setItem(storageKey, clientId)
+  }
+
+  return clientId
+}
+
 export const usePresentation = (presentationId, token) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [activePoll, setActivePoll] = useState(null);
@@ -79,6 +96,7 @@ export const usePresentation = (presentationId, token) => {
               setActiveQuestion(null)
               break
             case 'poll_activated':
+              setActiveQuestion(null)
               setActivePoll(data.poll)
               break
             case 'poll_results':
@@ -108,6 +126,7 @@ export const usePresentation = (presentationId, token) => {
               setSessionEnded(true)
               break
             case 'question_activated':
+              setActivePoll(null)
               setActiveQuestion(data.question || null)
               break
             case 'question_results':
@@ -196,6 +215,7 @@ export const usePresentation = (presentationId, token) => {
   }
 
   const activatePoll = (pollId) => {
+    setActiveQuestion(null)
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_poll', { poll_id: pollId })
     }
@@ -222,6 +242,7 @@ export const usePresentation = (presentationId, token) => {
 
   // Spørsmål-funksjonalitet til LivePresentation
   const activateQuestion = (questionId) => {
+    setActivePoll(null)
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_question', { question_id: questionId })
     }
@@ -235,6 +256,7 @@ export const usePresentation = (presentationId, token) => {
     subscriptionRef.current.perform('submit_question_response', {
       question_id: questionId,
       answer,
+      client_id: getLiveClientId(),
     })
   }
 

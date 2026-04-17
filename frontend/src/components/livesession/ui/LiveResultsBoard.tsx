@@ -45,6 +45,106 @@ type LiveResultsBoardProps = {
     options?: QuestionOption[]
   } | null
 }
+// WORD CLOUD LOGIKK
+type WordCloudItem = {
+  text: string
+  count: number 
+  size: number 
+  opacity: number
+}
+
+const normalizeWordSource = (value: string) =>
+  value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').trim()
+
+  const buildWordCloudItems = (results?: Record<string, number>): WordCloudItem[] => {
+    if (!results) return []
+
+    const counts = new Map<string, { text: string; count: number }>()
+
+    Object.entries(results).forEach(([rawAnswer, answerCount]) => {
+      const normalizedPhrase = normalizeWordSource(rawAnswer)
+      const displayPhrase = formatPhraseForDisplay(rawAnswer)
+
+      if (!normalizedPhrase || normalizedPhrase.replace(/\s/g, '').length < 3) return
+
+      const existing = counts.get(normalizedPhrase)
+      if (existing) {
+        existing.count += answerCount
+        return
+      }
+
+      counts.set(normalizedPhrase, {
+        text: displayPhrase || normalizedPhrase,
+        count: answerCount,
+      })
+    })
+
+    const ranked = Array.from(counts.values())
+      .filter((item) => item.count > 0)
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 30)
+
+      const maxCount = ranked[0]?.count ?? 1
+
+      return ranked.map((item) => {
+        const ratio = item.count / maxCount
+        return {
+          text: item.text,
+          count: item.count,
+          size: 16 + Math.round(Math.sqrt(ratio) * 28), // Størrelse mellom 16 og 44
+          opacity: 0.55 + ratio * 0.45, // Opasitet mellom 0.55 og 1
+        }
+      })
+    }
+
+    const colorFromWord = (word: string): string => {
+      let hash = 0
+      for (let index = 0; index < word.length; index += 1) {
+        hash = word.charCodeAt(index) + ((hash << 5) - hash)
+      }
+      const hue = Math.abs(hash) % 360
+      return `hsl(${hue}, 70%, 42%)`
+    }
+
+    type QuestionWordCloudProps = {
+      results?: Record<string, number>
+    }
+
+    const QuestionWordCloud = ({ results }: QuestionWordCloudProps) => {
+      const items = useMemo(() => buildWordCloudItems(results), [results])
+      if (items.length === 0) {
+        return <p className='text-sm text-muted-foreground'>Ingen tekstsvar registrert</p>
+      }
+
+      return (
+        <div className='rounded-lg border border-border bg-muted/30 p-4'>
+          <div className='flex flex-wrap items-center justify-center gap-x-4 gap-y-3'>
+            {items.map((item) => (
+              <span
+                key={item.text}
+                className='inline-block font-semibold leading-none transition-all duration-300 ease-out'
+                style={{
+                  fontSize: `${item.size}px`,
+                  opacity: item.opacity,
+                  color: colorFromWord(item.text),
+                }}
+              >
+                {item.text}
+              </span>
+                ))}
+            </div>
+          </div>
+      )
+    }
 
 const normalizeType = (value?: string | null): BoardType => {
   if (value === 'poll' || value === 'question' || value === 'both') return value
@@ -227,17 +327,20 @@ const LiveResultsBoard = ({
               ))}
 
             {questionId && questionType !== 'single_choice' && (
-              <div className='space-y-2'>
-                {(questionResult?.recent_answers ?? []).slice(-8).map((answer, index) => (
-                  <p
-                    key={`open-answer-${index}`}
-                    className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
-                  >
-                    {answer}
-                  </p>
-                ))}
-                {!hasQuestionData && (
-                  <p className='text-sm text-muted-foreground'>Ingen tekstsvar registrert ennå.</p>
+              <div className='space-y-3'>
+                <QuestionWordCloud results={questionResult?.results} />
+
+                {(questionResult?.recent_answers?.length ?? 0) > 0 && (
+                  <div className='space-y-2'>
+                    {(questionResult?.recent_answers ?? []).slice(-6).map((answer, index) => (
+                      <p
+                        key={`open-answer-${index}`}
+                        className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
+                      >
+                        {answer}
+                      </p>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

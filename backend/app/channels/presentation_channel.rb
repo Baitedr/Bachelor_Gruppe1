@@ -168,10 +168,10 @@ class PresentationChannel < ApplicationCable::Channel
     end
 
     store = question_store_for_session(active_session.id, question[:id])
-    user_key = current_user.id.to_s
-    return if store['user_answers'].key?(user_key)
+    client_key = data['client_id'].presence || data[:client_id].presence || current_user.id.to_s
+    return if store['user_answers'].key?(client_key)
 
-    store['user_answers'][user_key] = answer
+    store['user_answers'][client_key] = answer
     store['results'][answer] = store['results'].fetch(answer, 0) + 1
     store['total'] = store['total'].to_i + 1
 

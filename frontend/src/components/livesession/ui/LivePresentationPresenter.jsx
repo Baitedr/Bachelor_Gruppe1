@@ -402,12 +402,12 @@ const LivePresentationPresenter = ({
                           Aktiver spørsmål: {question.prompt}
                         </Button>
 
-                        {result && (
-                          <div className='space-y-1 text-sm'>
+                        {(result || activeQuestion?.id === question.id) && (
+                          <div className='space-y-2 text-sm'>
                             <p className='font-medium'>Resultater ({total} svar)</p>
                             {questionType === 'single_choice' ? (
                               (question.options || []).map((option) => {
-                                const count = result.results?.[option.text] || 0
+                                const count = result?.results?.[option.text] || 0
                                 const percent = total > 0 ? Math.round((count / total) * 100) : 0
 
                                 return (
@@ -417,16 +417,14 @@ const LivePresentationPresenter = ({
                                 )
                               })
                             ) : (
-                              <div className='space-y-2'>
-                                {(result.recent_answers || []).slice(-5).map((answer, index) => (
-                                  <p
-                                    key={`${question.id}-${index}`}
-                                    className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
-                                  >
-                                    {answer}
-                                  </p>
-                                ))}
-                              </div>
+                              <LiveResultsBoard
+                                initialType='question'
+                                initialItemId={question.id}
+                                questionMeta={question}
+                                pollResults={pollResults}
+                                questionResults={questionResults}
+                                sessionEnded={sessionEnded}
+                              />
                             )}
                           </div>
                         )}

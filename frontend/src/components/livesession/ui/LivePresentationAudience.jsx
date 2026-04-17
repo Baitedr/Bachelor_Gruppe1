@@ -212,20 +212,31 @@ const LivePresentationAudience = ({
             ))}
           </div>
         ) : (
-          <div className='space-y-3'>
-            <Textarea
-              value={questionAnswer}
-              onChange={(event) => setQuestionAnswer(event.target.value)}
-              placeholder='Skriv svaret ditt her...'
-              className='min-h-[8rem] resize-y text-base'
+          <div className='space-y-4'>
+            <div className='space-y-3'>
+              <Textarea
+                value={questionAnswer}
+                onChange={(event) => setQuestionAnswer(event.target.value)}
+                placeholder='Skriv svaret ditt her...'
+                className='min-h-[8rem] resize-y text-base'
+              />
+              <Button
+                className='w-full sm:w-auto'
+                onClick={submitOpenQuestionAnswer}
+                disabled={!questionAnswer.trim()}
+              >
+                Send svar
+              </Button>
+            </div>
+
+            <LiveResultsBoard
+              initialType='question'
+              initialItemId={activeQuestion.id}
+              questionMeta={activeQuestion}
+              pollResults={pollResults}
+              questionResults={questionResults}
+              sessionEnded={sessionEnded}
             />
-            <Button
-              className='w-full sm:w-auto'
-              onClick={submitOpenQuestionAnswer}
-              disabled={!questionAnswer.trim()}
-            >
-              Send svar
-            </Button>
           </div>
         )
       ) : (
@@ -252,17 +263,14 @@ const LivePresentationAudience = ({
               <p className='text-xs text-muted-foreground'>Totalt antall svar: {totalQuestionAnswers}</p>
             </>
           ) : (
-            <div className='space-y-2'>
-              {(questionResults[activeQuestion.id]?.recent_answers || []).slice(-5).map((answer, index) => (
-                <p
-                  key={`answer-${index}`}
-                  className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
-                >
-                  {answer}
-                </p>
-              ))}
-              <p className='text-xs text-muted-foreground'>Totalt antall svar: {totalQuestionAnswers}</p>
-            </div>
+            <LiveResultsBoard
+              initialType='question'
+              initialItemId={activeQuestion.id}
+              questionMeta={activeQuestion}
+              pollResults={pollResults}
+              questionResults={questionResults}
+              sessionEnded={sessionEnded}
+            />
           )}
         </div>
       )}
