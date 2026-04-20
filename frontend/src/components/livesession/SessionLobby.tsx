@@ -1,37 +1,45 @@
-import React, { useEffect, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 
-const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted, onSessionEnd }) => {
+const SessionLobby = ({
+  presentationId,
+  joinCode,
+  isPresenter,
+  onSessionStarted,
+  onSessionEnd,
+}: {
+  presentationId: string | number | null
+  joinCode: string | null
+  isPresenter: boolean
+  onSessionStarted: () => void
+  onSessionEnd?: () => void
+}) => {
   const { participantCount, sessionStarted, startSession, sessionEnded } = usePresentation(
     presentationId,
-    localStorage.getItem('auth_token')
+    localStorage.getItem('auth_token'),
   )
 
-  //URL brukere kan dele for å bli med i økten
   const joinUrl = useMemo(() => {
     if (!joinCode) return ''
     if (typeof window === 'undefined') return ''
     return `${window.location.origin}/live/join/${joinCode}`
   }, [joinCode])
 
-  //API kommando: Lager QR-kode
   const qrCodeUrl = useMemo(() => {
     if (!joinUrl) return ''
     return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`
   }, [joinUrl])
 
-  // Når sessionStarted endres til true, kaller vi onSessionStarted callback for å informere parent-komponenten om at økten har startet.
   useEffect(() => {
-    if (sessionStarted)  onSessionStarted()
-    }, [sessionStarted, onSessionStarted])
+    if (sessionStarted) onSessionStarted()
+  }, [sessionStarted, onSessionStarted])
 
-  // Når sessionEnded endres til true, kaller vi onSessionEnd callback for å informere parent-komponenten om at økten har avsluttet.
   useEffect(() => {
-    if (sessionEnded && onSessionEnd) onSessionEnd() 
-    }, [sessionEnded, onSessionEnd])
+    if (sessionEnded && onSessionEnd) onSessionEnd()
+  }, [sessionEnded, onSessionEnd])
 
   return (
     <Card className='mx-auto w-full max-w-2xl'>
@@ -67,16 +75,15 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted,
           <p className='text-sm text-muted-foreground'>Venter på at presentatør skal starte...</p>
         )}
 
-        {/*qr kode*/}
         {isPresenter && qrCodeUrl && (
           <div className='pt-4'>
             <p className='mb-2 text-sm text-muted-foreground'>Skann QR-koden for å bli med</p>
             <img
-            src={qrCodeUrl}
-            alt='QR-kode for å bli med i live presentasjon'
-            width={180}
-            height={180}
-            className='mx-auto rounded-md border border-border bg-white p-2'
+              src={qrCodeUrl}
+              alt='QR-kode for å bli med i live presentasjon'
+              width={180}
+              height={180}
+              className='mx-auto rounded-md border border-border bg-white p-2'
             />
           </div>
         )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import LivePresentation from './components/livesession/LivePresentation'
+import LivePresentationProjectorShell from './components/livesession/LivePresentationProjectorShell'
 import Login from './components/Login'
 import PhoneInteraction from './components/livesession/joinSession'
 import PollPage from './components/polls/PollPage'
@@ -115,6 +116,14 @@ function App() {
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
+
+  /** Lysbildevindu (sekundærskjerm / popup) — leses én gang ved første render. */
+  const [liveProjectorPresentationId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('liveProjector') !== '1') return null
+    return p.get('presentationId')
+  })
 
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
@@ -744,11 +753,18 @@ function App() {
   }
 
   if (isAuthChecking) {
+    if (liveProjectorPresentationId) {
+      return <LivePresentationProjectorShell presentationId={liveProjectorPresentationId} />
+    }
     return (
       <div className='grid min-h-screen place-items-center bg-background text-foreground'>
         Laster...
       </div>
     )
+  }
+
+  if (liveProjectorPresentationId) {
+    return <LivePresentationProjectorShell presentationId={liveProjectorPresentationId} />
   }
 
   if (!user && !guestMode) {
