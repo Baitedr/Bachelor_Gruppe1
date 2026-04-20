@@ -1,7 +1,18 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 // TODO: Denne komponenten har vokst seg ganske stor og kompleks, og kunne nok hatt godt av å bli delt opp i mindre deler.
 type BoardType = 'poll' | 'question' | 'both'
+type OpenTextDisplayMode = 'word_cloud' | 'answer_list'
 
 type PollOption = {
   id: string | number
@@ -23,6 +34,8 @@ type QuestionAggregate = {
   total?: number
   recent_answers?: string[]
   question_type?: 'single_choice' | 'open_text'
+  openTextDisplayMode?: OpenTextDisplayMode
+  open_text_display_mode?: OpenTextDisplayMode
 }
 
 type LiveResultsBoardProps = {
@@ -42,8 +55,66 @@ type LiveResultsBoardProps = {
     id?: string | number
     prompt?: string
     type?: string
+    openTextDisplayMode?: OpenTextDisplayMode
+    open_text_display_mode?: OpenTextDisplayMode
     options?: QuestionOption[]
   } | null
+}
+
+type ResultsBarChartRow = {
+  id: string | number
+  text: string
+  value: number
+  percent: number
+}
+
+const BAR_PALETTE = ['#2563eb', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6']
+
+const ResultsBarChart = ({ rows, valueLabel }: { rows: ResultsBarChartRow[]; valueLabel: string }) => {
+  if (rows.length === 0) return null
+
+  const data = rows
+    .slice()
+    .sort((left, right) => right.value - left.value)
+    .map((row) => ({
+      name: row.text,
+      value: row.value,
+      percent: row.percent,
+      rowId: row.id,
+    }))
+
+  return (
+    <div className='h-64 w-full rounded-lg border border-border bg-muted/20 p-2'>
+      <ResponsiveContainer width='100%' height='100%'>
+        <BarChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 36 }}>
+          <CartesianGrid strokeDasharray='3 3' vertical={false} />
+          <XAxis
+            dataKey='name'
+            angle={-16}
+            textAnchor='end'
+            interval={0}
+            height={52}
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis allowDecimals={false} />
+          <Tooltip
+            formatter={(value, _name, item) => {
+              const numericValue = typeof value === 'number' ? value : Number(value ?? 0)
+              const percent =
+                typeof item?.payload?.percent === 'number' ? item.payload.percent : 0
+
+              return [`${numericValue} ${valueLabel} (${percent}%)`, 'Resultat']
+            }}
+          />
+          <Bar dataKey='value' radius={[6, 6, 0, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={String(entry.rowId)} fill={BAR_PALETTE[index % BAR_PALETTE.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }
 // -------- WORD CLOUD LOGIKK ---------
 type WordCloudItem = {
@@ -228,6 +299,17 @@ const LiveResultsBoard = ({
     })
   }, [pollOptions, pollResult])
 
+  const pollChartRows = useMemo<ResultsBarChartRow[]>(
+    () =>
+      pollRows.map((row) => ({
+        id: row.id,
+        text: row.text,
+        value: row.votes,
+        percent: row.percent,
+      })),
+    [pollRows]
+  )
+
   const questionType = (questionResult?.question_type ??
     (questionMeta?.type === 'single_choice' ? 'single_choice' : 'open_text')) as
     | 'single_choice'
@@ -249,10 +331,36 @@ const LiveResultsBoard = ({
     })
   }, [questionType, questionOptions, questionResult])
 
-  const hasQuestionData =
-    questionType === 'single_choice'
-      ? questionChoiceRows.length > 0
-      : (questionResult?.recent_answers?.length ?? 0) > 0
+  const questionChartRows = useMemo<ResultsBarChartRow[]>(
+    () =>
+      questionChoiceRows.map((row) => ({
+        id: row.id,
+        text: row.text,
+        value: row.count,
+        percent: row.percent,
+      })),
+    [questionChoiceRows]
+  )
+
+  const openTextDisplayMode: OpenTextDisplayMode =
+    questionResult?.openTextDisplayMode === 'answer_list' ||
+    questionResult?.open_text_display_mode === 'answer_list' ||
+    questionMeta?.openTextDisplayMode === 'answer_list' ||
+    questionMeta?.open_text_display_mode === 'answer_list'
+      ? 'answer_list'
+      : 'word_cloud'
+
+  const openTextRows = useMemo(
+    () =>
+      Object.entries(questionResult?.results ?? {})
+        .map(([answer, count], index) => ({
+          id: `open-text-${index}`,
+          answer,
+          count,
+        }))
+        .sort((left, right) => right.count - left.count),
+    [questionResult]
+  )
 
   return (
     <Card className='w-full border-2 border-border shadow-sm dark:border-border dark:shadow-md'>
@@ -281,22 +389,23 @@ const LiveResultsBoard = ({
               <p className='text-sm text-muted-foreground'>Ingen svar registrert ennå.</p>
             )}
 
-            {pollRows.map((row) => (
-              <div key={row.id} className='space-y-1'>
-                <div className='flex justify-between text-sm'>
-                  <span>{row.text}</span>
-                  <span className='text-muted-foreground'>
-                    {row.votes} ({row.percent}%)
-                  </span>
-                </div>
-                <div className='h-2 w-full overflow-hidden rounded bg-muted'>
-                  <div
-                    className='h-full bg-primary transition-[width] duration-300'
-                    style={{ width: `${row.percent}%` }}
-                  />
-                </div>
+            {pollRows.length > 0 && <ResultsBarChart rows={pollChartRows} valueLabel='stemmer' />}
+
+            {pollRows.length > 0 && (
+              <div className='space-y-1'>
+                {pollRows
+                  .slice()
+                  .sort((left, right) => right.votes - left.votes)
+                  .map((row) => (
+                    <div key={row.id} className='flex justify-between text-sm'>
+                      <span>{row.text}</span>
+                      <span className='text-muted-foreground'>
+                        {row.votes} ({row.percent}%)
+                      </span>
+                    </div>
+                  ))}
               </div>
-            ))}
+            )}
           </section>
         )}
 
@@ -313,28 +422,54 @@ const LiveResultsBoard = ({
               <p className='text-sm text-muted-foreground'>Ingen svar registrert ennå.</p>
             )}
 
-            {questionId &&
-              questionType === 'single_choice' &&
-              questionChoiceRows.map((row) => (
-                <div key={row.id} className='space-y-1'>
-                  <div className='flex justify-between text-sm'>
-                    <span>{row.text}</span>
-                    <span className='text-muted-foreground'>
-                      {row.count} ({row.percent}%)
-                    </span>
-                  </div>
-                  <div className='h-2 w-full overflow-hidden rounded bg-muted'>
-                    <div
-                      className='h-full bg-primary transition-[width] duration-300'
-                      style={{ width: `${row.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+            {questionId && questionType === 'single_choice' && questionChoiceRows.length > 0 && (
+              <ResultsBarChart rows={questionChartRows} valueLabel='svar' />
+            )}
+
+            {questionId && questionType === 'single_choice' && questionChoiceRows.length > 0 && (
+              <div className='space-y-1'>
+                {questionChoiceRows
+                  .slice()
+                  .sort((left, right) => right.count - left.count)
+                  .map((row) => (
+                    <div key={row.id} className='flex justify-between text-sm'>
+                      <span>{row.text}</span>
+                      <span className='text-muted-foreground'>
+                        {row.count} ({row.percent}%)
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
 
             {questionId && questionType !== 'single_choice' && (
               <div className='space-y-3'>
-                <QuestionWordCloud results={questionResult?.results} />
+                <div className='flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground'>
+                  <span>Visning av tekstsvar</span>
+                  <span>
+                    {openTextDisplayMode === 'word_cloud' ? 'Word cloud' : 'Vanlig svarliste'}
+                  </span>
+                </div>
+
+                {openTextDisplayMode === 'word_cloud' ? (
+                  <QuestionWordCloud results={questionResult?.results} />
+                ) : (
+                  <div className='space-y-2'>
+                    {openTextRows.length === 0 ? (
+                      <p className='text-sm text-muted-foreground'>Ingen tekstsvar registrert</p>
+                    ) : (
+                      openTextRows.slice(0, 12).map((row) => (
+                        <div
+                          key={row.id}
+                          className='flex items-start justify-between gap-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm'
+                        >
+                          <span className='wrap-break-word'>{row.answer}</span>
+                          <span className='shrink-0 text-muted-foreground'>{row.count}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
 
                 {(questionResult?.recent_answers?.length ?? 0) > 0 && (
                   <div className='space-y-2'>

@@ -68,6 +68,7 @@ type Poll = {
 };
 
 type QuestionType = 'open_text' | 'single_choice';
+type OpenTextDisplayMode = 'word_cloud' | 'answer_list';
 
 type QuestionOption = {
     id: string;
@@ -78,6 +79,7 @@ type QuestionItem = {
     id: string;
     prompt: string;
     type: QuestionType;
+    openTextDisplayMode?: OpenTextDisplayMode;
     required: boolean;
     options: QuestionOption[];
     createdAt: string;
@@ -1673,6 +1675,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                             </div>
                                             <span className="text-xs text-muted-foreground">
                                                 {question.type === 'single_choice' ? 'Single choice' : 'Åpent svar'}
+                                                {question.type === 'open_text'
+                                                    ? ` • ${question.openTextDisplayMode === 'answer_list' ? 'Svarliste' : 'Word cloud'}`
+                                                    : ''}
                                                 {question.required ? ' • Obligatorisk' : ''}
                                             </span>
                                         </div>
@@ -1853,12 +1858,19 @@ const normalizeQuestionOption = (option: unknown, questionIndex: number, optionI
 const normalizeQuestion = (question: unknown, questionIndex: number): QuestionItem => {
     const rawQuestion = (typeof question === 'object' && question !== null ? question : {}) as Partial<QuestionItem> & {
         options?: unknown[];
+        open_text_display_mode?: OpenTextDisplayMode;
     };
+
+    const openTextDisplayMode: OpenTextDisplayMode =
+        rawQuestion.openTextDisplayMode === 'answer_list' || rawQuestion.open_text_display_mode === 'answer_list'
+            ? 'answer_list'
+            : 'word_cloud';
 
     return {
         id: rawQuestion.id || `local-question-${Date.now()}-${questionIndex}`,
         prompt: rawQuestion.prompt || '',
         type: rawQuestion.type === 'single_choice' ? 'single_choice' : 'open_text',
+        openTextDisplayMode,
         required: Boolean(rawQuestion.required),
         options: Array.isArray(rawQuestion.options)
             ? rawQuestion.options
