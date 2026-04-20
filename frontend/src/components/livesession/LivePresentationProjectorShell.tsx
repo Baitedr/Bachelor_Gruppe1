@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Maximize, Minimize } from 'lucide-react'
 import { usePresentation } from '../../hooks/usePresentation'
 import { exitFullscreenDoc, getFullscreenElement, requestFullscreenEl } from '../../lib/fullscreenDisplay'
+import {
+  normalizePresentationVariables,
+  resolveFabricDataWithVariables,
+  resolveTextWithVariables,
+  type PresentationVariable,
+} from '../../lib/utils'
 import api from '../../services/api'
 import { Button } from '../ui/button'
 import { PresenterSlideViewport, type PresenterSlideData } from './PresenterSlideViewport'
@@ -15,6 +21,7 @@ type PresentationRecord = {
   id?: string | number
   title: string
   slides: SlideRecord[]
+  variables?: PresentationVariable[]
 }
 
 /**
@@ -77,9 +84,24 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   }, [sessionEnded])
 
   const rawSlideData = presentation?.slides?.[currentSlide]
-  const currentSlideData = (rawSlideData?.background
+  const presentationVariables = normalizePresentationVariables(
+    presentation?.variables ||
+      ((rawSlideData?.variables as unknown[]) ||
+        (rawSlideData?.background as { variables?: unknown[] } | undefined)?.variables ||
+        (presentation?.slides?.[0]?.background as { variables?: unknown[] } | undefined)?.variables ||
+        []),
+  )
+  const mergedSlideData = rawSlideData?.background
     ? { ...rawSlideData, ...rawSlideData.background }
-    : rawSlideData) as PresenterSlideData
+    : rawSlideData
+  const currentSlideData = (mergedSlideData
+    ? {
+        ...mergedSlideData,
+        title: resolveTextWithVariables(mergedSlideData.title, presentationVariables),
+        content: resolveTextWithVariables(mergedSlideData.content, presentationVariables),
+        fabricData: resolveFabricDataWithVariables(mergedSlideData.fabricData, presentationVariables),
+      }
+    : mergedSlideData) as PresenterSlideData
 
   const {
     handleNextSlide,

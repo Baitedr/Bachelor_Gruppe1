@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
+import {
+  normalizePresentationVariables,
+  resolveFabricDataWithVariables,
+  resolveTextWithVariables,
+  type PresentationVariable,
+} from '../../lib/utils'
 import api from '../../services/api'
 import LivePresentationAudience from './ui/LivePresentationAudience'
 import LivePresentationPresenter from './ui/LivePresentationPresenter'
@@ -12,6 +18,7 @@ type PresentationRecord = {
   id?: string | number
   title: string
   slides: SlideRecord[]
+  variables?: PresentationVariable[]
 }
 
 /**
@@ -77,9 +84,32 @@ const LivePresentation = ({
   }, [presentationId])
 
   const rawSlideData = presentation?.slides?.[currentSlide]
-  const currentSlideData = rawSlideData?.background
+  const presentationVariables = useMemo(() => {
+    const currentSlideVariables =
+      (rawSlideData?.variables as unknown[]) ||
+      (rawSlideData?.background as { variables?: unknown[] } | undefined)?.variables ||
+      []
+    const firstSlide = presentation?.slides?.[0] as SlideRecord | undefined
+    const firstSlideVariables =
+      (firstSlide?.variables as unknown[]) ||
+      (firstSlide?.background as { variables?: unknown[] } | undefined)?.variables ||
+      []
+
+    return normalizePresentationVariables(
+      presentation?.variables || currentSlideVariables || firstSlideVariables || [],
+    )
+  }, [presentation?.variables, presentation?.slides, rawSlideData])
+  const mergedSlideData = rawSlideData?.background
     ? ({ ...rawSlideData, ...rawSlideData.background } as typeof rawSlideData)
     : rawSlideData
+  const currentSlideData = mergedSlideData
+    ? ({
+        ...mergedSlideData,
+        title: resolveTextWithVariables(mergedSlideData.title, presentationVariables),
+        content: resolveTextWithVariables(mergedSlideData.content, presentationVariables),
+        fabricData: resolveFabricDataWithVariables(mergedSlideData.fabricData, presentationVariables),
+      } as typeof mergedSlideData)
+    : mergedSlideData
 
   const activePollResult = activePoll && typeof activePoll === 'object' && activePoll !== null && 'id' in activePoll
     ? pollResults[String((activePoll as { id: string | number }).id)]
