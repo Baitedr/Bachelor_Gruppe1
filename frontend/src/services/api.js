@@ -60,6 +60,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// Hjelpefunksjon for å sette eller fjerne token i localStorage
 const setToken = (token) => {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token)
@@ -68,11 +69,13 @@ const setToken = (token) => {
   }
 }
 
+// Hoved-API-objektet som eksporterer alle funksjoner for å kommunisere med backend.
 const api = {
   setAuthToken: (token) => {
     setToken(token);
   },
 
+  // Slides
   getSlides: async () => {
     const response = await axiosRetry(() => apiClient.get('/slides'), 1)
     return response.data
@@ -88,6 +91,7 @@ const api = {
     return response.data
   },
 
+  // Login 
   login: async (credentials) => {
     const response = await axiosRetry(
       () => apiClient.post('/auth/login', credentials),
@@ -102,6 +106,7 @@ const api = {
     return response.data
   },
 
+  // Oppdaterer brukerprofilen, for eksempel ved endring av navn. Tar et objekt med profildata og sender det til backend.
   updateProfile: async (profileData) => {
     const response = await axiosRetry(
       () => apiClient.patch('/auth/profile', profileData),
@@ -110,6 +115,7 @@ const api = {
     return response.data
   },
 
+  // Endrer brukerens passord ved å sende nåværende passord, nytt passord og bekreftelse til backend. Krever at brukeren er logget inn.
   changePassword: async ({ current_password, password, password_confirmation }) => {
     const response = await axiosRetry(
       () =>
@@ -125,6 +131,7 @@ const api = {
     return response.data
   },
 
+  // Logout - fjerner token fra localStorage og informerer backend om utlogging.
   logout: async () => {
     try {
       await axiosRetry(() => apiClient.post('/auth/logout'), 1)
@@ -150,6 +157,7 @@ const api = {
     return response.data
   },
 
+  // Henter detaljer for en spesifikk presentasjon basert på ID. 
   getPresentation: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.get(`/presentations/${presentationId}`),
@@ -158,6 +166,7 @@ const api = {
     return response.data
   },
 
+  // Oppretter en ny presentasjon ved å sende presentasjonsdata til backend. Returnerer data for den opprettede presentasjonen.
   createPresentation: async (presentationData) => {
     const response = await axiosRetry(
       () => apiClient.post('/presentations', { presentation: presentationData }),
@@ -166,6 +175,7 @@ const api = {
     return response.data
   },
 
+  // Oppdaterer en eksisterende presentasjon ved å sende oppdatert data til backend. Krever presentasjons-ID og det nye dataet for presentasjonen.
   updatePresentation: async (presentationId, presentationData) => {
     const response = await axiosRetry(
       () =>
@@ -177,6 +187,7 @@ const api = {
     return response.data
   },
 
+  // Sletter en presentasjon basert på ID ved å sende en DELETE-forespørsel til backend. Returnerer data fra responsen.
   deletePresentation: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.delete(`/presentations/${presentationId}`),
@@ -186,6 +197,7 @@ const api = {
   },
 
   // Sessions
+  // Starter en live presentasjonsøkt ved å sende en POST-forespørsel til backend med presentasjons-ID. Returnerer data om den startet økten.
   startSession: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.post(`/presentations/${presentationId}/start`),
@@ -194,6 +206,7 @@ const api = {
     return response.data
   },
 
+  // Avslutter en live presentasjonsøkt ved å sende en POST-forespørsel til backend med presentasjons-ID. Returnerer data om den avsluttede økten.
   endSession: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.post(`/presentations/${presentationId}/end_session`),
@@ -202,6 +215,7 @@ const api = {
     return response.data
   },
 
+  // Bli med i en live presentasjonsøkt som presentatør ved å sende en POST-forespørsel til backend med presentasjons-ID.
   joinPresentation: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.post(`/presentations/${presentationId}/join`),
@@ -210,6 +224,7 @@ const api = {
     return response.data
   },
 
+  // Blir med i en live presentasjon som deltaker via en join-kode. Sender POST forespørsel til backend med koden.
   joinByCode: async (code) => {
     const response = await axiosRetry(
       () => apiClient.post('/sessions/join_by_code', { code }),
@@ -221,6 +236,8 @@ const api = {
     return response.data
   },
 
+  // Blir med i en live presentasjon som gjest ved å sende en POST-forespørsel til backend med presentasjons-ID og join-kode. 
+  // Returnerer data om økten og lagrer gjestetoken for autentisering.
   guestJoin: async (code) => {
     const response = await axiosRetry(
       () => apiClient.post('/sessions/guest_join', { code }),
@@ -231,6 +248,7 @@ const api = {
     return response.data
   },
 
+  // Henter listen over deltakere i en live presentasjonsøkt basert på presentasjons-ID. Returnerer data om deltakerne.
   getParticipants: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.get(`/presentations/${presentationId}/participants`),
@@ -239,6 +257,7 @@ const api = {
     return response.data
   },
 
+  // Henter gjeldende tilstand for en live presentasjonsøkt basert på presentasjons-ID. Returnerer data om øktens tilstand, som om den har startet eller avsluttet.
   getSessionState: async (presentationId) => {
     const response = await axiosRetry(
       () => apiClient.get(`/presentations/${presentationId}/session_state`),
@@ -248,11 +267,13 @@ const api = {
   },
 
   // Polls
+  // Henter listen over alle avstemninger. Returnerer data om avstemningene.
   getPolls: async () => {
     const response = await axiosRetry(() => apiClient.get('/polls'), 1)
     return response.data
   },
 
+  // Oppretter en ny avstemning ved å sende avstemningsdata til backend. Returnerer data om den opprettede avstemningen.
   createPoll: async (pollData) => {
     const response = await axiosRetry(
       () => apiClient.post('/polls', { poll: pollData }),
@@ -261,6 +282,7 @@ const api = {
     return response.data
   },
 
+  // Sletter en avstemning basert på ID ved å sende en DELETE-forespørsel til backend. Returnerer data fra responsen.
   deletePoll: async (pollId) => {
     const response = await axiosRetry(
       () => apiClient.delete(`/polls/${pollId}`),
@@ -269,6 +291,7 @@ const api = {
     return response.data
   },
 
+  // Stemmer i en avstemning ved å sende en POST-forespørsel til backend med avstemnings-ID og valgt alternativ-ID. Returnerer data om den registrerte stemmen.
   votePoll: async (pollId, optionId) => {
     const response = await axiosRetry(
       () => apiClient.post(`/polls/${pollId}/vote`, { option_id: optionId }),

@@ -1,4 +1,6 @@
 class PresentationChannel < ApplicationCable::Channel
+  
+  # WS-kanal for sanntidsinteraksjoner i presentasjonsøkter, inkludert deltakelse, lysbildeendringer, spørsmål og avstemninger.
   def subscribed
     presentation = Presentation.find_by(id: params[:presentation_id])
     return reject unless presentation
@@ -36,6 +38,7 @@ class PresentationChannel < ApplicationCable::Channel
   def unsubscribed
   end
 
+  # Presentatør starter en presentasjonsøkt, som gjør at deltakere kan bli med og interagere i sanntid.
   def start_session(_data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
@@ -64,6 +67,7 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
+  # Presentatør navigerer til et spesifikt lysbilde, og nullstiller aktive polls for å sikre korrekt visning.
   def navigate_slide(data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
@@ -135,6 +139,7 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
+  # Presentatør aktiverer et spørsmål på lysbildet, og sender det til alle deltakere for visning og interaksjon.
   def activate_question(data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
@@ -151,6 +156,7 @@ class PresentationChannel < ApplicationCable::Channel
     broadcast_question_results(presentation, active_session, question) if active_session
   end
 
+  # Deltaker sender svar på et spørsmål, som lagres og oppdateres i sanntid for alle deltakere.
   def submit_question_response(data)
     presentation = Presentation.find(params[:presentation_id])
     active_session = active_session_for_presentation(presentation)
@@ -167,6 +173,7 @@ class PresentationChannel < ApplicationCable::Channel
       return unless valid
     end
 
+    # Lagrer svar i cache for rask tilgang og sanntidsoppdatering, og unngår duplikater basert på client_id eller user_id.
     store = question_store_for_session(active_session.id, question[:id])
     client_key = data['client_id'].presence || data[:client_id].presence || current_user.id.to_s
     return if store['user_answers'].key?(client_key)
@@ -174,7 +181,7 @@ class PresentationChannel < ApplicationCable::Channel
     store['user_answers'][client_key] = answer
     store['results'][answer] = store['results'].fetch(answer, 0) + 1
     store['total'] = store['total'].to_i + 1
-
+    # For åpne tekst-svar, lagrer vi de siste 20 svarene for visning i liveboard-resultater.
     if question[:type] == 'open_text'
       store['recent_answers'] ||= []
       store['recent_answers'] << answer
@@ -185,16 +192,21 @@ class PresentationChannel < ApplicationCable::Channel
     broadcast_question_results(presentation, active_session, question)
   end
 
+  # Hjelpemetode for å generere en unik cache-nøkkel for lagring av spørsmålssvar basert på presentasjons-ID, økt-ID og spørsmål-ID.
   def question_store_key(session_id, question_id)
     "presentation_session:#{params[:presentation_id]}:session:#{session_id}:question:#{question_id}"
   end
 
+  # Hjelpemetode for å hente eller initialisere lagringsstruktur for spørsmålssvar i cache, som inkluderer resultater, 
+  # total antall svar, individuelle bruker-svar og nylige åpne tekst-svar.
   def question_store_for_session(session_id, question_id)
     Rails.cache.fetch(question_store_key(session_id, question_id)) do
       { 'results' => {}, 'total' => 0, 'user_answers' => {}, 'recent_answers' => [] }
     end
   end
 
+  # Hjelpemetode for å finne et spørsmål i en presentasjon basert på spørsmål-ID, 
+  # ved å iterere gjennom lysbildene og deres bakgrunnsdata for å finne matchende spørsmål.
   def find_question_in_presentation(presentation, question_id)
     target_id = question_id.to_s
     presentation.slides.each do |slide|
@@ -220,6 +232,7 @@ class PresentationChannel < ApplicationCable::Channel
     nil
   end
 
+  # Hjelpemetode for å formatere et spørsmål i en standard struktur for sending til klienter, inkludert ID, prompt, type og alternativer.
   def serialize_question(question)
     {
       id: question[:id],
@@ -229,6 +242,7 @@ class PresentationChannel < ApplicationCable::Channel
     }
   end
 
+  # Hjelpemetode for å sende oppdaterte resultater for et spørsmål til alle deltakere i sanntid.
   def broadcast_question_results(presentation, active_session, question)
     store = question_store_for_session(active_session.id, question[:id])
     PresentationChannel.broadcast_to(
@@ -243,7 +257,8 @@ class PresentationChannel < ApplicationCable::Channel
       }
     )
   end
-  
+
+  # Presentatør aktiverer en poll, og sender den til alle deltakere for visning og interaksjon.
   def activate_poll(data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
@@ -264,6 +279,7 @@ class PresentationChannel < ApplicationCable::Channel
     broadcast_poll_results(poll, active_session_for_presentation(presentation))
   end
 
+  # Deltaker sender svar på en poll, som lagres i databasen og oppdateres i sanntid for alle deltakere.
   def submit_poll_response(data)
     poll = Poll.includes(slide: :presentation).find(data['poll_id'])
     presentation = poll.slide&.presentation
@@ -294,10 +310,12 @@ class PresentationChannel < ApplicationCable::Channel
 
   private
 
+  # Hjelpemetode for å finne den aktive presentasjonsøkten for en gitt presentasjon, som er nødvendig for å håndtere deltakelse og interaksjoner i sanntid.
   def active_session_for_presentation(presentation)
     presentation.presentation_sessions.find_by(ended_at: nil)
   end
 
+  # Hjelpemetode for å sende oppdaterte resultater for en poll til alle deltakere i sanntid, basert på svarene som er lagret i databasen for den aktive økten.
   def broadcast_poll_results(poll, active_session)
     return unless active_session
 
@@ -316,6 +334,8 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
+  # Hjelpemetode for å formatere en poll i en struktur som inkluderer spørsmål, alternativer og nåværende stemme-telling,
+  # basert på svarene som er lagret i databasen for den aktive økten.
   def serialize_poll(poll, active_session)
     counts = if active_session
                poll.poll_responses.where(presentation_session_id: active_session.id).group(:answer).count

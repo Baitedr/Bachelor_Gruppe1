@@ -402,6 +402,7 @@ function App() {
     }
   }
 
+  // Håndterer åpningen av en eksisterende presentasjon ved å hente data fra backend og navigere til editoren, med tilstandshåndtering for innlastning og feil.
   const handleOpenPresentation = async (presentationId: string) => {
     if (openingPresentationId !== null) return
 
@@ -421,6 +422,11 @@ function App() {
   }
 }
 
+  /* 
+   * Håndterer lagring av presentasjonen ved å sende oppdaterte data til backend og oppdatere lokal state, 
+   * med tilbakemelding til editoren når lagring er fullført. 
+   * Navigerer ikke bort fra editoren, da dette kan kalles både fra manuell lagring og autosave.
+   */
   const handleSavePresentation = async (payload: Record<string, unknown>) => {
     setIsSavingPresentation(true)
     try {
@@ -539,6 +545,7 @@ function App() {
     }
   }
 
+  // Viser dialog for permanent sletting av en presentasjon fra papirkurven, og hvis bekreftet, sletter den for godt.
   const handleDeletePermanently = (trashId: string) => {
     const trashedItem = trashedPresentations.find((item) => item.id === trashId)
     if (!trashedItem) return
@@ -592,8 +599,10 @@ function App() {
     )
   }
 
+  // Fjerner all session-relatert state ved utlogging.
   const clearSessionState = () => sessionStorage.removeItem('proslides_session')
 
+  // Håndterer oppstart av en live presentasjonsøkt ved å kommunisere med backend, sette relevant state og navigere til lobbyen.
   const handleStartLive = async (presentationId: string) => {
     setStartingLivePresentationId(presentationId)
     setPresentationsError(null)
@@ -611,6 +620,7 @@ function App() {
     }
   }
 
+  // Håndterer at en gjest blir med i en live presentasjonsøkt ved å sette relevant state og navigere til lobbyen.
   const handleGuestJoin = (presentationId: string | number) => {
     const normalizedPresentationId = String(presentationId)
     saveSessionState('lobby', normalizedPresentationId, null, true, false)
@@ -621,6 +631,7 @@ function App() {
     setCurrentPage('lobby')
   }
 
+  // Håndterer utlogging ved å rydde all relevant state, både lokalt og i sessionStorage, og navigere til login-siden.
   const handleLogout = async () => {
     await api.logout()
     dismissNavbarToast() // ikke la toast henge igjen etter utlogging
@@ -639,6 +650,7 @@ function App() {
     setCurrentPage('login')
   }
 
+  // Håndterer navigering "hjem" fra editoren, med sjekk for usaved changes og visning av dialog for å velge mellom å lagre, forkaste eller avbryte navigering.
   const handleGoHome =  () => {
     if (isSavingPresentation || isDiscardingPresentation) return
 
@@ -659,6 +671,7 @@ function App() {
   }
 
 
+  // Håndterer avslutning av en live presentasjonsøkt ved å kommunisere med backend for å avslutte økten, rydde session-relatert state og navigere hjem.
   const handleEndLiveSession = async () => {
     if (livePresentationId) {
       try {
@@ -673,11 +686,13 @@ function App() {
     setLivePresentationId(null)
   }
 
+  // Håndterer oppdatering av brukerens profilnavn ved å sende oppdaterte data til backend og oppdatere lokal state.
   const handleUpdateProfileName = async (name: string) => {
     const data = await api.updateProfile({ name })
     setUser((previous) => ({ ...(previous || {}), ...(data?.user || {}), name }))
   }
 
+  // Håndterer passordendring ved å sende nødvendig data til backend og oppdatere lokal state basert på responsen.
   const handleChangePassword = async (payload: {
     current_password?: string
     password: string
@@ -692,6 +707,7 @@ function App() {
     }
   }
 
+  // Håndterer forkasting av en presentasjon og navigering hjem, med sjekk for pågående lagring eller forkasting.
   const handleDiscardAndGoHome = async () => {
     if (isSavingPresentation || isDiscardingPresentation) return
 
@@ -714,6 +730,7 @@ function App() {
     }
   }
 
+  // Håndterer lagring av en presentasjon og navigering hjem, med sjekk for pågående lagring og om det faktisk var noe å lagre.
   const handleSaveAndGoHome = async () => {
     if (isSavingPresentation) return
 
@@ -798,6 +815,10 @@ function App() {
     )
   }
 
+  /*
+   Både live-økt og editor har behov for låst viewport-høyde slik at flex-1 og canvas får reell høyde å skalere i,
+   mens home og login kan ha vanlig min-h-screen som vokser med innhold.
+  */
   const isLiveSessionPage =
     currentPage === 'phoneinteraction' || currentPage === 'lobby' || currentPage === 'live'
 

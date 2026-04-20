@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
-
+// TODO: Denne komponenten har vokst seg ganske stor og kompleks, og kunne nok hatt godt av å bli delt opp i mindre deler.
 type BoardType = 'poll' | 'question' | 'both'
 
 type PollOption = {
@@ -45,7 +45,7 @@ type LiveResultsBoardProps = {
     options?: QuestionOption[]
   } | null
 }
-// WORD CLOUD LOGIKK
+// -------- WORD CLOUD LOGIKK ---------
 type WordCloudItem = {
   text: string
   count: number 
@@ -53,6 +53,7 @@ type WordCloudItem = {
   opacity: number
 }
 
+// Normaliserer tekst ved å fjerne diakritiske tegn, gjøre alt til små bokstaver, og fjerne spesialtegn (unntatt mellomrom og bindestreker).
 const normalizeWordSource = (value: string) =>
   value
     .normalize('NFKD')
@@ -63,8 +64,9 @@ const normalizeWordSource = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+// Formaterer teksten for visning ved å erstatte flere mellomrom med ett enkelt og trimme det.
 const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').trim()
-
+  // Bygger en liste av WordCloudItem basert på resultatene, og rangerer dem etter forekomst.
   const buildWordCloudItems = (results?: Record<string, number>): WordCloudItem[] => {
     if (!results) return []
 
@@ -87,7 +89,8 @@ const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').tri
         count: answerCount,
       })
     })
-
+   
+    // Rangering og skalering av ord basert på forekomst, og begrenser til topp 30.
     const ranked = Array.from(counts.values())
       .filter((item) => item.count > 0)
       .sort((left, right) => right.count - left.count)
@@ -105,7 +108,7 @@ const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').tri
         }
       })
     }
-
+    // Genererer en farge basert på ordets tekst ved å hashe det og konvertere til en HSL-farge.
     const colorFromWord = (word: string): string => {
       let hash = 0
       for (let index = 0; index < word.length; index += 1) {
@@ -118,7 +121,8 @@ const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').tri
     type QuestionWordCloudProps = {
       results?: Record<string, number>
     }
-
+    // Komponent som viser en ordsky basert på tekstsvarene i et spørsmål, 
+    // hvor størrelsen og opasiteten til hvert ord reflekterer hvor ofte det har blitt svart.
     const QuestionWordCloud = ({ results }: QuestionWordCloudProps) => {
       const items = useMemo(() => buildWordCloudItems(results), [results])
       if (items.length === 0) {
@@ -146,13 +150,15 @@ const formatPhraseForDisplay = (value: string) => value.replace(/\s+/g, ' ').tri
       )
     }
 
+// Normaliserer og validerer typen for resultattavlen, og faller tilbake til 'both' hvis den er ugyldig eller ikke angitt.
 const normalizeType = (value?: string | null): BoardType => {
   if (value === 'poll' || value === 'question' || value === 'both') return value
   return 'both'
 }
-
+// Konverterer en verdi til en string-ID, og håndterer null eller undefined ved å returnere en tom string.
 const toId = (value?: string | number | null) => (value == null ? '' : String(value))
 
+// Hovedkomponenten for LiveResultsBoard som viser sanntidsresultater for avstemninger og spørsmål i en live-økt, basert på de gitte propsene.
 const LiveResultsBoard = ({
   initialType,
   initialItemId,

@@ -26,6 +26,8 @@ const getLiveClientId = () => {
   return clientId
 }
 
+// Hoved-hook for å håndtere WebSocket-tilkobling og state for en live presentasjonsøkt, 
+// inkludert lysbildeindeks, aktive polls/spørsmål, deltakerantall og øktstatus.
 export const usePresentation = (presentationId, token) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [activePoll, setActivePoll] = useState(null);
@@ -43,6 +45,10 @@ export const usePresentation = (presentationId, token) => {
   const cableRef = useRef(null);
   const subscriptionRef = useRef(null);
 
+  /* 
+   * Når presentationId eller token endres, (re)etablerer vi WebSocket-tilkoblingen og setter opp 
+  * abonnementet for å motta sanntidsoppdateringer om presentasjonsøkten.
+  */
   useEffect(() => {
     if (!presentationId || !token) return
 
@@ -56,6 +62,10 @@ export const usePresentation = (presentationId, token) => {
     const consumer = createConsumer(`${wsBase}/cable?token=${token}`)
     cableRef.current = consumer
 
+    /*
+      * Når vi mottar data fra WebSocket, håndterer vi forskjellige typer meldinger for å oppdatere state i sanntid,
+      * for eksempel når lysbildet endres, når en poll aktiveres, eller når deltakerantallet oppdateres.
+    */
     const subscription = consumer.subscriptions.create(
       { channel: 'PresentationChannel', presentation_id: presentationId },
       {

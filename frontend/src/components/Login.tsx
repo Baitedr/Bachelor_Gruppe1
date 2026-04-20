@@ -47,6 +47,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
     }
   }, [])
 
+  /*
+   * Hjelpemetode for å evaluere styrken på et passord basert på lengde og kompleksitet, og returnere en score,
+   * etikett og farge som kan brukes i UI for å gi tilbakemelding til brukeren under registrering.
+  */
   const getPasswordStrength = (pass: string) => {
     if (!pass) return { score: 0, label: '', color: 'bg-muted' }
     let score = 1
@@ -65,6 +69,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
 
   const strength = getPasswordStrength(password)
 
+  /*
+    * Håndterer innsending av login eller registreringsskjema ved å validere input, sende forespørsel til API og håndtere responsen.
+  */
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
@@ -96,6 +103,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
     }
   }
 
+  // Håndterer innsending av gjest-join-skjema ved å validere øktkoden, 
+  // sende forespørsel til API og håndtere responsen for å bli med i en presentasjonsøkt som gjest.
   const handleGuestJoin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const suffix = sanitizeLiveCodeSuffix(guestCode)

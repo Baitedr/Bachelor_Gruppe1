@@ -23,11 +23,12 @@ const SessionLobby = ({ presentationId, joinCode, isPresenter, onSessionStarted,
     return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`
   }, [joinUrl])
 
-
+  // Når sessionStarted endres til true, kaller vi onSessionStarted callback for å informere parent-komponenten om at økten har startet.
   useEffect(() => {
     if (sessionStarted)  onSessionStarted()
     }, [sessionStarted, onSessionStarted])
 
+  // Når sessionEnded endres til true, kaller vi onSessionEnd callback for å informere parent-komponenten om at økten har avsluttet.
   useEffect(() => {
     if (sessionEnded && onSessionEnd) onSessionEnd() 
     }, [sessionEnded, onSessionEnd])

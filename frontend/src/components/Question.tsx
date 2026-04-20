@@ -26,6 +26,7 @@ type Props = {
   onCancel?: () => void;
 };
 
+// Komponent for å opprette eller redigere et spørsmål, med støtte for både åpne tekstsvar og flervalgsspørsmål, og validering av input før lagring.
 export default function Question({ initialData = null, onSave, onCancel }: Props) {
   const [prompt, setPrompt] = useState(initialData?.prompt || '');
   const [questionType, setQuestionType] = useState<QuestionType>(initialData?.type ?? 'open_text');
@@ -34,12 +35,15 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
     initialData?.options?.map((option) => option.text) || ['', '']
   );
 
+  // Legger til et nytt tomt alternativ i listen over alternativer for flervalgsspørsmål.
   const addOption = () => setOptions((previous) => [...previous, '']);
-
+  
+  // Fjerner et alternativ basert på indeksen i listen over alternativer for flervalgsspørsmål.
   const removeOption = (index: number) => {
     setOptions((previous) => previous.filter((_, optionIndex) => optionIndex !== index));
   };
 
+  // Oppdaterer teksten for et spesifikt alternativ basert på indeksen i listen over alternativer for flervalgsspørsmål.
   const updateOption = (index: number, value: string) => {
     setOptions((previous) => {
       const next = [...previous];
@@ -48,6 +52,7 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
     });
   };
 
+  // Håndterer lagring av spørsmålet ved å validere input, generere nødvendige data og kalle onSave callbacken med det nye eller oppdaterte spørsmålet.
   const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -56,12 +61,14 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
       return;
     }
 
+    // For flervalgsspørsmål, validerer at det er minst 2 gyldige alternativer (ikke tomme eller bare whitespace) før lagring.
     const validOptions = options.map((option) => option.trim()).filter(Boolean);
     if (questionType === 'single_choice' && validOptions.length < 2) {
       alert('Flervalgsspørsmål må ha minst 2 alternativer');
       return;
     }
 
+    // Lager en unik ID for spørsmålet basert på eksisterende ID eller nåværende timestamp, og forbereder dataene for lagring.
     const timestamp = Date.now();
 
     onSave({
@@ -96,7 +103,7 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
           className="w-full rounded-md border border-input bg-background p-2"
         >
           <option value="open_text">Åpent svar</option>
-          {/* <option value="single_choice">Single choice</option> */}
+          <option value="single_choice">Flervalgsspørsmål</option> 
         </select>
       </div>
 
