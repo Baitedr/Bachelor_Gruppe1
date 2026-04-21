@@ -25,6 +25,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 // hjelpefunksjoner for å normalisere og håndtere presentasjonsvariabler
 import {
@@ -89,6 +90,7 @@ type Slide = {
     id: string;
     title: string;
     content: string;
+    notes: string;
     backgroundColor: string;
     fabricData: unknown;
     polls: Poll[];
@@ -106,6 +108,7 @@ type PresentationData = {
 type SaveSlidePayload = {
     title: string;
     content: string;
+    notes: string;
     backgroundColor: string;
     fabricData: unknown;
     previewImage?: string | null;
@@ -128,6 +131,7 @@ const defaultSlide = (index = 1): Slide => ({
     id: `local-${Date.now()}`,
     title: `Lysbilde ${index}`, // Slide
     content: '',
+    notes: '',
     backgroundColor: '#ffffff',
     fabricData: createDefaultSlideFabricData(),
     polls: [],
@@ -361,6 +365,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: slide.id || `local-${Date.now()}-${index}`,
             title: slide.title || `Lysbilde ${index + 1}`,
             content: slide.content || '',
+            notes: slide.notes || '',
             backgroundColor: slide.backgroundColor || '#ffffff',
             fabricData: slide.fabricData || null,
             polls: Array.isArray(slide.polls)
@@ -747,6 +752,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             id: `local-${Date.now()}`,
             title: `Lysbilde ${currentSlides.length + 1}`,
             content: '',
+            notes: '',
             backgroundColor: '#ffffff',
             fabricData: createDefaultSlideFabricData(),
             polls: [],
@@ -1149,6 +1155,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
       slides: slidesToSave.map((slide, index) => ({
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
+        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
@@ -1177,6 +1184,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
         id: slide?.id ?? `local-${Date.now()}-${index}`,
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
+        notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
                 previewImage: slide?.previewImage || null,
@@ -1539,6 +1547,32 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             <canvas ref={canvasRef} />
                         </div>
                     </div>
+                </div>
+
+                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+                    <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Presentatørnotater</Label>
+                    <Textarea
+                        id="presenter-notes"
+                        value={slides[currentSlideIndex]?.notes || ''}
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            markDirty();
+                            setSlides((prevSlides) => {
+                                const nextSlides = [...prevSlides];
+                                const current = nextSlides[currentSlideIndex];
+                                if (!current) return prevSlides;
+
+                                nextSlides[currentSlideIndex] = {
+                                    ...current,
+                                    notes: value,
+                                };
+
+                                return nextSlides;
+                            });
+                        }}
+                        placeholder="Skriv notater for deg selv som vises i live presentatørmodus"
+                        className="min-h-21 resize-y"
+                    />
                 </div>
             </div>
 
