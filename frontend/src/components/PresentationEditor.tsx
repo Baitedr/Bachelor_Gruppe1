@@ -1,4 +1,4 @@
-import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
 import {
     BarChart3,
@@ -189,7 +189,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [canvasScale, setCanvasScale] = useState(1);
 
     const hasUnsavedChangesRef = useRef(false);
-
+    const loadedPresentationRef = useRef<PresentationData | null>(null)
     
     
 
@@ -348,6 +348,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     // Synkroniserer innkommende presentasjon fra parent til lokal editor-state.
     useEffect(() => {
         if (!presentation) {
+            loadedPresentationRef.current = null
             setPresentationId(null);
             setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
@@ -356,6 +357,16 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             hasUnsavedChangesRef.current = false;
             return;
         }
+
+        const incomingId = presentation.id ?? null
+        const loadedId = loadedPresentationRef.current?.id ?? null
+
+        if (incomingId && loadedId && String(incomingId) === String(loadedId)) {
+            return
+        }
+
+
+        loadedPresentationRef.current = presentation
 
         const normalizedVariables = normalizePresentationVariables(
             presentation.variables || presentation.slides?.[0]?.variables || []
@@ -1042,6 +1053,8 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             fabricCanvasRef.current.remove(...activeObjects);
             fabricCanvasRef.current.discardActiveObject();
             fabricCanvasRef.current.renderAll();
+            markDirty();
+            pushHistorySnapshot(createCanvasSnapshot())
         }
     };
 
@@ -1086,6 +1099,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         await applyCanvasSnapshot(previousSnapshot);
         setUndoStack((previousStack) => previousStack.slice(0, -1));
         setRedoStack((previousStack) => [currentSnapshot, ...previousStack]);
+        markDirty();
 
         const currentId = currentSlideIdRef.current;
         if (currentId && fabricCanvasRef.current) {
@@ -1115,6 +1129,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             return [...previousStack, nextSnapshot];
         });
         setRedoStack(remainingSnapshots);
+        markDirty();
 
         const currentId = currentSlideIdRef.current;
         if (currentId && fabricCanvasRef.current) {
