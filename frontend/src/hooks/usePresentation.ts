@@ -266,7 +266,6 @@ export const usePresentation = (presentationId: string | number | null, token: s
     activePoll,
     pollResults,
     navigateSlide,
-    clearLiveInteractions,
     liveboardForSlideIndex,
     showLiveboard,
     dismissLiveboard,
