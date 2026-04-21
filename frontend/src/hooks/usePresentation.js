@@ -204,13 +204,6 @@ export const usePresentation = (presentationId, token) => {
     }
   }
 
-  /** Kall fra presentatør før «liveboard»-steget: publikum mister overlay, samme lysbilde. */
-  const clearLiveInteractions = () => {
-    if (subscriptionRef.current) {
-      subscriptionRef.current.perform('clear_live_interactions', {})
-    }
-  }
-
   /** Synkron liveboard for alle (steg etter spørsmål, før faktisk neste lysbilde). */
   const showLiveboard = (slideIndex) => {
     if (subscriptionRef.current) {
@@ -275,7 +268,6 @@ export const usePresentation = (presentationId, token) => {
     activePoll,
     pollResults,
     navigateSlide,
-    clearLiveInteractions,
     liveboardForSlideIndex,
     showLiveboard,
     dismissLiveboard,

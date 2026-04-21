@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_07_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_21_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -66,37 +66,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000100) do
     t.index ["user_email"], name: "index_presentations_on_user_email"
   end
 
-  create_table "refresh_tokens", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
-    t.datetime "expires_at", precision: nil, null: false
-    t.boolean "revoked", default: false
-    t.text "token", null: false
-    t.uuid "user_id"
-
-    t.unique_constraint ["token"], name: "refresh_tokens_token_key"
-  end
-
-  create_table "roles", id: :serial, force: :cascade do |t|
-    t.text "name", null: false
-
-    t.unique_constraint ["name"], name: "roles_name_key"
-  end
-
   create_table "session_participants", primary_key: ["session_id", "user_id"], force: :cascade do |t|
     t.datetime "joined_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.uuid "session_id", null: false
     t.uuid "user_id", null: false
-  end
-
-  create_table "slide_elements", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
-    t.jsonb "content"
-    t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
-    t.jsonb "position", null: false
-    t.uuid "slide_id"
-    t.jsonb "style"
-    t.text "type", null: false
-    t.integer "z_index", default: 0
-    t.index ["slide_id"], name: "idx_elements_slide_id"
   end
 
   create_table "slides", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
@@ -116,10 +89,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000100) do
     t.text "oauth_provider"
     t.text "oauth_uid"
     t.text "password_hash"
-    t.datetime "reset_password_sent_at"
-    t.text "reset_password_token_digest"
     t.index ["oauth_provider", "oauth_uid"], name: "index_users_on_oauth_provider_and_oauth_uid", unique: true, where: "((oauth_provider IS NOT NULL) AND (oauth_uid IS NOT NULL))"
-    t.index ["reset_password_sent_at"], name: "index_users_on_reset_password_sent_at"
     t.unique_constraint ["email"], name: "users_email_key"
   end
 
@@ -130,9 +100,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_000100) do
   add_foreign_key "polls", "users", column: "owner_id", on_delete: :cascade
   add_foreign_key "presentation_sessions", "presentations", name: "presentation_sessions_presentation_id_fkey", on_delete: :cascade
   add_foreign_key "presentations", "users", column: "owner_id", name: "presentations_owner_id_fkey", on_delete: :cascade
-  add_foreign_key "refresh_tokens", "users", name: "refresh_tokens_user_id_fkey", on_delete: :cascade
   add_foreign_key "session_participants", "presentation_sessions", column: "session_id", name: "session_participants_session_id_fkey", on_delete: :cascade
   add_foreign_key "session_participants", "users", name: "session_participants_user_id_fkey", on_delete: :cascade
-  add_foreign_key "slide_elements", "slides", name: "slide_elements_slide_id_fkey", on_delete: :cascade
   add_foreign_key "slides", "presentations", name: "slides_presentation_id_fkey", on_delete: :cascade
 end

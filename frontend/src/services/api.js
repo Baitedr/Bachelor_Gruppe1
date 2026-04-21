@@ -75,12 +75,6 @@ const api = {
     setToken(token);
   },
 
-  // Slides
-  getSlides: async () => {
-    const response = await axiosRetry(() => apiClient.get('/slides'), 1)
-    return response.data
-  },
-
   // Authentication
   register: async (credentials) => {
     const response = await axiosRetry(
