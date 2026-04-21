@@ -518,8 +518,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         };
 
         const handleCanvasChangeWithPreview = () => {
-            if (isApplyingCanvasStateRef.current) return
-            markDirty();
+            handleCanvasChange();
             updatePreview();
         }
         // For tekstobjekter må vi også oppdatere templateText for å kunne bevare variabelplaceholder og oppdatere dem dynamisk senere hvis variablene endres. 
@@ -529,7 +528,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             if (isTextObject(event?.target)) {
                 event.target.set('templateText', typeof event.target.text === 'string' ? event.target.text : '');
             }
-            markDirty();
+            handleCanvasChange();
             updatePreview();
         }
 
@@ -539,14 +538,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             const templateText = typeof event.target.templateText === 'string'
                 ? event.target.templateText
                 : (typeof event.target.text === 'string' ? event.target.text : '');
-
             event.target.set('text', templateText);
             canvas.renderAll();
         }
 
         const handleTextEditingExited = (event: any) => {
             if (!isTextObject(event?.target)) return;
-
             const templateText = typeof event.target.text === 'string' ? event.target.text : '';
             event.target.set('templateText', templateText);
             event.target.set('text', templateText);
@@ -560,7 +557,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
-        canvas.on('text:changed', updatePreview);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
         canvas.on('selection:cleared', syncHasSelectedShape);
@@ -572,7 +568,6 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
             canvas.off('text:changed', handleTextChange);
-            canvas.off('text:changed', updatePreview);
             canvas.off('text:editing:entered', handleTextEditingEntered);
             canvas.off('text:editing:exited', handleTextEditingExited);
             canvas.off('selection:created', syncHasSelectedShape);
