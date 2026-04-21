@@ -206,7 +206,7 @@ export default function Navbar({
                 </form>
 
                 <div className='space-y-2'>
-                  <Label>Passord</Label>
+                  <Label></Label>
                   {!showPasswordForm ? (
                     <Button
                       type='button'
