@@ -1550,7 +1550,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                 </div>
 
                 <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
-                    <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Presentatørnotater</Label>
+                    <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Notater for slides</Label>
                     <Textarea
                         id="presenter-notes"
                         value={slides[currentSlideIndex]?.notes || ''}
