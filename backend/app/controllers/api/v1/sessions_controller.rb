@@ -108,6 +108,8 @@ module Api
                 if session
                     session.update!(ended_at: Time.current)
                     presentation.update!(is_live: false)
+                    delete_guest_users_from_session(session)
+                    delete_session_data(session)
                 end
 
                 render json: {
@@ -182,6 +184,31 @@ module Api
                     password: build_guest_password,
                     name: 'Gjest'
                 )
+            end
+
+            def delete_guest_user(user)
+                return unless user.email.end_with?('@guest.proslides')
+
+                user.destroy
+            end
+
+            def delete_guest_users_from_session(session)
+                session.session_participants.each do |participant|
+                    delete_guest_user(participant.user)
+                end
+            end
+
+            def delete_session_data(session)
+                PollResponse.where(presentation_session_id: session.id).destroy_all
+                SessionParticipant.where(session_id: session.id).destroy_all
+
+                session.destroy!
+            end
+
+            def delete_live_session_from_presentation(presentation)
+                presentation.presentation_sessions.where.not(ended_at: nil).each do |session|
+                    delete_session_data(session)
+                end
             end
 
             def build_guest_password
