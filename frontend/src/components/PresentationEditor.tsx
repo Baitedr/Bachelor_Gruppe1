@@ -144,15 +144,16 @@ export type PresentationEditorHandle = {
 };
 
 type PresentationEditorProps = {
-    presentation?: PresentationData | null;
-    onSavePresentation?: (payload: any) => Promise<any>;
-    isSaving?: boolean;
-    /** Kalles etter vellykket lagring (navbar oppdaterer «sist lagret») */
-    onSaveComplete?: (savedAt: Date) => void;
+   presentation: any 
+   onSavePresentation: (payload: Record<string, unknown>) => Promise<any>
+   isSaving: boolean
+   onSaveComplete?: (savedAt: Date) => void
+   onDirtyChange?: (isDirty: boolean) => void
 };
 
 const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(
-({ presentation, onSavePresentation, isSaving, onSaveComplete }, ref) => {
+({ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange }, ref) => {
+    
     // Referanser og grunnstate for editoren.
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<Canvas | null>(null);
@@ -190,8 +191,14 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
     const hasUnsavedChangesRef = useRef(false);
 
-    
-    
+    //Sjekker dirtystate for å aktivere autosave
+    const setDirtyState = (next: boolean) => {
+        if (hasUnsavedChangesRef.current === next) return
+        hasUnsavedChangesRef.current = next
+        onDirtyChange?.(next)
+    }
+
+
 
     // Regner ut hvor mye 16:9-canvas kan skaleres innenfor tilgjengelig plass.
     const updateCanvasScale = useCallback(() => {
@@ -210,7 +217,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     }, []);
 
     const markDirty = () => {
-        hasUnsavedChangesRef.current = true;
+        setDirtyState(true)
     };
 
     const captureCanvasPreview = () => {

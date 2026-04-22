@@ -117,6 +117,7 @@ function App() {
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
 
+
   /** Lysbildevindu (sekundærskjerm / popup) — leses én gang ved første render. */
   const [liveProjectorPresentationId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
@@ -144,7 +145,19 @@ function App() {
   // Husker hvilken presentasjon editoren viser, så vi ikke nullstiller ved nytt objekt med samme id etter lagring
   const editorPresentationIdRef = useRef<string | undefined>(undefined)
 
+  //Autosave timer(toggle autosave)
+  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
+  const autosaveTimerRef = useRef<number | null>(null)
+
+
   const PAGE_STATE_KEY = 'proslides_page_state'
+
+  //Rydder for autosave 
+  const clearAutosaveTimer = () => {
+    if (!autosaveTimerRef.current) return
+    window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = null
+  }
 
   const loadPageState = (): PersistedPageState | null => {
     try {
@@ -220,6 +233,22 @@ function App() {
     const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     return hasSmallViewport || isTouchDevice || userAgentIsMobile
   }
+
+  // Aktiverer autosave hvis brukeren er på en ikke-mobil enhet og har åpnet editoren (forutsatt at det ikke allerede er aktivert).
+  useEffect(() => {
+    clearAutosaveTimer()
+
+    if (!isAutosaveEnabled) return
+    if (currentPage !== 'editor') return
+    if (isSavingPresentation) return
+    if (!editorHasUnsavedChanges) return
+
+    autosaveTimerRef.current = window.setTimeout(() =>{
+      void presentationEditorRef.current?.savePresentation?.()
+      autosaveTimerRef.current = null
+    }, 6000)
+    return
+  }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
 
   useEffect(() => {
     if(!isAutosaveEnabled) return
@@ -1150,6 +1179,7 @@ function App() {
             onSavePresentation={handleSavePresentation}
             isSaving={isSavingPresentation}
             onSaveComplete={handleEditorSaveComplete}
+            onDirtyChange={setEditorHasUnsavedChanges}
           />
         )}
       </main>
