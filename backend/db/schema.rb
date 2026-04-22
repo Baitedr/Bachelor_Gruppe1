@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_22_000100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
@@ -46,6 +46,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_000100) do
     t.uuid "slide_id"
     t.datetime "updated_at", null: false
     t.index ["owner_id"], name: "index_polls_on_owner_id"
+    t.index ["slide_id"], name: "index_polls_on_slide_id"
   end
 
   create_table "presentation_sessions", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|
@@ -55,6 +56,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_000100) do
     t.boolean "started", default: false, null: false
     t.datetime "started_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
     t.index ["join_code"], name: "index_presentation_sessions_on_join_code", unique: true
+    t.index ["presentation_id", "started_at"], name: "index_presentation_sessions_on_presentation_started_at"
+    t.index ["presentation_id"], name: "index_presentation_sessions_on_presentation_active", where: "(ended_at IS NULL)"
   end
 
   create_table "presentations", id: :uuid, default: -> { "uuid_generate_v4()" }, force: :cascade do |t|

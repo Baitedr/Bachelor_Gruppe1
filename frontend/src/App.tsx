@@ -63,6 +63,14 @@ type PresentationSummary = {
   }>
 }
 
+type LiveSlidePayload = {
+  title?: string
+  content?: string
+  notes?: string
+  backgroundColor?: string
+  previewImage?: string
+}
+
 type TrashItem = {
   id: string
   presentation: PresentationSummary
@@ -190,6 +198,27 @@ function App() {
     if (!editorSaveFlashTimerRef.current) return
     window.clearTimeout(editorSaveFlashTimerRef.current)
     editorSaveFlashTimerRef.current = null
+  }
+
+  const presentationToSummary = (presentation: Record<string, unknown>): PresentationSummary => {
+    const slides = Array.isArray(presentation.slides) ? (presentation.slides as LiveSlidePayload[]) : []
+    const firstSlide = slides[0]
+
+    return {
+      id: String(presentation.id || ''),
+      title: String(presentation.title || 'Untitled Presentation'),
+      created_at: String(presentation.created_at || new Date().toISOString()),
+      slide_count: slides.length,
+      first_slide: firstSlide
+        ? {
+            title: firstSlide.title || 'Lysbilde 1',
+            content: firstSlide.content || '',
+            notes: firstSlide.notes || '',
+            backgroundColor: firstSlide.backgroundColor || '#ffffff',
+            previewImage: firstSlide.previewImage,
+          }
+        : undefined,
+    }
   }
 
   // Oppdaterer tid + kort «Lagret»-blink i navbar etter vellykket lagring fra editoren
@@ -474,9 +503,16 @@ function App() {
         : await api.createPresentation(payload)
 
       setActivePresentation(data.presentation)
+      const summary = presentationToSummary(data.presentation as Record<string, unknown>)
+      setPresentations((previous) => {
+        const idx = previous.findIndex((item) => item.id === summary.id)
+        if (idx === -1) return [summary, ...previous]
+        const next = [...previous]
+        next[idx] = { ...next[idx], ...summary }
+        return next
+      })
       setHasSavedCurrentSession(true)
       setIsNewPresentationSession(false)
-      await loadPresentations()
       return data.presentation
     } finally {
       setIsSavingPresentation(false)

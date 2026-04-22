@@ -5,7 +5,7 @@ module Api
       before_action :set_poll, only: [:results, :destroy, :vote]
 
       def index
-        polls = Poll.includes(:poll_options, :poll_responses)
+        polls = Poll.includes(:poll_options)
                     .where(owner_id: current_user.id)
                     .order(created_at: :desc)
 
@@ -64,7 +64,7 @@ module Api
       private
 
       def set_poll
-        @poll = Poll.includes(:poll_options, :poll_responses).find(params[:id])
+        @poll = Poll.includes(:poll_options).find(params[:id])
       end
 
       def poll_params
@@ -73,7 +73,7 @@ module Api
 
       def poll_payload(poll)
         counts = poll.poll_responses.group(:answer).count
-        user_response = poll.poll_responses.find { |response| response.user_id == current_user.id }
+        user_response = poll.poll_responses.find_by(user_id: current_user.id)
 
         {
           id: poll.id,

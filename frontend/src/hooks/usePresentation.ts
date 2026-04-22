@@ -56,6 +56,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const subscriptionRef = useRef<{ perform: (action: string, data: object) => void; unsubscribe: () => void } | null>(
     null,
   )
+  const lastRealtimeSessionStateAtRef = useRef<number>(0)
 
   useEffect(() => {
     if (!presentationId || !token) return
@@ -118,20 +119,24 @@ export const usePresentation = (presentationId: string | number | null, token: s
               break
             case 'participant_joined':
               setParticipantCount(data.count || 0)
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_state':
               setParticipantCount(data.participant_count || 0)
               setSessionStarted(Boolean(data.session_started))
               setSessionEnded(Boolean(data.session_ended))
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_started':
               setSessionStarted(true)
               if (typeof data.participant_count === 'number') {
                 setParticipantCount(data.participant_count)
               }
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_ended':
               setSessionEnded(true)
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'question_activated':
               setActiveQuestion(data.question || null)
@@ -166,8 +171,15 @@ export const usePresentation = (presentationId: string | number | null, token: s
     if (!presentationId || !token) return
 
     let cancelled = false
+    // Poll only as a fallback if websocket state has been silent.
+    const realtimeFreshThresholdMs = 10_000
 
     const syncSessionState = async () => {
+      const silenceMs = Date.now() - lastRealtimeSessionStateAtRef.current
+      if (lastRealtimeSessionStateAtRef.current > 0 && silenceMs < realtimeFreshThresholdMs) {
+        return
+      }
+
       try {
         const state = await api.getSessionState(presentationId)
         if (cancelled || !state) return
@@ -183,7 +195,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     }
 
     void syncSessionState()
-    const intervalId = window.setInterval(syncSessionState, 2000)
+    const intervalId = window.setInterval(syncSessionState, 15_000)
 
     return () => {
       cancelled = true
