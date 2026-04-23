@@ -1,5 +1,5 @@
 import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Canvas, IText, FabricImage, Rect, Circle } from 'fabric';
+import { Canvas, IText, Textbox, FabricImage, Rect, Circle } from 'fabric';
 import {
     BarChart3,
     Circle as CircleIcon,
@@ -291,6 +291,14 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
         try {
             await fabricCanvasRef.current.loadFromJSON(snapshot.fabricData || null);
+            // Fix text colors after loading from snapshot
+            fabricCanvasRef.current.getObjects().forEach((obj: any) => {
+                if (isTextObject(obj) && !obj.listStyleType) {
+                    if (typeof obj.fill === 'string' && (obj.fill === '#6b7280' || obj.fill === 'rgb(107, 114, 128)')) {
+                        obj.set({ fill: '#000000' });
+                    }
+                }
+            });
             fabricCanvasRef.current.backgroundColor = snapshot.backgroundColor || '#ffffff';
             fabricCanvasRef.current.renderAll();
         } finally {
@@ -424,6 +432,15 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                    // Ensure all text objects have proper fill color after loading from JSON
+                    fabricCanvasRef.current.getObjects().forEach((obj: any) => {
+                        if (isTextObject(obj) && !obj.listStyleType) {
+                            // Only fix text objects that are NOT list items - list items should keep their color
+                            if (typeof obj.fill === 'string' && (obj.fill === '#6b7280' || obj.fill === 'rgb(107, 114, 128)')) {
+                                obj.set({ fill: '#000000' });
+                            }
+                        }
+                    });
                     clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
@@ -474,6 +491,30 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         };
 
         const handleTextChange = () => {
+            const activeObject = canvas.getActiveObject() as any;
+
+            if (
+                activeObject &&
+                activeObject.isEditing &&
+                isTextObject(activeObject) &&
+                typeof activeObject.text === 'string'
+            ) {
+                const currentText = activeObject.text;
+                const cursorPosition =
+                    typeof activeObject.selectionStart === 'number'
+                        ? activeObject.selectionStart
+                        : currentText.length;
+
+                const lineStart = currentText.lastIndexOf('\n', Math.max(0, cursorPosition - 1)) + 1;
+                const typedAtLineStart = currentText.slice(lineStart, cursorPosition);
+
+                // Markdown-like shortcut: '- ' at the beginning of a line turns on dash-list mode.
+                if (typedAtLineStart === '- ') {
+                    activeObject.set('listStyleType', 'dash');
+                    setListStyleType('dash');
+                }
+            }
+
             markDirty();
             updatePreview();
         };
@@ -596,18 +637,46 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     (typeof activeObject?.text === 'string' ? getListStyleFromText(activeObject.text) : null);
 
                 if (activeObject && activeObject.isEditing && isTextObject(activeObject) && activeListStyle) {
+                    const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
+                    const selectionStart = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
+                    const isOnListLine = isCursorOnListLine(currentText, selectionStart, activeListStyle as ListStyleType);
+
+                    if (!isOnListLine) {
+                        return;
+                    }
+
                     event.preventDefault();
 
                     const marker = getListMarker(activeListStyle as ListStyleType);
-                    const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
-                    const selectionStart = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
                     const selectionEnd = typeof activeObject.selectionEnd === 'number' ? activeObject.selectionEnd : currentText.length;
                     const nextText = `${currentText.slice(0, selectionStart)}\n${marker} ${currentText.slice(selectionEnd)}`;
                     const nextCursorPosition = selectionStart + 1 + marker.length + 1;
 
                     activeObject.set('text', nextText);
-                    activeObject.selectionStart = nextCursorPosition;
-                    activeObject.selectionEnd = nextCursorPosition;
+                    if (typeof activeObject.setSelectionStart === 'function') {
+                        activeObject.setSelectionStart(nextCursorPosition);
+                    } else {
+                        activeObject.selectionStart = nextCursorPosition;
+                    }
+                    if (typeof activeObject.setSelectionEnd === 'function') {
+                        activeObject.setSelectionEnd(nextCursorPosition);
+                    } else {
+                        activeObject.selectionEnd = nextCursorPosition;
+                    }
+
+                    // Keep Fabric's hidden textarea in sync so the next typed character is
+                    // inserted on the new bullet line (not on the previous line).
+                    if (activeObject.hiddenTextarea) {
+                        activeObject.hiddenTextarea.value = nextText;
+                        activeObject.hiddenTextarea.selectionStart = nextCursorPosition;
+                        activeObject.hiddenTextarea.selectionEnd = nextCursorPosition;
+                        activeObject.hiddenTextarea.focus();
+                    }
+
+                    if (typeof activeObject._updateTextarea === 'function') {
+                        activeObject._updateTextarea();
+                    }
+
                     activeObject.setCoords();
                     canvas.requestRenderAll();
 
@@ -787,10 +856,11 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
-        const pos = getSafePosition(80, 150, 280, 40);
-        const text = new IText('Klikk for å redigere', { // Click to edit
+        const pos = getSafePosition(80, 150, 420, 80);
+        const text = new Textbox('Klikk for å redigere', { // Click to edit
             left: pos.left,
             top: pos.top,
+            width: 420,
             originX: 'left',
             originY: 'top',
             fontSize: 28,
@@ -874,18 +944,30 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             .join('\n');
     };
 
+    const isCursorOnListLine = (text: string, cursorPosition: number, styleType: ListStyleType) => {
+        const marker = getListMarker(styleType);
+        const safeCursor = Math.max(0, Math.min(cursorPosition, text.length));
+        const lineStart = text.lastIndexOf('\n', Math.max(0, safeCursor - 1)) + 1;
+        const lineEndIndex = text.indexOf('\n', safeCursor);
+        const lineEnd = lineEndIndex === -1 ? text.length : lineEndIndex;
+        const currentLine = text.slice(lineStart, lineEnd).trimStart();
+
+        return currentLine.startsWith(`${marker} `);
+    };
+
     const addBulletList = (styleType: ListStyleType = listStyleType) => {
         if (!fabricCanvasRef.current) return;
 
-        const pos = getSafePosition(80, 150, 320, 120);
+        const pos = getSafePosition(80, 150, 420, 140);
         const marker = getListMarker(styleType);
-        const text = new IText(`${marker} \n${marker} \n${marker} `, {
+        const text = new Textbox(`${marker} `, {
             left: pos.left,
             top: pos.top,
+            width: 420,
             originX: 'left',
             originY: 'top',
             fontSize: 24,
-            fill: textColor,
+            fill: '#000000',
             fontFamily: 'Arial',
             lineHeight: 1.35,
         });
