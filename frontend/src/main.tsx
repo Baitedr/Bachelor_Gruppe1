@@ -8,7 +8,7 @@ import './index.css'
 // defaultTheme system = følg OS; enableSystem tillater det valget.
 // Sirkulært temabytte (inspirert av bl.a. Telegram) styres av View Transitions + ModeToggle (index.css).
 // disableTransitionOnChange er ikke satt — next-themes sin korte blokkering av overganger er uproblematisk her.
-ReactDOM.createRoot(document.getElementById('root')).render(
+ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
       <App />

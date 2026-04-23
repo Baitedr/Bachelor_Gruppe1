@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -7,9 +7,37 @@ import { X, Plus, Trash2, Save, XCircle } from 'lucide-react'
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 10
 
-const PollCreator = ({ initialData = null, onSave, onCancel }) => {
-  const [pollQuestion, setPollQuestion] = useState(initialData?.question || '')
-  const [pollOptions, setPollOptions] = useState(
+type PollOptionInput = {
+  text: string
+  votes?: number
+}
+
+type PollInputData = {
+  id?: string | number
+  question?: string
+  options?: PollOptionInput[]
+  createdAt?: string
+}
+
+type PollOutputData = {
+  id: string | number
+  question: string
+  options: Array<{
+    text: string
+    votes: number
+  }>
+  createdAt: string
+}
+
+type PollCreatorProps = {
+  initialData?: PollInputData | null
+  onSave: (pollData: PollOutputData) => void
+  onCancel?: () => void
+}
+
+const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps) => {
+  const [pollQuestion, setPollQuestion] = useState<string>(initialData?.question || '')
+  const [pollOptions, setPollOptions] = useState<string[]>(
     initialData?.options?.map((opt) => opt.text) || Array(MIN_OPTIONS).fill('')
   )
 
@@ -19,19 +47,19 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
     }
   }
 
-  const handleRemoveOption = (index) => {
+  const handleRemoveOption = (index: number) => {
     if (pollOptions.length > MIN_OPTIONS) {
       setPollOptions(pollOptions.filter((_, i) => i !== index))
     }
   }
 
-  const handleOptionChange = (index, value) => {
+  const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...pollOptions]
     newOptions[index] = value
     setPollOptions(newOptions)
   }
 
-  const handleSave = (e) => {
+  const handleSave = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     if (!pollQuestion.trim()) {
@@ -45,7 +73,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }) => {
       return
     }
 
-    const pollData = {
+    const pollData: PollOutputData = {
       id: initialData?.id || Date.now(),
       question: pollQuestion,
       options: validOptions.map((opt) => ({
