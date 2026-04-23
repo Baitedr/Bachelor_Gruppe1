@@ -22,6 +22,7 @@ import {
 import api from './services/api'
 import { createDefaultSlideFabricData } from './lib/fabricDefaults'
 import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 type Page =
   | 'login'
@@ -256,12 +257,7 @@ function App() {
   })
 
   // Sjekker om brukeren benytter en mobil enhet basert på skjermstørrelse og touch-mulighet.
-  const isMobileDevice = () => {
-    const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
-    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
-    const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    return hasSmallViewport || isTouchDevice || userAgentIsMobile
-  }
+  const isMobileDevice = useIsMobileDevice()
 
   // Aktiverer autosave hvis brukeren er på en ikke-mobil enhet og har åpnet editoren (forutsatt at det ikke allerede er aktivert).
   useEffect(() => {
@@ -910,9 +906,10 @@ function App() {
         currentPage === 'editor'
           ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
           : isLiveSessionPage
-            ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
-            : 'min-h-screen',
-      )}
+            ? isMobileDevice
+              ? 'flex min-h-screen flex-col'
+              : 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
+          : 'min-h-screen',)}
     >
       <Navbar
         currentPage={currentPage}
@@ -1162,7 +1159,7 @@ function App() {
           </Card>
         )}
 
-        {currentPage === 'polls' && <PollPage onNavigate={setCurrentPage} user={user} />}
+        {currentPage === 'polls' && <PollPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
 
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>

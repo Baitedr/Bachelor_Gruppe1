@@ -8,6 +8,7 @@ import { ModeToggle } from '../../ui/mode-toggle'
 import { Textarea } from '../../ui/textarea'
 import LivePresentationCanvas from '../LivePresentationCanvas'
 import LiveResultsBoard from './LiveResultsBoard'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 type PollOption = { id: string | number; text: string }
 type ActivePoll = { id: string | number; question: string; options: PollOption[] }
@@ -21,7 +22,7 @@ type ActiveQuestion = {
 type SlideLike = Record<string, unknown> & {
   title?: string
   content?: string
-  fabricData?: unknown
+  fabricData?: { [key: string]: unknown; width?: number; height?: number }  // ← was: unknown
   polls?: unknown[]
   questions?: unknown[]
 }
@@ -68,19 +69,19 @@ const LivePresentationAudience = ({
   participantCount: number
   liveboardForSlideIndex: number | null
   hasActiveInteraction: boolean
-  activePoll: unknown
-  activeQuestion: unknown
+  activePoll: ActivePoll | null
+  activeQuestion: ActiveQuestion | null
   pollResults: Record<string, { results?: Record<string, number>; total?: number }>
   questionResults: Record<
     string,
-    { results?: Record<string, number>; total?: number; recent_answers?: string[]; question_type?: string }
+    { results?: Record<string, number>; total?: number; recent_answers?: string[]; question_type?: 'single_choice' | 'open_text' }
   >
   sessionEnded: boolean
   submitPollAnswer: (pollId: string | number, answer: string) => void
   submitQuestionAnswer: (questionId: string | number, answer: string) => void
   audienceResults: Array<{ id: string | number; text: string; votes: number; percent: number }>
   activeQuestionChoiceResults: Array<{ id: string | number; text: string; count: number; percent: number }>
-  activeQuestionType: string
+  activeQuestionType: 'single_choice' | 'open_text'
   hasAnsweredActivePoll: boolean
   hasAnsweredActiveQuestion: boolean
   totalVotes: number
@@ -92,6 +93,7 @@ const LivePresentationAudience = ({
 }) => {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const isMobileDevice = useIsMobileDevice()
 
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(getFullscreenElement()))
@@ -291,8 +293,60 @@ const LivePresentationAudience = ({
     </section>
   )
 
+  const mobileInteractionView = (
+    <div className='flex w-full flex-col gap-4 p-4'>
+      <div className='flex items-baseline gap-2'>
+        <span className='text-lg font-semibold'>{presentation.title}</span>
+        <span className='text-xs text-muted-foreground'>Lysbilde {currentSlide + 1} av {slideCount}</span>
+      </div>
+      {hasActiveInteraction ? (
+        <>
+          {pollSection}
+          {questionSection}
+        </>
+      ) : inLiveboardResults ? (
+        <div className='flex flex-col gap-4'>
+          {((liveboardSlideData as SlideLike)?.polls || []).map((poll) => {
+            const p = poll as { id: string | number; question?: string }
+            return (
+              <LiveResultsBoard
+                key={`lb-poll-${p.id}`}
+                initialType='poll'
+                initialItemId={p.id}
+                pollMeta={p}
+                pollResults={pollResults}
+                questionResults={questionResults}
+                sessionEnded={sessionEnded}
+              />
+            )
+          })}
+          {((liveboardSlideData as SlideLike)?.questions || []).map((question) => {
+            const q = question as { id: string | number; prompt?: string; type?: 'single_choice' | 'open_text'; options?: { id: string | number; text: string }[] }
+            return (
+              <LiveResultsBoard
+                key={`lb-q-${q.id}`}
+                initialType='question'
+                initialItemId={q.id}
+                questionMeta={q}
+                pollResults={pollResults}
+                questionResults={questionResults}
+                sessionEnded={sessionEnded}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        <div className='rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground'>
+          Venter på aktivitet fra presentatøren…
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className='flex h-full min-h-0 min-w-0 w-full flex-col gap-3'>
+      {isMobileDevice && mobileInteractionView}
+      {!isMobileDevice && (
       <Card
         ref={stageRef}
         className={cn(
@@ -407,7 +461,7 @@ const LivePresentationAudience = ({
                       )
                     })}
                     {((liveboardSlideData as SlideLike)?.questions || []).map((question) => {
-                      const q = question as { id: string | number; prompt?: string; type?: string; options?: unknown[] }
+                      const q = question as { id: string | number; prompt?: string; type?: 'single_choice' | 'open_text'; options?: { id: string | number; text: string }[] }
                       return (
                         <LiveResultsBoard
                           key={`lb-q-${q.id}`}
@@ -442,6 +496,7 @@ const LivePresentationAudience = ({
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }
