@@ -163,6 +163,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
     const [isListMenuOpen, setIsListMenuOpen] = useState(false);
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
+    const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
@@ -174,6 +175,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const canvasViewportRef = useRef<HTMLDivElement | null>(null);
     const canvasScaleWrapperRef = useRef<HTMLDivElement | null>(null);
     const listMenuRef = useRef<HTMLDivElement | null>(null);
+    const shapeMenuRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
 
@@ -1032,6 +1034,30 @@ useEffect(() => {
     };
 }, [isTextMenuOpen]);
 
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+
+        if (isShapeMenuOpen && shapeMenuRef.current && target && !shapeMenuRef.current.contains(target)) {
+            setIsShapeMenuOpen(false);
+        }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setIsShapeMenuOpen(false);
+        }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isShapeMenuOpen]);
+
     const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !fabricCanvasRef.current) return;
@@ -1686,8 +1712,45 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             )}
                         </div>
                         <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
-                        <Button onClick={() => addShape('rectangle')} variant="outline" size="sm" className="flex items-center gap-1.5"><Square className="h-3.5 w-3.5" /> Rektangel</Button>
-                        <Button onClick={() => addShape('circle')} variant="outline" size="sm" className="flex items-center gap-1.5"><CircleIcon className="h-3.5 w-3.5" /> Sirkel</Button>
+                        <div ref={shapeMenuRef} className="relative">
+                            <Button
+                                onClick={() => setIsShapeMenuOpen((prev) => !prev)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-1.5"
+                                aria-haspopup="menu"
+                                aria-expanded={isShapeMenuOpen}
+                            >
+                                <Square className="h-3.5 w-3.5" /> Former
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            {isShapeMenuOpen && (
+                                <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            addShape('rectangle');
+                                            setIsShapeMenuOpen(false);
+                                        }}
+                                    >
+                                        <Square className="h-4 w-4" />
+                                        <span>Rektangel</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            addShape('circle');
+                                            setIsShapeMenuOpen(false);
+                                        }}
+                                    >
+                                        <CircleIcon className="h-4 w-4" />
+                                        <span>Sirkel</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <Button onClick={deleteSelected} variant="destructive" size="sm" className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
                             <Palette className="h-3.5 w-3.5" /> Bakgrunn
