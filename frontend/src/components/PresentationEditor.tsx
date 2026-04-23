@@ -1,5 +1,5 @@
-import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Canvas, IText, Textbox, FabricImage, Rect, Circle } from 'fabric';
+import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
+import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText, classRegistry } from 'fabric';
 import {
     BarChart3,
     Circle as CircleIcon,
@@ -36,8 +36,98 @@ import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
+const FONT_FAMILIES = [
+    { value: 'Arial, sans-serif', label: 'Arial' },
+    { value: 'Times New Roman, serif', label: 'Times New Roman' },
+    { value: 'Georgia, serif', label: 'Georgia' },
+    { value: 'Courier New, monospace', label: 'Courier New' },
+    { value: 'Verdana, sans-serif', label: 'Verdana' }
+];
+
 // Når vinduet er smalere enn dette, kollapser sidepanelene automatisk.
 const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
+
+type MediaKind = 'image' | 'video';
+
+type SerializedVideoProps = {
+    mediaType?: 'video';
+    src?: string;
+};
+
+type GuideLine = {
+    orientation: 'horizontal' | 'vertical';
+    position: number;
+};
+
+type AlignmentPoint = {
+    value: number;
+    label: 'start' | 'center' | 'end';
+};
+
+const ALIGNMENT_TOLERANCE = 6;
+
+const createVideoElement = (src: string) =>
+    new Promise<HTMLVideoElement>((resolve, reject) => {
+        const video = document.createElement('video');
+        let settled = false;
+
+        const cleanup = () => {
+            video.removeEventListener('loadeddata', handleLoadedData);
+            video.removeEventListener('error', handleError);
+        };
+
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(video);
+        };
+
+        const fail = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('Kunne ikke laste video'));
+        };
+
+        const handleLoadedData = () => finish();
+        const handleError = () => fail();
+
+        video.preload = 'auto';
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.crossOrigin = 'anonymous';
+        video.addEventListener('loadeddata', handleLoadedData, { once: true });
+        video.addEventListener('error', handleError, { once: true });
+        video.src = src;
+        video.load();
+    });
+
+// Utvid Fabric.Object for å inkludere mediaType
+class FabricVideo extends FabricImage {
+    static type = 'video';
+
+    constructor(element: HTMLVideoElement, options: Record<string, unknown> = {}) {
+        // Video skal rendres direkte fra elementet i stedet for et stillbilde-cache.
+        super(element, {
+            ...options,
+            objectCaching: false,
+        });
+    }
+
+    static async fromObject(
+        { src, mediaType, ...object }: SerializedVideoProps & Record<string, any>,
+    ) {
+        const videoElement = await createVideoElement(src || '');
+        return new this(videoElement, {
+            ...object,
+            src,
+        });
+    }
+}
+
+classRegistry.setClass(FabricVideo, 'video');
 
 type CanvasSnapshot = {
     backgroundColor: string;
@@ -82,6 +172,12 @@ type QuestionItem = {
     createdAt: string;
 };
 type ListStyleType = 'bullet' | 'dash' | 'arrow';
+type FabricTextObject = (FabricText | IText | Textbox) & {
+    listStyleType?: ListStyleType;
+};
+type FabricEditableTextObject = (IText | Textbox) & {
+    listStyleType?: ListStyleType;
+};
 
 type Slide = {
     id: string;
@@ -135,12 +231,15 @@ type PresentationEditorProps = {
     onSaveComplete?: (savedAt: Date) => void;
 };
 
-const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEditorProps>(
-({ presentation, onSavePresentation, isSaving, onSaveComplete }, ref) => {
+const PresentationEditor = (
+{ presentation, onSavePresentation, isSaving, onSaveComplete }: PresentationEditorProps,
+ref: ForwardedRef<PresentationEditorHandle>
+) => {
     // Referanser og grunnstate for editoren.
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const fabricCanvasRef = useRef<Canvas | null>(null);
-    const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+    const mediaUploadInputRef = useRef<HTMLInputElement | null>(null);
+    const videoRenderFrameRef = useRef<number | null>(null);
     const isApplyingCanvasStateRef = useRef(false);
     const [slides, setSlides] = useState<Slide[]>([defaultSlide()]);
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -157,6 +256,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
     const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
     const [shapeColor, setShapeColor] = useState<string>('#667eea');
+    const [shapeHasFill, setShapeHasFill] = useState(true);
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
     const [hasSelectedText, setHasSelectedText] = useState(false);
@@ -164,6 +264,11 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [isListMenuOpen, setIsListMenuOpen] = useState(false);
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
+    const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
+    const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
+    const [fontFamily, setFontFamily] = useState<string>(FONT_FAMILIES[0].value);
+    const [isTextBold, setIsTextBold] = useState(false);
+    const [isTextItalic, setIsTextItalic] = useState(false);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
@@ -176,6 +281,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const canvasScaleWrapperRef = useRef<HTMLDivElement | null>(null);
     const listMenuRef = useRef<HTMLDivElement | null>(null);
     const shapeMenuRef = useRef<HTMLDivElement | null>(null);
+    const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
 
@@ -212,11 +318,31 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const serializeCanvasData = () => {
         if (!fabricCanvasRef.current) return null;
 
-        return (fabricCanvasRef.current as any).toJSON(['listStyleType']);
+        return (fabricCanvasRef.current as any).toJSON(['listStyleType', 'fontFamily']);
     };
 
+    const isValidHexColor = (value: string) => /^#([0-9A-Fa-f]{6})$/.test(value);
+
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
-    const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
+    const isTextObject = (obj: unknown): obj is FabricTextObject =>
+        obj instanceof FabricText || obj instanceof IText || obj instanceof Textbox;
+    const isEditableTextObject = (obj: unknown): obj is FabricEditableTextObject =>
+        obj instanceof IText || obj instanceof Textbox;
+    const isVideoObject = (obj: any) => obj?.type === 'video';
+    const isBoldFontWeight = (value: unknown) => {
+        if (typeof value === 'number') {
+            return value >= 600;
+        }
+
+        if (typeof value === 'string') {
+            if (value === 'bold') return true;
+
+            const numericWeight = Number(value);
+            return Number.isFinite(numericWeight) && numericWeight >= 600;
+        }
+
+        return false;
+    };
 
     const syncHasSelectedShape = () => {
         const canvas = fabricCanvasRef.current;
@@ -233,19 +359,126 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         setHasSelectedShape(Boolean(selectedShape));
         setHasSelectedText(Boolean(selectedText));
 
-        if (selectedShape && typeof selectedShape.fill === 'string') {
-            setShapeColor(selectedShape.fill);
+        if (selectedShape) {
+            const hasFill = selectedShape.fill !== null && selectedShape.fill !== undefined && selectedShape.fill !== 'transparent';
+            setShapeHasFill(hasFill);
+
+            if (typeof selectedShape.fill === 'string' && selectedShape.fill !== 'transparent') {
+                setShapeColor(selectedShape.fill);
+            }
         }
 
         if (selectedText && typeof selectedText.fill === 'string') {
             setTextColor(selectedText.fill);
         }
+
+        if (selectedText && typeof selectedText.fontFamily === 'string') {
+            setFontFamily(selectedText.fontFamily);
+        }
+
+        if (selectedText) {
+            setIsTextBold(isBoldFontWeight(selectedText.fontWeight));
+            setIsTextItalic(selectedText.fontStyle === 'italic');
+        }
     };
+
+    const getObjectAlignmentPoints = useCallback((obj: any): { x: AlignmentPoint[]; y: AlignmentPoint[] } => {
+        const width = (obj.getScaledWidth?.() || obj.width || 0) / 2;
+        const height = (obj.getScaledHeight?.() || obj.height || 0) / 2;
+        const center = obj.getCenterPoint();
+
+        return {
+            x: [
+                { label: 'start', value: center.x - width },
+                { label: 'center', value: center.x },
+                { label: 'end', value: center.x + width },
+            ],
+            y: [
+                { label: 'start', value: center.y - height },
+                { label: 'center', value: center.y },
+                { label: 'end', value: center.y + height },
+            ],
+        };
+    }, []);
+
+    const nudgeObjectBy = useCallback((obj: any, deltaX = 0, deltaY = 0) => {
+        if (typeof obj.left === 'number') {
+            obj.left += deltaX;
+        }
+        if (typeof obj.top === 'number') {
+            obj.top += deltaY;
+        }
+        obj.setCoords();
+    }, []);
+
+    const clearGuideLines = useCallback(() => {
+        setGuideLines([]);
+    }, []);
 
     const currentSlideIdRef = useRef<string | null>(null);
     useEffect(() => {
         currentSlideIdRef.current = slides[currentSlideIndex]?.id || null;
     }, [slides, currentSlideIndex]);
+
+    const stopVideoRenderLoop = useCallback(() => {
+        if (videoRenderFrameRef.current !== null) {
+            cancelAnimationFrame(videoRenderFrameRef.current);
+            videoRenderFrameRef.current = null;
+        }
+    }, []);
+
+    const syncCanvasVideos = useCallback(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) {
+            stopVideoRenderLoop();
+            return;
+        }
+
+        const videoObjects = canvas.getObjects().filter(isVideoObject) as FabricVideo[];
+        if (!videoObjects.length) {
+            stopVideoRenderLoop();
+            return;
+        }
+
+        videoObjects.forEach((videoObject) => {
+            const element = videoObject.getElement();
+            if (!(element instanceof HTMLVideoElement)) return;
+
+            // Muted autoplay gjÃ¸r at videoene kan starte uten ekstra brukerklikk.
+            element.loop = true;
+            element.muted = true;
+            element.playsInline = true;
+            void element.play().catch(() => {});
+        });
+
+        const renderVideoFrame = () => {
+            const activeCanvas = fabricCanvasRef.current;
+            if (!activeCanvas) {
+                stopVideoRenderLoop();
+                return;
+            }
+
+            const hasActiveVideo = activeCanvas
+                .getObjects()
+                .filter(isVideoObject)
+                .some((videoObject: any) => {
+                    const element = videoObject.getElement?.();
+                    return element instanceof HTMLVideoElement && !element.paused && !element.ended;
+                });
+
+            if (!hasActiveVideo) {
+                stopVideoRenderLoop();
+                return;
+            }
+
+            activeCanvas.requestRenderAll();
+            videoRenderFrameRef.current = requestAnimationFrame(renderVideoFrame);
+        };
+
+        if (videoRenderFrameRef.current === null) {
+            videoRenderFrameRef.current = requestAnimationFrame(renderVideoFrame);
+        }
+    }, [stopVideoRenderLoop]);
 
     // Snapshot brukes for angre/gjør om uten å mutere lerretet direkte.
     const createCanvasSnapshot = (): CanvasSnapshot | null => {
@@ -277,6 +510,27 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         setRedoStack([]);
     };
 
+    // Samler tunge oppdateringer slik at de bare kjører når brukeren er ferdig med et fargevalg.
+    const commitCanvasColorChange = () => {
+        markDirty();
+        pushHistorySnapshot(createCanvasSnapshot());
+
+        const currentId = currentSlideIdRef.current;
+        const preview = captureCanvasPreview();
+        if (!currentId || !preview) return;
+
+        setSlidePreviewImages((prev) => ({
+            ...prev,
+            [currentId]: preview,
+        }));
+    };
+
+    // Lagrer bakgrunnsfargen til lysbildet etter at live-forhåndsvisningen er ferdig.
+    const commitBackgroundColorChange = (color: string) => {
+
+        commitCanvasColorChange();
+    };
+
     const resetHistoryWithSnapshot = (snapshot: CanvasSnapshot | null) => {
         if (!snapshot) {
             setUndoStack([]);
@@ -289,7 +543,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     };
 
     // Gjenoppretter et definert state (snapshot) tilbake til canvas-lerretet
-    const applyCanvasSnapshot = async (snapshot: CanvasSnapshot) => {
+    const applyCanvasSnapshot = useCallback(async (snapshot: CanvasSnapshot) => {
         if (!fabricCanvasRef.current || !snapshot) return;
 
         isApplyingCanvasStateRef.current = true;
@@ -306,10 +560,11 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             });
             fabricCanvasRef.current.backgroundColor = snapshot.backgroundColor || '#ffffff';
             fabricCanvasRef.current.renderAll();
+            syncCanvasVideos();
         } finally {
             isApplyingCanvasStateRef.current = false;
         }
-    };
+    }, [syncCanvasVideos]);
 
     // Synkroniserer innkommende presentasjon fra parent til lokal editor-state.
     useEffect(() => {
@@ -360,12 +615,13 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         }
 
         return () => {
+            stopVideoRenderLoop();
             if (fabricCanvasRef.current) {
                 fabricCanvasRef.current.dispose();
                 fabricCanvasRef.current = null;
             }
         };
-    }, []);
+    }, [stopVideoRenderLoop]);
 
     // Setter riktig initial kollaps-status ved første render.
     useEffect(() => {
@@ -432,6 +688,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             const currentSlide = slides[currentSlideIndex];
 
             const backgroundColor = currentSlide.backgroundColor || '#ffffff';
+            clearGuideLines();
 
             isApplyingCanvasStateRef.current = true;
 
@@ -449,6 +706,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
+                    syncCanvasVideos();
                     isApplyingCanvasStateRef.current = false;
                     resetHistoryWithSnapshot(createCanvasSnapshot());
                 });
@@ -456,6 +714,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                 fabricCanvasRef.current.clear();
                 fabricCanvasRef.current.set({ backgroundColor });
                 fabricCanvasRef.current.renderAll();
+                stopVideoRenderLoop();
                 isApplyingCanvasStateRef.current = false;
                 resetHistoryWithSnapshot(createCanvasSnapshot());
             }
@@ -463,12 +722,87 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             setUndoStack([]);
             setRedoStack([]);
         }
-    }, [currentSlideIndex, slides]);
+    }, [clearGuideLines, currentSlideIndex, slides, stopVideoRenderLoop, syncCanvasVideos]);
 
     // Lyttere for endringer på lerretet (legge til, flytte eller fjerne objekter) for å bygge opp angre-historikken
     useEffect(() => {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
+
+        const handleObjectMoving = (event: any) => {
+            const target = event.target;
+            if (!target) return;
+
+            const targetPoints = getObjectAlignmentPoints(target);
+            const nextGuideLines: GuideLine[] = [];
+            let deltaX = 0;
+            let deltaY = 0;
+            let bestXDistance = ALIGNMENT_TOLERANCE + 1;
+            let bestYDistance = ALIGNMENT_TOLERANCE + 1;
+
+            const xCandidates: AlignmentPoint[] = [
+                { value: CANVAS_WIDTH / 2, label: 'center' as const },
+            ];
+            const yCandidates: AlignmentPoint[] = [
+                { value: CANVAS_HEIGHT / 2, label: 'center' as const },
+            ];
+
+            canvas.getObjects().forEach((obj) => {
+                if (obj === target) return;
+
+                const points = getObjectAlignmentPoints(obj);
+                xCandidates.push(...points.x);
+                yCandidates.push(...points.y);
+            });
+
+            targetPoints.x.forEach((point) => {
+                xCandidates.forEach((candidate) => {
+                    if (point.label !== candidate.label) return;
+
+                    const distance = Math.abs(point.value - candidate.value);
+                    if (distance >= bestXDistance || distance > ALIGNMENT_TOLERANCE) return;
+
+                    bestXDistance = distance;
+                    deltaX = candidate.value - point.value;
+                    nextGuideLines.push({
+                        orientation: 'vertical',
+                        position: candidate.value,
+                    });
+                });
+            });
+
+            targetPoints.y.forEach((point) => {
+                yCandidates.forEach((candidate) => {
+                    if (point.label !== candidate.label) return;
+
+                    const distance = Math.abs(point.value - candidate.value);
+                    if (distance >= bestYDistance || distance > ALIGNMENT_TOLERANCE) return;
+
+                    bestYDistance = distance;
+                    deltaY = candidate.value - point.value;
+                    nextGuideLines.push({
+                        orientation: 'horizontal',
+                        position: candidate.value,
+                    });
+                });
+            });
+
+            setGuideLines(
+                nextGuideLines.filter(
+                    (line, index, lines) =>
+                        lines.findIndex(
+                            (candidate) =>
+                                candidate.orientation === line.orientation &&
+                                Math.abs(candidate.position - line.position) < 0.5
+                        ) === index
+                )
+            );
+
+            if (deltaX !== 0 || deltaY !== 0) {
+                // En liten nudge gir snapping uten at flyttingen føles låst.
+                nudgeObjectBy(target, deltaX, deltaY);
+            }
+        };
 
         const handleCanvasChange = () => {
             if (isApplyingCanvasStateRef.current) return;
@@ -493,6 +827,11 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         const handleCanvasChangeWithPreview = () => {
             handleCanvasChange();
             updatePreview();
+            syncCanvasVideos();
+        };
+
+        const handleGuideReset = () => {
+            clearGuideLines();
         };
 
         const handleTextChange = () => {
@@ -501,7 +840,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             if (
                 activeObject &&
                 activeObject.isEditing &&
-                isTextObject(activeObject) &&
+                isEditableTextObject(activeObject) &&
                 typeof activeObject.text === 'string'
             ) {
                 const currentText = activeObject.text;
@@ -527,9 +866,12 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
+        canvas.on('object:moving', handleObjectMoving);
+        canvas.on('mouse:up', handleGuideReset);
         canvas.on('text:changed', handleTextChange);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
+        canvas.on('selection:cleared', handleGuideReset);
         canvas.on('selection:cleared', syncHasSelectedShape);
 
         syncHasSelectedShape();
@@ -538,12 +880,15 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
+            canvas.off('object:moving', handleObjectMoving);
+            canvas.off('mouse:up', handleGuideReset);
             canvas.off('text:changed', handleTextChange);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
+            canvas.off('selection:cleared', handleGuideReset);
             canvas.off('selection:cleared', syncHasSelectedShape);
         };
-    }, []);
+    }, [clearGuideLines, getObjectAlignmentPoints, nudgeObjectBy, syncCanvasVideos]);
 
     // Oppdaterer state-arrayen med oppdatert JSON-data fra lerretet (canvas) for gjeldende lysbilde
     const buildSlidesWithCurrentCanvasState = () => {
@@ -641,7 +986,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
                     activeObject?.listStyleType ||
                     (typeof activeObject?.text === 'string' ? getListStyleFromText(activeObject.text) : null);
 
-                if (activeObject && activeObject.isEditing && isTextObject(activeObject) && activeListStyle) {
+                if (activeObject && activeObject.isEditing && isEditableTextObject(activeObject) && activeListStyle) {
                     const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
                     const selectionStart = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
                     const isOnListLine = isCursorOnListLine(currentText, selectionStart, activeListStyle as ListStyleType);
@@ -870,7 +1215,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             originY: 'top',
             fontSize: 28,
             fill: textColor,
-            fontFamily: 'Arial',
+            fontFamily,
+            fontWeight: isTextBold ? 'bold' : 'normal',
+            fontStyle: isTextItalic ? 'italic' : 'normal',
             lineHeight: 1.2,
         });
         
@@ -885,15 +1232,16 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         if (!fabricCanvasRef.current) return;
         
         const pos = getSafePosition(80, 60, 340, 60);
-        const text = new IText('', { // Slide Title
+        const text = new IText('Tittel', { // Slide Title
             left: pos.left,
             top: pos.top,
             originX: 'left',
             originY: 'top',
             fontSize: 48,
             fill: textColor,
-            fontFamily: 'Arial',
+            fontFamily,
             fontWeight: 'bold',
+            fontStyle: isTextItalic ? 'italic' : 'normal',
             lineHeight: 1.16,
         });
         
@@ -1034,6 +1382,7 @@ useEffect(() => {
     };
 }, [isTextMenuOpen]);
 
+// Holder menyene lukket når brukeren klikker utenfor eller avbryter med Escape.
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1041,11 +1390,28 @@ useEffect(() => {
         if (isShapeMenuOpen && shapeMenuRef.current && target && !shapeMenuRef.current.contains(target)) {
             setIsShapeMenuOpen(false);
         }
+
+        if (
+            isShapeColorPickerOpen &&
+            shapeColorPickerRef.current &&
+            target &&
+            !shapeColorPickerRef.current.contains(target)
+        ) {
+            setIsShapeColorPickerOpen(false);
+            commitCanvasColorChange();
+        }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
+        if (event.key !== 'Escape') return;
+
+        if (isShapeMenuOpen) {
             setIsShapeMenuOpen(false);
+        }
+
+        if (isShapeColorPickerOpen) {
+            setIsShapeColorPickerOpen(false);
+            commitCanvasColorChange();
         }
     };
 
@@ -1056,25 +1422,60 @@ useEffect(() => {
         document.removeEventListener('mousedown', handleOutsideClick);
         document.removeEventListener('keydown', handleEscape);
     };
-}, [isShapeMenuOpen]);
+}, [isShapeMenuOpen, isShapeColorPickerOpen]);
 
-    const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const addImageObject = async (source: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const img = await FabricImage.fromURL(source);
+        img.scaleToWidth(400);
+        const scaledHeight = (img.height || 0) * (img.scaleY || 1);
+        const pos = getSafePosition(80, 150, 400, scaledHeight || 300);
+        img.set({ left: pos.left, top: pos.top });
+        fabricCanvasRef.current.add(img);
+        fabricCanvasRef.current.setActiveObject(img);
+        fabricCanvasRef.current.renderAll();
+    };
+
+    const addVideoObject = async (source: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const videoElement = await createVideoElement(source);
+        const video = new FabricVideo(videoElement, {
+            left: 80,
+            top: 150,
+        });
+        video.scaleToWidth(420);
+        const scaledHeight = (video.height || 0) * (video.scaleY || 1);
+        const pos = getSafePosition(80, 150, 420, scaledHeight || 236);
+        video.set({ left: pos.left, top: pos.top });
+        fabricCanvasRef.current.add(video);
+        fabricCanvasRef.current.setActiveObject(video);
+        fabricCanvasRef.current.renderAll();
+        syncCanvasVideos();
+    };
+
+    const handleMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !fabricCanvasRef.current) return;
 
+        // Leser inn lokal fil som data-URL slik at media kan serialiseres i Fabric-JSON.
         const reader = new FileReader();
-        reader.onload = (loadEvent) => {
-            const imageSource = loadEvent.target?.result;
-            if (!imageSource || typeof imageSource !== 'string') return;
+        reader.onload = async (loadEvent) => {
+            const mediaSource = loadEvent.target?.result;
+            if (!mediaSource || typeof mediaSource !== 'string') return;
 
-            FabricImage.fromURL(imageSource).then((img) => {
-                img.scaleToWidth(400);
-                const scaledHeight = (img.height || 0) * (img.scaleY || 1);
-                const pos = getSafePosition(80, 150, 400, scaledHeight || 300);
-                img.set({ left: pos.left, top: pos.top });
-                fabricCanvasRef.current.add(img);
-                fabricCanvasRef.current.renderAll();
-            });
+            const mediaKind: MediaKind = file.type.startsWith('video/') ? 'video' : 'image';
+
+            try {
+                if (mediaKind === 'video') {
+                    await addVideoObject(mediaSource);
+                } else {
+                    await addImageObject(mediaSource);
+                }
+            } catch (error) {
+                console.error('Media upload failed:', error);
+            }
         };
 
         reader.readAsDataURL(file);
@@ -1082,9 +1483,9 @@ useEffect(() => {
     };
 
     const addImage = () => {
-        imageUploadInputRef.current?.click();
+        mediaUploadInputRef.current?.click();
     };
-
+    // Legger til en valgt form, rektangel eller sirkel
     const addShape = (shapeType: 'rectangle' | 'circle') => {
         if (!fabricCanvasRef.current) return;
 
@@ -1097,7 +1498,9 @@ useEffect(() => {
                     top: pos.top,
                     width: 200,
                     height: 150,
-                    fill: shapeColor,
+                    fill: shapeHasFill ? shapeColor : null,
+                    stroke: shapeColor,
+                    strokeWidth: 2,
                 });
                 break;
             case 'circle':
@@ -1105,7 +1508,9 @@ useEffect(() => {
                     left: pos.left,
                     top: pos.top,
                     radius: 75,
-                    fill: shapeColor,
+                    fill: shapeHasFill ? shapeColor : null,
+                    stroke: shapeColor,
+                    strokeWidth: 2,
                 });
                 break;
         }
@@ -1118,7 +1523,8 @@ useEffect(() => {
         }
     };
 
-    const changeSelectedShapeColor = (color: string) => {
+    // Oppdaterer valgte figurer direkte på canvas mens brukeren drar i fargevelgeren.
+    const applySelectedShapeFillLive = (hasFill: boolean) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1128,31 +1534,47 @@ useEffect(() => {
 
         activeObjects.forEach((obj: any) => {
             if (obj.type === 'rect' || obj.type === 'circle') {
-                obj.set('fill', color);
+                obj.set({
+                    fill: hasFill ? shapeColor : null,
+                    stroke: shapeColor,
+                    strokeWidth: 2,
+                });
                 changed = true;
             }
         });
 
         if (!changed) return;
 
-        fabricCanvasRef.current.renderAll();
-        markDirty();
-        pushHistorySnapshot(createCanvasSnapshot());
-
-        const currentId = currentSlideIdRef.current;
-        if (currentId) {
-            setSlidePreviewImages((prev) => ({
-                ...prev,
-                [currentId]: fabricCanvasRef.current!.toDataURL({
-                    format: 'png',
-                    quality: 0.9,
-                    multiplier: 0.8,
-                }),
-            }));
-        }
+        fabricCanvasRef.current.requestRenderAll();
     };
 
-    const changeSelectedTextColor = (color: string) => {
+    // Oppdaterer valgte figurer direkte pÃ¥ canvas mens brukeren drar i fargevelgeren.
+    const applySelectedShapeColorLive = (color: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (obj.type === 'rect' || obj.type === 'circle') {
+                obj.set({
+                    fill: shapeHasFill ? color : null,
+                    stroke: color,
+                    strokeWidth: 2,
+                });
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.requestRenderAll();
+    };
+
+    // Oppdaterer valgt tekst direkte på canvas uten å lagre historikk for hver lille endring.
+    const applySelectedTextColorLive = (color: string) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1169,21 +1591,28 @@ useEffect(() => {
 
         if (!changed) return;
 
-        fabricCanvasRef.current.renderAll();
-        markDirty();
-        pushHistorySnapshot(createCanvasSnapshot());
+        fabricCanvasRef.current.requestRenderAll();
+    };
 
-        const currentId = currentSlideIdRef.current;
-        if (currentId) {
-            setSlidePreviewImages((prev) => ({
-                ...prev,
-                [currentId]: fabricCanvasRef.current!.toDataURL({
-                    format: 'png',
-                    quality: 0.9,
-                    multiplier: 0.8,
-                }),
-            }));
-        }
+    const applySelectedTextStylesLive = (styles: Record<string, unknown>) => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (isTextObject(obj)) {
+                obj.set(styles);
+                obj.setCoords();
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.requestRenderAll();
     };
 
     const deleteSelected = () => {
@@ -1196,36 +1625,11 @@ useEffect(() => {
         }
     };
 
-    const changeBackgroundColor = (color: string) => {
+    // Oppdaterer bakgrunnsfargen live, mens lagring og historikk skjer når valget bekreftes.
+    const applyBackgroundColorLive = (color: string) => {
         if (!fabricCanvasRef.current) return;
         fabricCanvasRef.current.backgroundColor = color;
-        fabricCanvasRef.current.renderAll();
-        markDirty();
-
-        setSlides((prevSlides) => {
-            const newSlides = [...prevSlides];
-            if (!newSlides[currentSlideIndex]) return prevSlides;
-
-            newSlides[currentSlideIndex] = {
-                ...newSlides[currentSlideIndex],
-                backgroundColor: color,
-            };
-            return newSlides;
-        });
-
-        pushHistorySnapshot(createCanvasSnapshot());
-
-        const currentId = currentSlideIdRef.current;
-        if (currentId) {
-            setSlidePreviewImages(prev => ({
-                ...prev,
-                [currentId]: fabricCanvasRef.current.toDataURL({
-                    format: 'png',
-                    quality: 0.9,
-                    multiplier: 0.8,
-                })
-            }));
-        }
+        fabricCanvasRef.current.requestRenderAll();
     };
 
     const handleUndo = async () => {
@@ -1492,11 +1896,11 @@ const handleSavePresentation = async (): Promise<boolean> => {
     return (
         <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
-                ref={imageUploadInputRef}
+                ref={mediaUploadInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 className="hidden"
-                onChange={handleImageFileChange}
+                onChange={handleMediaFileChange}
             />
 
             <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_14px_rgba(0,0,0,0.05)] ring-1 ring-border/30 transition-all duration-200`}>
@@ -1506,7 +1910,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         onClick={() => setIsLeftSidebarCollapsed((prev) => !prev)}
                         size="icon"
                         variant="ghost"
-                        className="ml-auto h-8 w-8"
+                        className="h-8 w-8"
                         title={isLeftSidebarCollapsed ? 'Vis lysbildepanel' : 'Skjul lysbildepanel'}
                         aria-label={isLeftSidebarCollapsed ? 'Vis lysbildepanel' : 'Skjul lysbildepanel'}
                     >
@@ -1594,7 +1998,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             onClick={handleUndo}
                             variant="secondary"
                             size="sm"
-                            className="flex items-center gap-1.5"
+                            className="order-1 flex items-center gap-1.5"
                             disabled={undoStack.length <= 1}
                         >
                             <Undo2 className="h-3.5 w-3.5" /> Angre
@@ -1603,13 +2007,13 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             onClick={handleRedo}
                             variant="secondary"
                             size="sm"
-                            className="flex items-center gap-1.5"
+                            className="order-2 flex items-center gap-1.5"
                             disabled={!redoStack.length}
                         >
                             <Redo2 className="h-3.5 w-3.5" /> Gjør om
                         </Button>
 
-<div ref={textMenuRef} className="relative">
+<div ref={textMenuRef} className="relative order-3">
     <Button
         onClick={() => setIsTextMenuOpen((prev) => !prev)}
         variant="outline"
@@ -1658,7 +2062,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         
                         
 
-                        <div ref={listMenuRef} className="relative">
+                        <div ref={listMenuRef} className="relative order-7">
                             <Button
                                 onClick={() => setIsListMenuOpen((prev) => !prev)}
                                 variant="outline"
@@ -1667,7 +2071,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 aria-haspopup="menu"
                                 aria-expanded={isListMenuOpen}
                             >
-                                <List className="h-3.5 w-3.5" /> Liste
+                                <List className="h-3.5 w-3.5" />
                                 <ChevronDown className="h-3.5 w-3.5" />
                             </Button>
                             {isListMenuOpen && (
@@ -1711,9 +2115,13 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 </div>
                             )}
                         </div>
-                        <Button onClick={addImage} variant="outline" size="sm" className="flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Bilde</Button>
-                        <div ref={shapeMenuRef} className="relative">
+                        <div className="order-8 basis-full" />
+                        <Button onClick={addImage} variant="outline" size="sm" className="order-9 flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Media</Button>
+                        
+                        {/* Dropdown-meny for å legge til former, rektangel eller sirkel, som er de to formene vi tilbyr i første versjon. Kan enkelt utvides med flere former senere ved behov. */}
+                        <div ref={shapeMenuRef} className="relative order-10">
                             <Button
+                                //Åpner og lukker menyen med tilgjengelige former
                                 onClick={() => setIsShapeMenuOpen((prev) => !prev)}
                                 variant="outline"
                                 size="sm"
@@ -1724,8 +2132,10 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <Square className="h-3.5 w-3.5" /> Former
                                 <ChevronDown className="h-3.5 w-3.5" />
                             </Button>
+                            {/* Viser valg for hvilke former brukeren kan sette inn */}
                             {isShapeMenuOpen && (
                                 <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    {/* Legger til rektangel eller sirkel og menyen lukker seg etter */}
                                     <button
                                         type="button"
                                         className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
@@ -1751,44 +2161,169 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 </div>
                             )}
                         </div>
-                        <Button onClick={deleteSelected} variant="destructive" size="sm" className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
-                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
-                            <Palette className="h-3.5 w-3.5" /> Bakgrunn
-                            <Input
-                                type="color"
-                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
-                                value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
-                                onChange={(e) => changeBackgroundColor(e.target.value)}
-                            />
-                        </Label>
-                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
-                            <Square className="h-3.5 w-3.5" /> Figurfarge
-                            <Input
-                                type="color"
-                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
-                                value={shapeColor}
-                                disabled={!hasSelectedShape}
+                        <Button onClick={deleteSelected} variant="destructive" size="sm" className="order-14 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
+                        <div className="contents">
+                            <div className="relative order-11">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="relative flex items-center gap-1.5"
+                                >
+                                    <Palette className="h-3.5 w-3.5" /> Bakgrunnsfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: slides[currentSlideIndex]?.backgroundColor || '#ffffff' }}
+                                    />
+                                </Button>
+                                <input
+                                    type="color"
+                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                    value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
+                                    onInput={(e) => {
+                                        applyBackgroundColorLive((e.target as HTMLInputElement).value);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        applyBackgroundColorLive(color);
+                                        commitBackgroundColorChange(color);
+                                    }}
+                                />
+                            </div>
+                            <div ref={shapeColorPickerRef} className="relative order-12">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1.5"
+                                    disabled={!hasSelectedShape}
+                                    onClick={() => setIsShapeColorPickerOpen((prev) => !prev)}
+                                >
+                                    <Square className="h-3.5 w-3.5" /> Figurfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: shapeColor }}
+                                    />
+                                </Button>
+                                {isShapeColorPickerOpen && hasSelectedShape && (
+                                    <div className="absolute left-0 top-full z-30 mt-2 min-w-52 rounded-md border border-border bg-background p-3 shadow-lg">
+                                        <Label className="flex items-center gap-2 px-0 py-0 text-xs font-medium">
+                                            <span>Farge</span>
+                                            <input
+                                                type="color"
+                                                className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+                                                value={shapeColor}
+                                                onInput={(e) => {
+                                                    const color = (e.target as HTMLInputElement).value;
+                                                    setShapeColor(color);
+                                                    applySelectedShapeColorLive(color);
+                                                }}
+                                                onChange={(e) => {
+                                                    const color = e.target.value;
+                                                    setShapeColor(color);
+                                                    applySelectedShapeColorLive(color);
+                                                    commitCanvasColorChange();
+                                                }}
+                                            />
+                                        </Label>
+                                        <Label className="mt-3 flex items-center gap-2 px-0 py-0 text-xs font-medium">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 cursor-pointer"
+                                                checked={shapeHasFill}
+                                                onChange={(e) => {
+                                                    const nextHasFill = e.target.checked;
+                                                    setShapeHasFill(nextHasFill);
+                                                    applySelectedShapeFillLive(nextHasFill);
+                                                    commitCanvasColorChange();
+                                                }}
+                                            />
+                                            Fyll figur
+                                        </Label>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="relative order-13">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="relative flex items-center gap-1.5"
+                                    disabled={!hasSelectedText}
+                                >
+                                    <Type className="h-3.5 w-3.5" /> Tekstfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: textColor }}
+                                    />
+                                </Button>
+                                <input
+                                    type="color"
+                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                                    value={textColor}
+                                    disabled={!hasSelectedText}
+                                    onInput={(e) => {
+                                        const color = (e.target as HTMLInputElement).value;
+                                        setTextColor(color);
+                                        applySelectedTextColorLive(color);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        setTextColor(color);
+                                        applySelectedTextColorLive(color);
+                                        commitCanvasColorChange();
+                                    }}
+                                />
+                            </div>
+                            <select
+                                value={fontFamily}
+                                className="order-4 h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
                                 onChange={(e) => {
-                                    const color = e.target.value;
-                                    setShapeColor(color);
-                                    changeSelectedShapeColor(color);
+                                    const nextFontFamily = e.target.value;
+                                    setFontFamily(nextFontFamily);
+
+                                    if (hasSelectedText) {
+                                        applySelectedTextStylesLive({ fontFamily: nextFontFamily });
+                                        commitCanvasColorChange();
+                                    }
                                 }}
-                            />
-                        </Label>
-                        <Label className="flex items-center gap-1.5 px-2 py-1 border border-input rounded-md text-xs font-medium hover:bg-accent hover:text-accent-foreground cursor-pointer bg-background">
-                            <Type className="h-3.5 w-3.5" /> Tekstfarge
-                            <Input
-                                type="color"
-                                className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
-                                value={textColor}
-                                disabled={!hasSelectedText}
-                                onChange={(e) => {
-                                    const color = e.target.value;
-                                    setTextColor(color);
-                                    changeSelectedTextColor(color);
+                            >
+                                {FONT_FAMILIES.map((font) => (
+                                    <option key={font.value} value={font.value}>
+                                        {font.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <Button
+                                variant={isTextBold ? 'default' : 'outline'}
+                                size="sm"
+                                className="order-5 min-w-9 px-3 font-bold"
+                                onClick={() => {
+                                    const nextIsTextBold = !isTextBold;
+                                    setIsTextBold(nextIsTextBold);
+
+                                    if (hasSelectedText) {
+                                        applySelectedTextStylesLive({ fontWeight: nextIsTextBold ? 'bold' : 'normal' });
+                                        commitCanvasColorChange();
+                                    }
                                 }}
-                            />
-                        </Label>
+                            >
+                                B
+                            </Button>
+                            <Button
+                                variant={isTextItalic ? 'default' : 'outline'}
+                                size="sm"
+                                className="order-6 min-w-9 px-3 italic"
+                                onClick={() => {
+                                    const nextIsTextItalic = !isTextItalic;
+                                    setIsTextItalic(nextIsTextItalic);
+
+                                    if (hasSelectedText) {
+                                        applySelectedTextStylesLive({ fontStyle: nextIsTextItalic ? 'italic' : 'normal' });
+                                        commitCanvasColorChange();
+                                    }
+                                }}
+                            >
+                                I
+                            </Button>
+                        </div>
 
                             
                     
@@ -1807,9 +2342,34 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     >
                         <div
                             ref={canvasScaleWrapperRef}
-                            className="h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
+                            className="relative h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
                         >
                             <canvas ref={canvasRef} />
+                            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
+                                {guideLines.map((line, index) => (
+                                    <div
+                                        key={`${line.orientation}-${line.position}-${index}`}
+                                        className="absolute bg-blue-600/80"
+                                        style={
+                                            line.orientation === 'vertical'
+                                                ? {
+                                                    left: `${line.position}px`,
+                                                    top: 0,
+                                                    bottom: 0,
+                                                    width: '1px',
+                                                    borderLeft: '1px dashed rgba(37,99,235,0.95)',
+                                                }
+                                                : {
+                                                    top: `${line.position}px`,
+                                                    left: 0,
+                                                    right: 0,
+                                                    height: '1px',
+                                                    borderTop: '1px dashed rgba(37,99,235,0.95)',
+                                                }
+                                        }
+                                    />
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1892,7 +2452,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     </div>
                 )}
 
-                {!isRightSidebarCollapsed && <div className="flex-1 overflow-y-auto p-4">
+                {!isRightSidebarCollapsed && (
+                    <div className="flex-1 overflow-y-auto p-4">
                     <div className="mb-6">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-sm font-semibold">Spørsmål</h4>
@@ -1998,7 +2559,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                             </div>
                         )}
                     </div>
-                </div>}
+                    </div>
+                )}
             </div>
                     
 
@@ -2082,9 +2644,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
             )}
         </div>
     );
-});
+};
 
-export default PresentationEditor;
+export default forwardRef(PresentationEditor);
 
 const normalizeQuestionOption = (option: unknown, questionIndex: number, optionIndex: number): QuestionOption => {
     const rawOption = (typeof option === 'object' && option !== null ? option : {}) as Partial<QuestionOption>;
