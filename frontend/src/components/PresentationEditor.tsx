@@ -21,6 +21,7 @@ import {
     Type as TypeIcon,
     Undo2,
     X,
+    BadgeRussianRubleIcon,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './polls/PollCreator';
@@ -161,6 +162,8 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     const [hasSelectedText, setHasSelectedText] = useState(false);
     const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
     const [isListMenuOpen, setIsListMenuOpen] = useState(false);
+    const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
+    const textMenuRef = useRef<HTMLDivElement | null>(null);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
@@ -880,7 +883,7 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         if (!fabricCanvasRef.current) return;
         
         const pos = getSafePosition(80, 60, 340, 60);
-        const text = new IText('Tittel', { // Slide Title
+        const text = new IText('', { // Slide Title
             left: pos.left,
             top: pos.top,
             originX: 'left',
@@ -980,30 +983,54 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         text.selectAll();
     };
 
-    useEffect(() => {
-        const handleOutsideClick = (event: MouseEvent) => {
-            if (!isListMenuOpen) return;
+ useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        if (!isListMenuOpen) return;
 
-            const target = event.target as Node | null;
-            if (listMenuRef.current && target && !listMenuRef.current.contains(target)) {
-                setIsListMenuOpen(false);
-            }
-        };
+        const target = event.target as Node | null;
+        if (listMenuRef.current && target && !listMenuRef.current.contains(target)) {
+            setIsListMenuOpen(false);
+        }
+    };
 
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setIsListMenuOpen(false);
-            }
-        };
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setIsListMenuOpen(false);
+        }
+    };
 
-        document.addEventListener('mousedown', handleOutsideClick);
-        document.addEventListener('keydown', handleEscape);
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
 
-        return () => {
-            document.removeEventListener('mousedown', handleOutsideClick);
-            document.removeEventListener('keydown', handleEscape);
-        };
-    }, [isListMenuOpen]);
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isListMenuOpen]);
+
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+
+        if (isTextMenuOpen && textMenuRef.current && target && !textMenuRef.current.contains(target)) {
+            setIsTextMenuOpen(false);
+        }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setIsTextMenuOpen(false);
+        }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isTextMenuOpen]);
 
     const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -1555,8 +1582,56 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         >
                             <Redo2 className="h-3.5 w-3.5" /> Gjør om
                         </Button>
-                        <Button onClick={addTitle} variant="outline" size="sm" className="flex items-center gap-1.5"><TypeIcon className="h-3.5 w-3.5" /> Tittel</Button>
-                        <Button onClick={addText} variant="outline" size="sm" className="flex items-center gap-1.5"><Type className="h-3.5 w-3.5" /> Tekst</Button>
+
+<div ref={textMenuRef} className="relative">
+    <Button
+        onClick={() => setIsTextMenuOpen((prev) => !prev)}
+        variant="outline"
+        size="sm"
+        className="flex items-center gap-1.5"
+        aria-haspopup="menu"
+        aria-expanded={isTextMenuOpen}
+    >
+        <Type className="h-3.5 w-3.5" />
+        Tekststil
+        <ChevronDown className="h-3.5 w-3.5" />
+    </Button>
+
+    {isTextMenuOpen && (
+        <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+            
+            <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                    addTitle();
+                    setIsTextMenuOpen(false);
+                }}
+            >
+                <TypeIcon className="h-4 w-4" />
+                <span>Tittel</span>
+            </button>
+
+            <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                    addText();
+                    setIsTextMenuOpen(false);
+                }}
+            >
+                <Type className="h-4 w-4" />
+                <span>Tekst</span>
+            </button>
+
+        </div>
+    )}
+</div>
+
+
+                        
+                        
+
                         <div ref={listMenuRef} className="relative">
                             <Button
                                 onClick={() => setIsListMenuOpen((prev) => !prev)}
@@ -1862,6 +1937,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     </div>
                 </div>}
             </div>
+                    
+
 
             {isQuestionCreatorOpen && (
                 <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 p-4">
