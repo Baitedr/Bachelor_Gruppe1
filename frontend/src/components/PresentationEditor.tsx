@@ -296,6 +296,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
+    const colorChangeCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [presentationVariables, setPresentationVariables] = useState<PresentationVariable[]>([]);
     const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
     const [fontFamily, setFontFamily] = useState('Arial, sans-serif');
@@ -520,6 +521,16 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 
     // Samler tunge oppdateringer slik at de bare kjører når brukeren er ferdig med et fargevalg.
+    const debouncedCommitCanvasColorChange = (delay = 400) => {
+        if (colorChangeCommitTimerRef.current !== null) {
+            clearTimeout(colorChangeCommitTimerRef.current);
+        }
+        colorChangeCommitTimerRef.current = setTimeout(() => {
+            colorChangeCommitTimerRef.current = null;
+            commitCanvasColorChange();
+        }, delay);
+    };
+
     const commitCanvasColorChange = () => {
         markDirty();
         pushHistorySnapshot(createCanvasSnapshot());
@@ -2212,9 +2223,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                         applyBackgroundColorLive((e.target as HTMLInputElement).value);
                                     }}
                                     onChange={(e) => {
-                                        const color = e.target.value;
-                                        applyBackgroundColorLive(color);
-                                        commitBackgroundColorChange(color);
+                                        applyBackgroundColorLive(e.target.value);
+                                        debouncedCommitCanvasColorChange();
                                     }}
                                 />
                             </div>
@@ -2249,7 +2259,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                                     const color = e.target.value;
                                                     setShapeColor(color);
                                                     applySelectedShapeColorLive(color);
-                                                    commitCanvasColorChange();
+                                                    debouncedCommitCanvasColorChange();
                                                 }}
                                             />
                                         </Label>
