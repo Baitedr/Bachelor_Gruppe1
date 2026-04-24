@@ -91,6 +91,14 @@ const MOBILE_BREAKPOINT = 768
 // Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
 const DELETE_UNDO_TIMEOUT_MS = 16_000
 
+function parseLiveJoinCodeFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/live\/join\/([^/?#]+)/i)
+  if (!match) return null
+  const decoded = decodeURIComponent(match[1] || '').trim().toUpperCase()
+  if (!decoded) return null
+  return decoded.startsWith('LIVE-') ? decoded : `LIVE-${decoded}`
+}
+
 // Intern toast-state: Navbar får kun message + actions
 type NavbarUndoToastState = {
   message: string
@@ -318,6 +326,28 @@ function App() {
   const savedRaw = sessionStorage.getItem('proslides_session')
   const saved = savedRaw ? JSON.parse(savedRaw) : null
   const savedPage = loadPageState()
+  const qrJoinCode = parseLiveJoinCodeFromPath(loc.pathname)
+
+  if (qrJoinCode) {
+    try {
+      const data = await api.guestJoin(qrJoinCode)
+      const presentationId = String(data.presentation_id)
+      const nextPage: Page = data.session_started ? 'live' : 'lobby'
+      saveSessionState(nextPage, presentationId, null, true, false)
+      setLivePresentationId(presentationId)
+      setLiveJoinCode(null)
+      setLiveIsPresenter(false)
+      setGuestMode(true)
+      setCurrentPage(nextPage)
+      window.history.replaceState({}, '', '/')
+      setIsAuthChecking(false)
+      return
+    } catch {
+      setCurrentPage('login')
+      setIsAuthChecking(false)
+      return
+    }
+  }
 
   if (saved?.guestMode) {
     setLivePresentationId(saved.presentationId)
