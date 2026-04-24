@@ -190,6 +190,8 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
     const hasUnsavedChangesRef = useRef(false);
     const loadedPresentationRef = useRef<PresentationData | null>(null)
+    const skipHistoryResetRef = useRef(false);
+
     
     
 
@@ -345,10 +347,11 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         }
     };
 
+    
     // Synkroniserer innkommende presentasjon fra parent til lokal editor-state.
     useEffect(() => {
         if (!presentation) {
-            loadedPresentationRef.current = null
+            loadedPresentationRef.current = null;
             setPresentationId(null);
             setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
@@ -358,43 +361,53 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
             return;
         }
 
-        const incomingId = presentation.id ?? null
-        const loadedId = loadedPresentationRef.current?.id ?? null
+        const incomingId = presentation.id ?? null;
+        const loadedId = loadedPresentationRef.current?.id ?? null;
 
         if (incomingId && loadedId && String(incomingId) === String(loadedId)) {
             return
         }
 
-
         loadedPresentationRef.current = presentation
 
         const normalizedVariables = normalizePresentationVariables(
             presentation.variables || presentation.slides?.[0]?.variables || []
-        );
+        )
 
         const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
-            id: slide.id || `local-${Date.now()}-${index}`,
-            title: slide.title || `Lysbilde ${index + 1}`,
-            content: slide.content || '',
-            notes: slide.notes || '',
-            backgroundColor: slide.backgroundColor || '#ffffff',
-            fabricData: slide.fabricData || null,
-            polls: Array.isArray(slide.polls)
+              id: slide.id || `local-${Date.now()}-${index}`,
+              title: slide.title || `Lysbilde ${index + 1}`,
+              content: slide.content || '',
+              notes: slide.notes || '',
+              backgroundColor: slide.backgroundColor || '#ffffff',
+              fabricData: slide.fabricData || null,
+              polls: Array.isArray(slide.polls)
                 ? slide.polls.map((poll, pollIndex) => normalizePoll(poll, pollIndex))
                 : [],
-            questions: Array.isArray(slide.questions)
+              questions: Array.isArray(slide.questions)
                 ? slide.questions.map((question, questionIndex) => normalizeQuestion(question, questionIndex))
                 : [],
-        }));
+            }))
+        
+            setPresentationVariables(normalizedVariables)
+            setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()])
+            setCurrentSlideIndex(0)
+            hasUnsavedChangesRef.current = false
+    }, [presentation?.id])
 
-        setPresentationId(presentation.id || null);
-        setPresentationTitle(presentation.title || 'Uten navn');
-        setPresentationVariables(normalizedVariables);
-        setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
-        setCurrentSlideIndex(0);
-        setSaveError(null);
-        hasUnsavedChangesRef.current = false;
-    }, [presentation]);
+    
+
+    useEffect(() => {
+        const currentSlideId = currentSlideIdRef.current
+        const currentSlide = slides[currentSlideIndex]
+
+        if (currentSlideId && currentSlide) {
+            setSlidePreviewImages((prev) => ({
+                ...prev,
+                [currentSlideId]: captureCanvasPreview(),
+            }))
+        }
+    }, [presentation?.id])
 
     // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
     useEffect(() => {
@@ -479,34 +492,44 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
 
     // Laster aktivt lysbilde inn i Fabric ved bytte av slide.
     useEffect(() => {
-        if (fabricCanvasRef.current && slides[currentSlideIndex]) {
-            const currentSlide = slides[currentSlideIndex];
+    const shouldSkipHistoryReset = skipHistoryResetRef.current;
+    skipHistoryResetRef.current = false;
 
-            const backgroundColor = currentSlide.backgroundColor || '#ffffff';
+    if (fabricCanvasRef.current && slides[currentSlideIndex]) {
+        const currentSlide = slides[currentSlideIndex];
+        const backgroundColor = currentSlide.backgroundColor || '#ffffff';
 
-            isApplyingCanvasStateRef.current = true;
+        isApplyingCanvasStateRef.current = true;
 
-            if (currentSlide.fabricData) {
-                fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
-                    syncCurrentCanvasVariableText();
-                    clampAllObjectsToCanvas();
-                    fabricCanvasRef.current.backgroundColor = backgroundColor;
-                    fabricCanvasRef.current.renderAll();
-                    isApplyingCanvasStateRef.current = false;
-                    resetHistoryWithSnapshot(createCanvasSnapshot());
-                });
-            } else {
-                fabricCanvasRef.current.clear();
-                fabricCanvasRef.current.set({ backgroundColor });
+        if (currentSlide.fabricData) {
+            fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
+                syncCurrentCanvasVariableText();
+                clampAllObjectsToCanvas();
+                fabricCanvasRef.current.backgroundColor = backgroundColor;
                 fabricCanvasRef.current.renderAll();
                 isApplyingCanvasStateRef.current = false;
+
+                if (!shouldSkipHistoryReset) {
+                    resetHistoryWithSnapshot(createCanvasSnapshot());
+                }
+            });
+        } else {
+            fabricCanvasRef.current.clear();
+            fabricCanvasRef.current.set({ backgroundColor });
+            fabricCanvasRef.current.renderAll();
+            isApplyingCanvasStateRef.current = false;
+
+            if (!shouldSkipHistoryReset) {
                 resetHistoryWithSnapshot(createCanvasSnapshot());
             }
-        } else {
+        }
+    } else {
+        if (!shouldSkipHistoryReset) {
             setUndoStack([]);
             setRedoStack([]);
         }
-    }, [currentSlideIndex, slides, syncCurrentCanvasVariableText]);
+    }
+}, [currentSlideIndex, slides, syncCurrentCanvasVariableText]);
 
     // Lyttere for endringer på lerretet (legge til, flytte eller fjerne objekter) for å bygge opp angre-historikken
     useEffect(() => {
@@ -750,9 +773,9 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
     };
 
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
-    const saveCurrentSlide = () => {
+    const saveCurrentSlide = (persistToState = true) => {
         const newSlides = buildSlidesWithCurrentCanvasState();
-        setSlides(newSlides);
+        if (persistToState) setSlides(newSlides)
         return newSlides;
     };
 
@@ -1144,24 +1167,18 @@ const PresentationEditor = forwardRef<PresentationEditorHandle, PresentationEdit
         }
     };
 
-    // Klargjør og lagrer hele presentasjonen, inkludert state og et preview-bilde av første lysbilde
-    // ...existing code...
+    
+    const handleSavePresentation = async (): Promise<boolean> => {
+        if (!onSavePresentation || isSaving) return false
 
-const handleSavePresentation = async (): Promise<boolean> => {
-  if (!onSavePresentation || isSaving) return false
+    
 
-  try {
-    setSaveError(null)
+        try { setSaveError(null)
 
     // Current canvas er med i neste save 
-    const slidesToSave = saveCurrentSlide()
-        const currentSlide = slidesToSave[currentSlideIndex]
-        const currentSlidePreview = captureCanvasPreview()
-        const slidePreviewsById = { ...slidePreviewImages }
-
-        if (currentSlide?.id && currentSlidePreview) {
-            slidePreviewsById[currentSlide.id] = currentSlidePreview
-        }
+    const slidesToSave = saveCurrentSlide(false)
+        
+       
 
     const payload: SavePresentationPayload = {
       id: presentationId ?? undefined,
@@ -1173,9 +1190,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
         notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
-                previewImage: slide?.id ? (slidePreviewsById[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
+        previewImage: slide?.id ? (slidePreviewImages[slide.id] || slide?.previewImage || null) : (slide?.previewImage || null),
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
-                questions: Array.isArray(slide?.questions) ? slide.questions : [],
+        questions: Array.isArray(slide?.questions) ? slide.questions : [],
       })),
     }
 
@@ -1202,25 +1219,26 @@ const handleSavePresentation = async (): Promise<boolean> => {
         notes: slide?.notes || '',
         backgroundColor: slide?.backgroundColor || '#ffffff',
         fabricData: slide?.fabricData ?? null,
-                previewImage: slide?.previewImage || null,
+        previewImage: slide?.previewImage || null,
         polls: Array.isArray(slide?.polls) ? slide.polls : [],
-            questions: Array.isArray(slide?.questions) ? slide.questions : [],
+        questions: Array.isArray(slide?.questions) ? slide.questions : [],
       }))
 
+      skipHistoryResetRef.current = true;
       setSlides(normalizedSlides)
       setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
     }
 
-    const savedAt = new Date();
-    onSaveComplete?.(savedAt);
+   //Timestamp, for når presentasjonen sist ble lagret 
     hasUnsavedChangesRef.current = false;
+    const saveAt = new Date();
+    onSaveComplete?.(saveAt);
     return true
   } catch (err) {
-    console.error('Save presentation failed:', err)
     setSaveError('Kunne ikke lagre presentasjonen. Prøv igjen.')
     return false
-  }
-}
+  } 
+};
 
 
     // Hjelper for å oppdatere polls atomisk på valgt slide.

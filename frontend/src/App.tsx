@@ -116,7 +116,10 @@ function App() {
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
+  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
 
+  const AUTOSAVE_DEBOUNCE_MS = 8000
+  const autosaveTimerRef = useRef<number | null>(null)
   /** Lysbildevindu (sekundærskjerm / popup) — leses én gang ved første render. */
   const [liveProjectorPresentationId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
@@ -222,21 +225,30 @@ function App() {
   }
 
   useEffect(() => {
-    if(!isAutosaveEnabled) return
-    if(currentPage !== 'editor') return
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current)
+      autosaveTimerRef.current = null
+    }
+    if (!isAutosaveEnabled) return
+    if (currentPage !== 'editor') return
+    if (isSavingPresentation) return
+    if (!editorHasUnsavedChanges) return
 
-    const timerId = window.setInterval(() =>{
-      if (isSavingPresentation) return
-
-      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false 
-      if (!hasUnsavedChanges) return
-
+    autosaveTimerRef.current = window.setTimeout(() => {
       void presentationEditorRef.current?.savePresentation?.()
-    }, 1000)
+      autosaveTimerRef.current = null
+    }, AUTOSAVE_DEBOUNCE_MS)
 
-    return () => window.clearInterval(timerId)
-  }, [isAutosaveEnabled, currentPage, isSavingPresentation])
+    return () => {
+      if (autosaveTimerRef.current) {
+        window.clearTimeout(autosaveTimerRef.current)
+        autosaveTimerRef.current = null
+      }
+    }
 
+   }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
+
+  
   useEffect(() => {
   if (!user && !guestMode) return
   savePageState({
