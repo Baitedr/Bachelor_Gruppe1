@@ -1,28 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogOut, Maximize2, Minimize2 } from 'lucide-react'
 import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
+import { exitFullscreenDoc, getFullscreenElement, requestFullscreenEl } from '@/lib/fullscreenDisplay'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import { ModeToggle } from '../../ui/mode-toggle'
 import { Textarea } from '../../ui/textarea'
 import LivePresentationCanvas from '../LivePresentationCanvas'
 import LiveResultsBoard from './LiveResultsBoard'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
-/** Aktivt fullskjerm-element (standard + Safari/WebKit). */
-const getFullscreenElement = () =>
-  document.fullscreenElement || document.webkitFullscreenElement || null
-
-/** Starter element-fullskjerm med webkit-fallback. */
-const requestFullscreenEl = (el) => {
-  if (!el) return Promise.reject(new Error('no element'))
-  const req = el.requestFullscreen || el.webkitRequestFullscreen
-  return req ? req.call(el) : Promise.reject(new Error('fullscreen unsupported'))
+type PollOption = { id: string | number; text: string }
+type ActivePoll = { id: string | number; question: string; options: PollOption[] }
+type ActiveQuestion = {
+  id: string | number
+  prompt: string
+  type?: string
+  options?: PollOption[]
 }
 
-/** Avslutter dokument-fullskjerm med webkit-fallback. */
-const exitFullscreenDoc = () => {
-  const exit = document.exitFullscreen || document.webkitExitFullscreen
-  return exit ? exit.call(document) : Promise.resolve()
+type SlideLike = Record<string, unknown> & {
+  title?: string
+  content?: string
+  fabricData?: { [key: string]: unknown; width?: number; height?: number }  // ← was: unknown
+  polls?: unknown[]
+  questions?: unknown[]
+}
+
+type PresentationShape = {
+  title: string
+  slides: SlideLike[]
 }
 
 /**
@@ -55,11 +62,39 @@ const LivePresentationAudience = ({
   setQuestionAnswer,
   submitOpenQuestionAnswer,
   onLeaveSession,
+}: {
+  presentation: PresentationShape
+  currentSlide: number
+  currentSlideData: SlideLike | null | undefined
+  participantCount: number
+  liveboardForSlideIndex: number | null
+  hasActiveInteraction: boolean
+  activePoll: ActivePoll | null
+  activeQuestion: ActiveQuestion | null
+  pollResults: Record<string, { results?: Record<string, number>; total?: number }>
+  questionResults: Record<
+    string,
+    { results?: Record<string, number>; total?: number; recent_answers?: string[]; question_type?: 'single_choice' | 'open_text' }
+  >
+  sessionEnded: boolean
+  submitPollAnswer: (pollId: string | number, answer: string) => void
+  submitQuestionAnswer: (questionId: string | number, answer: string) => void
+  audienceResults: Array<{ id: string | number; text: string; votes: number; percent: number }>
+  activeQuestionChoiceResults: Array<{ id: string | number; text: string; count: number; percent: number }>
+  activeQuestionType: 'single_choice' | 'open_text'
+  hasAnsweredActivePoll: boolean
+  hasAnsweredActiveQuestion: boolean
+  totalVotes: number
+  totalQuestionAnswers: number
+  questionAnswer: string
+  setQuestionAnswer: (v: string) => void
+  submitOpenQuestionAnswer: () => void
+  onLeaveSession?: () => void
 }) => {
-  const stageRef = useRef(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const isMobileDevice = useIsMobileDevice()
 
-  // Synkroniser fullskjerm-state ved Esc eller nettleser-avslutning
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(getFullscreenElement()))
     document.addEventListener('fullscreenchange', sync)
@@ -83,7 +118,6 @@ const LivePresentationAudience = ({
 
   const slideCount = presentation.slides.length
 
-  // Liveboard-data for gjeldende indeks (utflating av background der det trengs)
   const liveboardSlideData = useMemo(() => {
     if (liveboardForSlideIndex == null) return null
     const li = Number(liveboardForSlideIndex)
@@ -92,9 +126,9 @@ const LivePresentationAudience = ({
 
     const raw = presentation?.slides?.[li]
     if (!raw) return currentSlideData ?? null
-    const bg = raw.background
+    const bg = raw.background as Record<string, unknown> | undefined
     if (bg && typeof bg === 'object' && !Array.isArray(bg)) {
-      return { ...raw, ...bg }
+      return { ...raw, ...bg } as SlideLike
     }
     return raw
   }, [presentation, liveboardForSlideIndex, currentSlide, currentSlideData])
@@ -104,7 +138,6 @@ const LivePresentationAudience = ({
     Number(liveboardForSlideIndex) === Number(currentSlide) &&
     liveboardSlideData != null
 
-  /** Innhold i slide-cell: Fabric-canvas, eller enkel tekstslide */
   const slideBody = useMemo(() => {
     if (!currentSlideData) {
       return (
@@ -125,41 +158,43 @@ const LivePresentationAudience = ({
     return (
       <div className='flex h-full min-h-0 w-full flex-col items-center justify-center overflow-auto p-2 sm:p-3'>
         <div className='w-full max-w-3xl rounded-lg bg-card p-6 shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'>
-        <div className='relative w-full max-w-3xl px-2 text-center sm:px-4'>
-          {currentSlideData.title && (
-            <h2 className='mb-4 text-balance text-2xl font-bold text-foreground sm:mb-6 sm:text-3xl md:text-4xl'>
-              {currentSlideData.title}
-            </h2>
-          )}
-          {currentSlideData.content && (
-            <div className='whitespace-pre-wrap text-balance text-lg text-foreground sm:text-xl md:text-2xl'>
-              {currentSlideData.content}
-            </div>
-          )}
-          {!currentSlideData.title && !currentSlideData.content && (
-            <p className='text-sm text-muted-foreground'>Dette lysbildet er tomt.</p>
-          )}
-        </div>
+          <div className='relative w-full max-w-3xl px-2 text-center sm:px-4'>
+            {currentSlideData.title && (
+              <h2 className='mb-4 text-balance text-2xl font-bold text-foreground sm:mb-6 sm:text-3xl md:text-4xl'>
+                {String(currentSlideData.title)}
+              </h2>
+            )}
+            {currentSlideData.content && (
+              <div className='whitespace-pre-wrap text-balance text-lg text-foreground sm:text-xl md:text-2xl'>
+                {String(currentSlideData.content)}
+              </div>
+            )}
+            {!currentSlideData.title && !currentSlideData.content && (
+              <p className='text-sm text-muted-foreground'>Dette lysbildet er tomt.</p>
+            )}
+          </div>
         </div>
       </div>
     )
   }, [currentSlideData])
 
-  /** Avstemning: stem før svar, deretter live resultater */
-  const pollSection = !activePoll ? null : (
+  const typedActivePoll = activePoll as ActivePoll | null
+  const typedActiveQuestion = activeQuestion as ActiveQuestion | null
+
+  const pollSection = !typedActivePoll ? null : (
     <section className='space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-6'>
       <div>
         <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Avstemning</p>
-        <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{activePoll.question}</h3>
+        <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{typedActivePoll.question}</h3>
       </div>
       {!hasAnsweredActivePoll ? (
         <div className='grid gap-2 sm:gap-3'>
-          {activePoll.options.map((option) => (
+          {typedActivePoll.options.map((option) => (
             <Button
               key={option.id}
               className='h-auto min-h-11 w-full justify-start whitespace-normal py-3 text-left text-base'
               variant='outline'
-              onClick={() => submitPollAnswer(activePoll.id, option.text)}
+              onClick={() => submitPollAnswer(typedActivePoll.id, option.text)}
             >
               {option.text}
             </Button>
@@ -177,10 +212,7 @@ const LivePresentationAudience = ({
                 </span>
               </div>
               <div className='h-2.5 w-full overflow-hidden rounded-full bg-muted'>
-                <div
-                  className='h-full bg-primary transition-all duration-300'
-                  style={{ width: `${option.percent}%` }}
-                />
+                <div className='h-full bg-primary transition-all duration-300' style={{ width: `${option.percent}%` }} />
               </div>
             </div>
           ))}
@@ -190,22 +222,21 @@ const LivePresentationAudience = ({
     </section>
   )
 
-  /** Spørsmål: flervalg eller fritekst; etter svar vises aggregerte resultater */
-  const questionSection = !activeQuestion ? null : (
+  const questionSection = !typedActiveQuestion ? null : (
     <section className='space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-6'>
       <div>
         <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Spørsmål</p>
-        <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{activeQuestion.prompt}</h3>
+        <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{typedActiveQuestion.prompt}</h3>
       </div>
       {!hasAnsweredActiveQuestion ? (
         activeQuestionType === 'single_choice' ? (
           <div className='grid gap-2 sm:gap-3'>
-            {(activeQuestion.options || []).map((option) => (
+            {(typedActiveQuestion.options || []).map((option) => (
               <Button
                 key={option.id}
                 className='h-auto min-h-11 w-full justify-start whitespace-normal py-3 text-left text-base'
                 variant='outline'
-                onClick={() => submitQuestionAnswer(activeQuestion.id, option.text)}
+                onClick={() => submitQuestionAnswer(typedActiveQuestion.id, option.text)}
               >
                 {option.text}
               </Button>
@@ -219,11 +250,7 @@ const LivePresentationAudience = ({
               placeholder='Skriv svaret ditt her...'
               className='min-h-[8rem] resize-y text-base'
             />
-            <Button
-              className='w-full sm:w-auto'
-              onClick={submitOpenQuestionAnswer}
-              disabled={!questionAnswer.trim()}
-            >
+            <Button className='w-full sm:w-auto' onClick={submitOpenQuestionAnswer} disabled={!questionAnswer.trim()}>
               Send svar
             </Button>
           </div>
@@ -242,10 +269,7 @@ const LivePresentationAudience = ({
                     </span>
                   </div>
                   <div className='h-2.5 w-full overflow-hidden rounded-full bg-muted'>
-                    <div
-                      className='h-full bg-primary transition-all duration-300'
-                      style={{ width: `${option.percent}%` }}
-                    />
+                    <div className='h-full bg-primary transition-all duration-300' style={{ width: `${option.percent}%` }} />
                   </div>
                 </div>
               ))}
@@ -253,7 +277,7 @@ const LivePresentationAudience = ({
             </>
           ) : (
             <div className='space-y-2'>
-              {(questionResults[activeQuestion.id]?.recent_answers || []).slice(-5).map((answer, index) => (
+              {(questionResults[String(typedActiveQuestion.id)]?.recent_answers || []).slice(-5).map((answer, index) => (
                 <p
                   key={`answer-${index}`}
                   className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
@@ -269,10 +293,60 @@ const LivePresentationAudience = ({
     </section>
   )
 
+  const mobileInteractionView = (
+    <div className='flex w-full flex-col gap-4 p-4'>
+      <div className='flex items-baseline gap-2'>
+        <span className='text-lg font-semibold'>{presentation.title}</span>
+        <span className='text-xs text-muted-foreground'>Lysbilde {currentSlide + 1} av {slideCount}</span>
+      </div>
+      {hasActiveInteraction ? (
+        <>
+          {pollSection}
+          {questionSection}
+        </>
+      ) : inLiveboardResults ? (
+        <div className='flex flex-col gap-4'>
+          {((liveboardSlideData as SlideLike)?.polls || []).map((poll) => {
+            const p = poll as { id: string | number; question?: string }
+            return (
+              <LiveResultsBoard
+                key={`lb-poll-${p.id}`}
+                initialType='poll'
+                initialItemId={p.id}
+                pollMeta={p}
+                pollResults={pollResults}
+                questionResults={questionResults}
+                sessionEnded={sessionEnded}
+              />
+            )
+          })}
+          {((liveboardSlideData as SlideLike)?.questions || []).map((question) => {
+            const q = question as { id: string | number; prompt?: string; type?: 'single_choice' | 'open_text'; options?: { id: string | number; text: string }[] }
+            return (
+              <LiveResultsBoard
+                key={`lb-q-${q.id}`}
+                initialType='question'
+                initialItemId={q.id}
+                questionMeta={q}
+                pollResults={pollResults}
+                questionResults={questionResults}
+                sessionEnded={sessionEnded}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        <div className='rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground'>
+          Venter på aktivitet fra presentatøren…
+        </div>
+      )}
+    </div>
+  )
+
   return (
-    // Topplinje ligger alltid i normal flyt (også fullskjerm) slik at lysbildet aldri tegnes under den —
-    // hele sliden forblir synlig; canvas skalerer innenfor feltet under header (letterbox).
     <div className='flex h-full min-h-0 min-w-0 w-full flex-col gap-3'>
+      {isMobileDevice && mobileInteractionView}
+      {!isMobileDevice && (
       <Card
         ref={stageRef}
         className={cn(
@@ -304,7 +378,6 @@ const LivePresentationAudience = ({
             </p>
           </div>
           <div className='flex flex-shrink-0 flex-wrap items-center gap-2'>
-            {/* Samme mønster som presentatør: tydelig gruppe i lyst modus. */}
             <div
               className={cn(
                 'inline-flex items-center gap-2 rounded-lg border border-border bg-muted/55 px-2 py-1 shadow-sm dark:bg-muted/35',
@@ -312,10 +385,7 @@ const LivePresentationAudience = ({
               )}
             >
               <span
-                className={cn(
-                  'font-semibold text-foreground',
-                  isFullscreen ? 'text-xs sm:text-sm' : 'text-sm',
-                )}
+                className={cn('font-semibold text-foreground', isFullscreen ? 'text-xs sm:text-sm' : 'text-sm')}
               >
                 Deltakere
               </span>
@@ -323,9 +393,8 @@ const LivePresentationAudience = ({
                 {participantCount}
               </span>
             </div>
-            {/* Fullskjerm: rekkefølge som gjesteheader (ModeToggle → Forlat økt). I vanlig visning: kun Forlat (tema i Navbar). */}
             {isFullscreen ? <ModeToggle /> : null}
-            {onLeaveSession ? (
+            {onLeaveSession && isFullscreen ? (
               <Button
                 type='button'
                 variant='outline'
@@ -344,7 +413,6 @@ const LivePresentationAudience = ({
               size='sm'
               className={cn(
                 'gap-1.5',
-                /* I lyst modus ligger header på bg-muted; secondary ble nesten usynlig — tydelig kortflate i fullskjerm. */
                 isFullscreen &&
                   'border-border bg-card text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground dark:border-secondary dark:bg-secondary dark:text-secondary-foreground dark:shadow-none dark:hover:bg-secondary/85 dark:hover:text-secondary-foreground',
               )}
@@ -365,15 +433,9 @@ const LivePresentationAudience = ({
               : 'px-2 pb-2 pt-3 sm:px-3 sm:pb-3 sm:pt-4',
           )}
         >
-          {/* Slide + dialoger: relative for absolute-overlegg */}
           <div className='relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible'>
-            {/*
-              Grid minmax(0,1fr): stabil høyde til canvas (ResizeObserver), som hos presentatør.
-            */}
             <div className='grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)]'>
-              <div className='relative flex min-h-0 h-full min-w-0 flex-col overflow-visible'>
-                {slideBody}
-              </div>
+              <div className='relative flex min-h-0 h-full min-w-0 flex-col overflow-visible'>{slideBody}</div>
             </div>
 
             {inLiveboardResults && (
@@ -384,28 +446,34 @@ const LivePresentationAudience = ({
               >
                 <div className='flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4'>
                   <div className='flex w-full flex-col gap-4'>
-                    {(liveboardSlideData?.polls || []).map((poll) => (
-                      <LiveResultsBoard
-                        key={`lb-poll-${poll.id}`}
-                        initialType='poll'
-                        initialItemId={poll.id}
-                        pollMeta={poll}
-                        pollResults={pollResults}
-                        questionResults={questionResults}
-                        sessionEnded={sessionEnded}
-                      />
-                    ))}
-                    {(liveboardSlideData?.questions || []).map((question) => (
-                      <LiveResultsBoard
-                        key={`lb-q-${question.id}`}
-                        initialType='question'
-                        initialItemId={question.id}
-                        questionMeta={question}
-                        pollResults={pollResults}
-                        questionResults={questionResults}
-                        sessionEnded={sessionEnded}
-                      />
-                    ))}
+                    {((liveboardSlideData as SlideLike)?.polls || []).map((poll) => {
+                      const p = poll as { id: string | number; question?: string }
+                      return (
+                        <LiveResultsBoard
+                          key={`lb-poll-${p.id}`}
+                          initialType='poll'
+                          initialItemId={p.id}
+                          pollMeta={p}
+                          pollResults={pollResults}
+                          questionResults={questionResults}
+                          sessionEnded={sessionEnded}
+                        />
+                      )
+                    })}
+                    {((liveboardSlideData as SlideLike)?.questions || []).map((question) => {
+                      const q = question as { id: string | number; prompt?: string; type?: 'single_choice' | 'open_text'; options?: { id: string | number; text: string }[] }
+                      return (
+                        <LiveResultsBoard
+                          key={`lb-q-${q.id}`}
+                          initialType='question'
+                          initialItemId={q.id}
+                          questionMeta={q}
+                          pollResults={pollResults}
+                          questionResults={questionResults}
+                          sessionEnded={sessionEnded}
+                        />
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -428,6 +496,7 @@ const LivePresentationAudience = ({
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

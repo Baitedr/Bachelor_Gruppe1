@@ -1,10 +1,31 @@
-import React, { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import PollResults from './PollResults'
 import { Button } from '../ui/button'
 
-const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
+type PollOption = {
+  id?: string | number
+  text: string
+  votes?: number
+}
+
+type PollData = {
+  id: string | number
+  question: string
+  options: PollOption[]
+  user_has_voted?: boolean
+  user_vote_answer?: string
+}
+
+type PollViewerProps = {
+  pollData: PollData
+  userId?: string | number
+  onVote?: (optionId: string | number | undefined) => void
+  showResults?: boolean
+}
+
+const PollViewer = ({ pollData, userId, onVote, showResults = false }: PollViewerProps) => {
   const [hasVoted, setHasVoted] = useState(showResults)
-  const [selectedOption, setSelectedOption] = useState(null)
+  const [selectedOption, setSelectedOption] = useState<number | null>(null)
 
   useEffect(() => {
     // Prefer backend truth
@@ -18,7 +39,7 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
     }
 
     // Fallback to local storage (per user + poll)
-    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}')
+    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}') as Record<string, string | number>
     const key = `${userId || 'anon'}:${pollData.id}`
     const storedOptionId = votedPolls[key]
 
@@ -32,16 +53,18 @@ const PollViewer = ({ pollData, userId, onVote, showResults = false }) => {
     }
   }, [pollData, userId])
 
-  const handleVote = (option, index) => {
+  const handleVote = (option: PollOption, index: number) => {
     if (hasVoted) {
       alert('Du har allerede stemt på denne avstemningen')
       return
     }
 
-    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}')
+    const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '{}') as Record<string, string | number>
     const key = `${userId || 'anon'}:${pollData.id}`
-    votedPolls[key] = option.id
-    localStorage.setItem('votedPolls', JSON.stringify(votedPolls))
+    if (option.id !== undefined) {
+      votedPolls[key] = option.id
+      localStorage.setItem('votedPolls', JSON.stringify(votedPolls))
+    }
 
     setHasVoted(true)
     setSelectedOption(index)

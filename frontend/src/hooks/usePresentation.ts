@@ -1,30 +1,62 @@
-import { useEffect, useState, useRef } from 'react';
-import { createConsumer } from '@rails/actioncable';
-import api from '../services/api';
+import { useEffect, useRef, useState } from 'react'
+import { createConsumer } from '@rails/actioncable'
+import api from '../services/api'
 
 /** Kanal/JSON kan gi indeks som tall eller streng; må matche strengt mellom liveboard og currentSlide. */
-const normalizeSlideIndex = (value) => {
+const normalizeSlideIndex = (value: unknown): number | null => {
   if (value === null || value === undefined) return null
   const n = typeof value === 'number' ? value : parseInt(String(value), 10)
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
-export const usePresentation = (presentationId, token) => {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [activePoll, setActivePoll] = useState(null);
-  const [pollResults, setPollResults] = useState({});
-  const [sessionEnded, setSessionEnded] = useState(false);
-  const [participantCount, setParticipantCount] = useState(0);
-  const [sessionStarted, setSessionStarted] = useState(false);
-  const [submittedPollIds, setSubmittedPollIds] = useState({});
-  const [activeQuestion, setActiveQuestion] = useState(null);
-  const [questionResults, setQuestionResults] = useState({});
-  const [submittedQuestionIds, setSubmittedQuestionIds] = useState({});
-  /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
-  const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState(null);
+type CableReceived = {
+  type?: string
+  slide_index?: unknown
+  resume_liveboard?: boolean | string
+  clear_interactions?: boolean
+  poll?: unknown
+  poll_id?: string
+  results?: Record<string, number>
+  total?: number
+  count?: number
+  participant_count?: number
+  session_started?: boolean
+  session_ended?: boolean
+  question?: unknown
+  question_id?: string
+  recent_answers?: string[]
+  question_type?: string
+}
 
-  const cableRef = useRef(null);
-  const subscriptionRef = useRef(null);
+export const usePresentation = (presentationId: string | number | null, token: string | null) => {
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [activePoll, setActivePoll] = useState<unknown>(null)
+  const [pollResults, setPollResults] = useState<Record<string, { results?: Record<string, number>; total?: number }>>({})
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [participantCount, setParticipantCount] = useState(0)
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [submittedPollIds, setSubmittedPollIds] = useState<Record<string, boolean>>({})
+  const [activeQuestion, setActiveQuestion] = useState<unknown>(null)
+  const [questionResults, setQuestionResults] = useState<
+    Record<
+      string,
+      {
+        results?: Record<string, number>
+        total?: number
+        recent_answers?: string[]
+        question_type?: string
+      }
+    >
+  >({})
+  const [submittedQuestionIds, setSubmittedQuestionIds] = useState<Record<string, boolean>>({})
+  /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
+  const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState<number | null>(null)
+
+  const cableRef = useRef<ReturnType<typeof createConsumer> | null>(null)
+  const subscriptionRef = useRef<{ perform: (action: string, data: object) => void; unsubscribe: () => void } | null>(
+    null,
+  )
+  const lastRealtimeSessionStateAtRef = useRef<number>(0)
 
   useEffect(() => {
     if (!presentationId || !token) return
@@ -42,18 +74,14 @@ export const usePresentation = (presentationId, token) => {
     const subscription = consumer.subscriptions.create(
       { channel: 'PresentationChannel', presentation_id: presentationId },
       {
-        received(data) {
+        received(data: CableReceived) {
           switch (data.type) {
             case 'slide_change': {
               const idx = normalizeSlideIndex(data.slide_index)
               if (idx !== null) setCurrentSlide(idx)
-              // Nytt lysbilde: fjern aktive poll/spørsmål slik at publikum ser sliden uten overlay.
               setActivePoll(null)
               setActiveQuestion(null)
-              // Én melding med resume_liveboard: tilbake fra neste lysbilde til resultatside (unngår race med to WS-kall).
-              const resume =
-                data.resume_liveboard === true ||
-                data.resume_liveboard === 'true'
+              const resume = data.resume_liveboard === true || data.resume_liveboard === 'true'
               if (resume && idx !== null) {
                 setLiveboardForSlideIndex(idx)
               } else {
@@ -62,7 +90,6 @@ export const usePresentation = (presentationId, token) => {
               break
             }
             case 'liveboard_started': {
-              // Eldre server sendte interactions_cleared separat; uten flag antar vi fortsatt at poll/spørsmål skal bort.
               if (data.clear_interactions !== false) {
                 setActivePoll(null)
                 setActiveQuestion(null)
@@ -84,7 +111,7 @@ export const usePresentation = (presentationId, token) => {
             case 'poll_results':
               setPollResults((prev) => ({
                 ...prev,
-                [data.poll_id]: {
+                [String(data.poll_id)]: {
                   results: data.results || {},
                   total: data.total || 0,
                 },
@@ -92,20 +119,24 @@ export const usePresentation = (presentationId, token) => {
               break
             case 'participant_joined':
               setParticipantCount(data.count || 0)
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_state':
               setParticipantCount(data.participant_count || 0)
               setSessionStarted(Boolean(data.session_started))
               setSessionEnded(Boolean(data.session_ended))
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_started':
               setSessionStarted(true)
               if (typeof data.participant_count === 'number') {
                 setParticipantCount(data.participant_count)
               }
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_ended':
               setSessionEnded(true)
+              lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'question_activated':
               setActiveQuestion(data.question || null)
@@ -113,7 +144,7 @@ export const usePresentation = (presentationId, token) => {
             case 'question_results':
               setQuestionResults((prev) => ({
                 ...prev,
-                [data.question_id]: {
+                [String(data.question_id)]: {
                   results: data.results || {},
                   total: data.total || 0,
                   recent_answers: data.recent_answers || [],
@@ -125,7 +156,7 @@ export const usePresentation = (presentationId, token) => {
               break
           }
         },
-      }
+      },
     )
 
     subscriptionRef.current = subscription
@@ -140,8 +171,15 @@ export const usePresentation = (presentationId, token) => {
     if (!presentationId || !token) return
 
     let cancelled = false
+    // Poll only as a fallback if websocket state has been silent.
+    const realtimeFreshThresholdMs = 10_000
 
     const syncSessionState = async () => {
+      const silenceMs = Date.now() - lastRealtimeSessionStateAtRef.current
+      if (lastRealtimeSessionStateAtRef.current > 0 && silenceMs < realtimeFreshThresholdMs) {
+        return
+      }
+
       try {
         const state = await api.getSessionState(presentationId)
         if (cancelled || !state) return
@@ -157,7 +195,7 @@ export const usePresentation = (presentationId, token) => {
     }
 
     void syncSessionState()
-    const intervalId = window.setInterval(syncSessionState, 2000)
+    const intervalId = window.setInterval(syncSessionState, 15_000)
 
     return () => {
       cancelled = true
@@ -165,8 +203,7 @@ export const usePresentation = (presentationId, token) => {
     }
   }, [presentationId, token])
 
-  /** options.resumeLiveboard: gå til indeks og åpne liveboard i samme broadcast (kun presentatør «tilbake til resultat»). */
-  const navigateSlide = (slideIndex, options = {}) => {
+  const navigateSlide = (slideIndex: number, options: { resumeLiveboard?: boolean } = {}) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('navigate_slide', {
         slide_index: slideIndex,
@@ -175,15 +212,13 @@ export const usePresentation = (presentationId, token) => {
     }
   }
 
-  /** Kall fra presentatør før «liveboard»-steget: publikum mister overlay, samme lysbilde. */
   const clearLiveInteractions = () => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('clear_live_interactions', {})
     }
   }
 
-  /** Synkron liveboard for alle (steg etter spørsmål, før faktisk neste lysbilde). */
-  const showLiveboard = (slideIndex) => {
+  const showLiveboard = (slideIndex: number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('show_liveboard', { slide_index: slideIndex })
     }
@@ -195,18 +230,18 @@ export const usePresentation = (presentationId, token) => {
     }
   }
 
-  const activatePoll = (pollId) => {
+  const activatePoll = (pollId: string | number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_poll', { poll_id: pollId })
     }
   }
 
-  const submitPollAnswer = (pollId, answer) => {
+  const submitPollAnswer = (pollId: string | number, answer: string) => {
     if (!subscriptionRef.current) return
-    if (submittedPollIds[pollId]) return
+    const key = String(pollId)
+    if (submittedPollIds[key]) return
 
-    // Prevent double-click duplicate sends client-side
-    setSubmittedPollIds((prev) => ({ ...prev, [pollId]: true }))
+    setSubmittedPollIds((prev) => ({ ...prev, [key]: true }))
 
     subscriptionRef.current.perform('submit_poll_response', {
       poll_id: pollId,
@@ -220,18 +255,18 @@ export const usePresentation = (presentationId, token) => {
     }
   }
 
-  // Spørsmål-funksjonalitet til LivePresentation
-  const activateQuestion = (questionId) => {
+  const activateQuestion = (questionId: string | number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_question', { question_id: questionId })
     }
   }
 
-  const submitQuestionAnswer = (questionId, answer) => {
+  const submitQuestionAnswer = (questionId: string | number, answer: string) => {
     if (!subscriptionRef.current) return
-    if (submittedQuestionIds[questionId]) return
+    const key = String(questionId)
+    if (submittedQuestionIds[key]) return
 
-    setSubmittedQuestionIds((prev) => ({ ...prev, [questionId]: true }))
+    setSubmittedQuestionIds((prev) => ({ ...prev, [key]: true }))
     subscriptionRef.current.perform('submit_question_response', {
       question_id: questionId,
       answer,
@@ -243,7 +278,6 @@ export const usePresentation = (presentationId, token) => {
     activePoll,
     pollResults,
     navigateSlide,
-    clearLiveInteractions,
     liveboardForSlideIndex,
     showLiveboard,
     dismissLiveboard,

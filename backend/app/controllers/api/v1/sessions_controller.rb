@@ -82,13 +82,7 @@ module Api
 
                 render json: {
                     message: 'Koblet til',
-                    presentation: presentation.as_json(include: {
-                        slides: {
-                            include: {
-                                polls: { include: :poll_options }
-                            }
-                        }
-                    }),
+                    presentation: live_presentation_payload(presentation),
                     join_code: session.join_code,
                     session_started: session.started?,
                     session_ended: session.ended_at.present?,
@@ -108,6 +102,8 @@ module Api
                 if session
                     session.update!(ended_at: Time.current)
                     presentation.update!(is_live: false)
+                    delete_guest_users_from_session(session)
+                    delete_session_data(session)
                 end
 
                 render json: {
@@ -184,6 +180,31 @@ module Api
                 )
             end
 
+            def delete_guest_user(user)
+                return unless user.email.end_with?('@guest.proslides')
+
+                user.destroy
+            end
+
+            def delete_guest_users_from_session(session)
+                session.session_participants.each do |participant|
+                    delete_guest_user(participant.user)
+                end
+            end
+
+            def delete_session_data(session)
+                PollResponse.where(presentation_session_id: session.id).destroy_all
+                SessionParticipant.where(session_id: session.id).destroy_all
+
+                session.destroy!
+            end
+
+            def delete_live_session_from_presentation(presentation)
+                presentation.presentation_sessions.where.not(ended_at: nil).each do |session|
+                    delete_session_data(session)
+                end
+            end
+
             def build_guest_password
                 # Meets User complexity validation: lowercase, uppercase, and digit.
                 "Guest#{SecureRandom.alphanumeric(10)}1aA"
@@ -208,6 +229,55 @@ module Api
                     "[sessions#safe_broadcast] failed presentation_id=#{presentation.id} " \
                     "event=#{payload[:type] || payload['type']} error=#{e.class}: #{e.message}"
                 )
+            end
+
+            def live_presentation_payload(presentation)
+                slides = presentation.slides.order(:slide_index).includes(polls: :poll_options)
+
+                {
+                    id: presentation.id,
+                    title: presentation.title,
+                    slides: slides.map { |slide| live_slide_payload(slide) },
+                    variables: live_presentation_variables(slides.first)
+                }
+            end
+
+            def live_slide_payload(slide)
+                payload = slide.background.is_a?(Hash) ? slide.background : {}
+
+                {
+                    id: slide.id,
+                    slideIndex: slide.slide_index,
+                    title: payload_value(payload, 'title') || "Slide #{slide.slide_index + 1}",
+                    content: payload_value(payload, 'content') || '',
+                    notes: slide.notes.presence || payload_value(payload, 'notes') || '',
+                    backgroundColor: payload_value(payload, 'backgroundColor') || '#ffffff',
+                    fabricData: payload_value(payload, 'fabricData'),
+                    previewImage: payload_value(payload, 'previewImage'),
+                    variables: payload_value(payload, 'variables') || [],
+                    questions: payload_value(payload, 'questions') || [],
+                    polls: slide.polls.map do |poll|
+                        {
+                            id: poll.id,
+                            question: poll.question,
+                            poll_type: poll.poll_type,
+                            options: poll.poll_options.map do |option|
+                                { id: option.id, text: option.text }
+                            end
+                        }
+                    end
+                }
+            end
+
+            def live_presentation_variables(first_slide)
+                return [] unless first_slide
+
+                payload = first_slide.background.is_a?(Hash) ? first_slide.background : {}
+                payload_value(payload, 'variables') || []
+            end
+
+            def payload_value(payload, key)
+                payload[key] || payload[key.to_sym]
             end
         end
     end

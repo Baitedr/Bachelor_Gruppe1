@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { PlusCircle, List, ArrowLeft, Trash2 } from 'lucide-react'
@@ -6,14 +6,38 @@ import api from '../../services/api'
 import PollCreator from './PollCreator'
 import PollViewer from './PollViewer'
 
-const PollPage = ({ onNavigate, user }) => {
-  const [activeTab, setActiveTab] = useState('create')
-  const [polls, setPolls] = useState([])
+type PollOption = {
+  id: string | number
+  text: string
+  votes?: number
+}
+
+type Poll = {
+  id: string | number
+  question: string
+  options: PollOption[]
+}
+
+type PollCreatorData = {
+  question: string
+  options: Array<{ text: string }>
+}
+
+type PollPageProps = {
+  onNavigate?: (page: string) => void
+  user?: {
+    id?: string | number
+  } | null
+}
+
+const PollPage = ({ onNavigate, user }: PollPageProps) => {
+  const [activeTab, setActiveTab] = useState<'create' | 'view'>('create')
+  const [polls, setPolls] = useState<Poll[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchPolls()
+    void fetchPolls()
   }, [])
 
   const fetchPolls = async () => {
@@ -29,7 +53,7 @@ const PollPage = ({ onNavigate, user }) => {
     }
   }
 
-  const handleSavePoll = async (pollData) => {
+  const handleSavePoll = async (pollData: PollCreatorData) => {
     try {
       const data = await api.createPoll({
         question: pollData.question,
@@ -44,17 +68,17 @@ const PollPage = ({ onNavigate, user }) => {
     }
   }
 
-  const handleVote = async (pollId, optionId) => {
+  const handleVote = async (pollId: string | number, optionId: string | number) => {
     try {
       const data = await api.votePoll(pollId, optionId)
       setPolls((previous) => previous.map((poll) => (poll.id === pollId ? data.poll : poll)))
       setError(null)
-    } catch (err) {
+    } catch (err: any) {
       setError(err?.response?.data?.error || 'Kunne ikke stemme')
     }
   }
 
-  const handleDeletePoll = async (pollId) => {
+  const handleDeletePoll = async (pollId: string | number) => {
     try {
       await api.deletePoll(pollId)
       setPolls((previous) => previous.filter((poll) => poll.id !== pollId))
@@ -133,7 +157,7 @@ const PollPage = ({ onNavigate, user }) => {
                   <PollViewer
                     pollData={poll}
                     userId={user?.id}
-                    onVote={(optionId) => handleVote(poll.id, optionId)}
+                    onVote={(optionId: string | number) => handleVote(poll.id, optionId)}
                   />
                 </CardContent>
               </Card>

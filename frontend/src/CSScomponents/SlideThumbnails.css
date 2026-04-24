@@ -171,3 +171,15 @@
 .thumbnail-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
+
+.thumbnail-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  cursor: grab;
+  touch-action: none;
+}
+.thumbnail-drag-handle:active {
+  cursor: grabbing;
+}

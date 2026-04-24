@@ -1,11 +1,23 @@
-import React from 'react'
+type PollOption = {
+  text: string
+  votes?: number
+}
 
-const PollResults = ({ pollData, selectedOption = null }) => {
+type PollData = {
+  options: PollOption[]
+}
+
+type PollResultsProps = {
+  pollData: PollData
+  selectedOption?: number | null
+}
+
+const PollResults = ({ pollData, selectedOption = null }: PollResultsProps) => {
   const getTotalVotes = () => {
-    return pollData.options.reduce((sum, opt) => sum + opt.votes, 0)
+    return pollData.options.reduce((sum, opt) => sum + Number(opt.votes || 0), 0)
   }
 
-  const getPercentage = (votes, total) => {
+  const getPercentage = (votes: number, total: number) => {
     return total === 0 ? 0 : Math.round((votes / total) * 100)
   }
 
@@ -15,7 +27,8 @@ const PollResults = ({ pollData, selectedOption = null }) => {
     <div className='space-y-4'>
       <div className='space-y-3'>
         {pollData.options.map((option, index) => {
-          const percentage = getPercentage(option.votes, totalVotes)
+          const votes = Number(option.votes || 0)
+          const percentage = getPercentage(votes, totalVotes)
           const isSelected = selectedOption === index
 
           return (
@@ -33,7 +46,7 @@ const PollResults = ({ pollData, selectedOption = null }) => {
                   {isSelected && <span className='ml-1 text-xs text-primary'>(Din stemme)</span>}
                 </span>
                 <span className='text-sm font-semibold text-primary'>
-                  {option.votes} ({percentage}%)
+                  {votes} ({percentage}%)
                 </span>
               </div>
               <div className='h-2 overflow-hidden rounded bg-muted'>

@@ -5,6 +5,7 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 
 type QuestionType = 'open_text' | 'single_choice';
+type OpenTextDisplayMode = 'word_cloud' | 'answer_list';
 
 type QuestionOption = {
   id: string;
@@ -15,6 +16,7 @@ type QuestionData = {
   id: string | number;
   prompt: string;
   type: QuestionType;
+  openTextDisplayMode?: OpenTextDisplayMode;
   options: QuestionOption[];
   required: boolean;
   createdAt: string;
@@ -26,20 +28,31 @@ type Props = {
   onCancel?: () => void;
 };
 
+// Komponent for å opprette eller redigere et spørsmål, med støtte for både åpne tekstsvar og flervalgsspørsmål, og validering av input før lagring.
 export default function Question({ initialData = null, onSave, onCancel }: Props) {
+  const initialOpenTextDisplayMode =
+    (initialData as { open_text_display_mode?: OpenTextDisplayMode } | null)?.open_text_display_mode ??
+    initialData?.openTextDisplayMode;
+
   const [prompt, setPrompt] = useState(initialData?.prompt || '');
   const [questionType, setQuestionType] = useState<QuestionType>(initialData?.type ?? 'open_text');
+  const [openTextDisplayMode, setOpenTextDisplayMode] = useState<OpenTextDisplayMode>(
+    initialOpenTextDisplayMode === 'answer_list' ? 'answer_list' : 'word_cloud'
+  );
   const [isRequired, setIsRequired] = useState(Boolean(initialData?.required));
   const [options, setOptions] = useState<string[]>(
     initialData?.options?.map((option) => option.text) || ['', '']
   );
 
+  // Legger til et nytt tomt alternativ i listen over alternativer for flervalgsspørsmål.
   const addOption = () => setOptions((previous) => [...previous, '']);
-
+  
+  // Fjerner et alternativ basert på indeksen i listen over alternativer for flervalgsspørsmål.
   const removeOption = (index: number) => {
     setOptions((previous) => previous.filter((_, optionIndex) => optionIndex !== index));
   };
 
+  // Oppdaterer teksten for et spesifikt alternativ basert på indeksen i listen over alternativer for flervalgsspørsmål.
   const updateOption = (index: number, value: string) => {
     setOptions((previous) => {
       const next = [...previous];
@@ -48,6 +61,7 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
     });
   };
 
+  // Håndterer lagring av spørsmålet ved å validere input, generere nødvendige data og kalle onSave callbacken med det nye eller oppdaterte spørsmålet.
   const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -56,18 +70,21 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
       return;
     }
 
+    // For flervalgsspørsmål, validerer at det er minst 2 gyldige alternativer (ikke tomme eller bare whitespace) før lagring.
     const validOptions = options.map((option) => option.trim()).filter(Boolean);
     if (questionType === 'single_choice' && validOptions.length < 2) {
       alert('Flervalgsspørsmål må ha minst 2 alternativer');
       return;
     }
 
+    // Lager en unik ID for spørsmålet basert på eksisterende ID eller nåværende timestamp, og forbereder dataene for lagring.
     const timestamp = Date.now();
 
     onSave({
       id: initialData?.id || timestamp,
       prompt: prompt.trim(),
       type: questionType,
+      openTextDisplayMode: questionType === 'open_text' ? openTextDisplayMode : undefined,
       required: isRequired,
       options:
         questionType === 'single_choice'
@@ -96,9 +113,23 @@ export default function Question({ initialData = null, onSave, onCancel }: Props
           className="w-full rounded-md border border-input bg-background p-2"
         >
           <option value="open_text">Åpent svar</option>
-          <option value="single_choice">Single choice</option>
+          <option value="single_choice">Flervalgsspørsmål</option> 
         </select>
       </div>
+
+      {questionType === 'open_text' && (
+        <div className="space-y-2">
+          <Label>Vis svar som</Label>
+          <select
+            value={openTextDisplayMode}
+            onChange={(event) => setOpenTextDisplayMode(event.target.value as OpenTextDisplayMode)}
+            className="w-full rounded-md border border-input bg-background p-2"
+          >
+            <option value="word_cloud">Word cloud</option>
+            <option value="answer_list">Vanlig svarliste</option>
+          </select>
+        </div>
+      )}
 
       {questionType === 'single_choice' && (
         <div className="space-y-2">

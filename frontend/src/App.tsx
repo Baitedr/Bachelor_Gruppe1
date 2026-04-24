@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import LivePresentation from './components/livesession/LivePresentation'
+import LivePresentationProjectorShell from './components/livesession/LivePresentationProjectorShell'
 import Login from './components/Login'
 import PhoneInteraction from './components/livesession/joinSession'
 import PollPage from './components/polls/PollPage'
@@ -21,6 +22,7 @@ import {
 import api from './services/api'
 import { createDefaultSlideFabricData } from './lib/fabricDefaults'
 import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 type Page =
   | 'login'
@@ -62,6 +64,14 @@ type PresentationSummary = {
   }>
 }
 
+type LiveSlidePayload = {
+  title?: string
+  content?: string
+  notes?: string
+  backgroundColor?: string
+  previewImage?: string
+}
+
 type TrashItem = {
   id: string
   presentation: PresentationSummary
@@ -101,6 +111,7 @@ function App() {
   const [isSavingPresentation, setIsSavingPresentation] = useState(false)
   const [isCreatingPresentation, setIsCreatingPresentation] = useState(false)
   const [currentPage, setCurrentPage] = useState<Page>('login')
+  const [openingPresentationId, setOpeningPresentationId] = useState<string | null>(null)
 
   const [user, setUser] = useState<UserRecord | null>(null)
   const [isAuthChecking, setIsAuthChecking] = useState(true)
@@ -113,6 +124,16 @@ function App() {
   const [startingLivePresentationId, setStartingLivePresentationId] = useState<string | null>(null)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
+  const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
+
+
+  /** Lysbildevindu (sekundærskjerm / popup) — leses én gang ved første render. */
+  const [liveProjectorPresentationId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('liveProjector') !== '1') return null
+    return p.get('presentationId')
+  })
 
   const [isExitEditorDialogOpen, setIsExitEditorDialogOpen] = useState(false)
   const [isDiscardingPresentation, setIsDiscardingPresentation] = useState(false)
@@ -133,7 +154,19 @@ function App() {
   // Husker hvilken presentasjon editoren viser, så vi ikke nullstiller ved nytt objekt med samme id etter lagring
   const editorPresentationIdRef = useRef<string | undefined>(undefined)
 
+  //Autosave timer(toggle autosave)
+  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
+  const autosaveTimerRef = useRef<number | null>(null)
+
+
   const PAGE_STATE_KEY = 'proslides_page_state'
+
+  //Rydder for autosave 
+  const clearAutosaveTimer = () => {
+    if (!autosaveTimerRef.current) return
+    window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = null
+  }
 
   const loadPageState = (): PersistedPageState | null => {
     try {
@@ -166,6 +199,27 @@ function App() {
     if (!editorSaveFlashTimerRef.current) return
     window.clearTimeout(editorSaveFlashTimerRef.current)
     editorSaveFlashTimerRef.current = null
+  }
+
+  const presentationToSummary = (presentation: Record<string, unknown>): PresentationSummary => {
+    const slides = Array.isArray(presentation.slides) ? (presentation.slides as LiveSlidePayload[]) : []
+    const firstSlide = slides[0]
+
+    return {
+      id: String(presentation.id || ''),
+      title: String(presentation.title || 'Untitled Presentation'),
+      created_at: String(presentation.created_at || new Date().toISOString()),
+      slide_count: slides.length,
+      first_slide: firstSlide
+        ? {
+            title: firstSlide.title || 'Lysbilde 1',
+            content: firstSlide.content || '',
+            notes: firstSlide.notes || '',
+            backgroundColor: firstSlide.backgroundColor || '#ffffff',
+            previewImage: firstSlide.previewImage,
+          }
+        : undefined,
+    }
   }
 
   // Oppdaterer tid + kort «Lagret»-blink i navbar etter vellykket lagring fra editoren
@@ -203,12 +257,39 @@ function App() {
   })
 
   // Sjekker om brukeren benytter en mobil enhet basert på skjermstørrelse og touch-mulighet.
-  const isMobileDevice = () => {
-    const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
-    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
-    const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    return hasSmallViewport || isTouchDevice || userAgentIsMobile
-  }
+  const isMobileDevice = useIsMobileDevice()
+
+  // Aktiverer autosave hvis brukeren er på en ikke-mobil enhet og har åpnet editoren (forutsatt at det ikke allerede er aktivert).
+  useEffect(() => {
+    clearAutosaveTimer()
+
+    if (!isAutosaveEnabled) return
+    if (currentPage !== 'editor') return
+    if (isSavingPresentation) return
+    if (!editorHasUnsavedChanges) return
+
+    autosaveTimerRef.current = window.setTimeout(() =>{
+      void presentationEditorRef.current?.savePresentation?.()
+      autosaveTimerRef.current = null
+    }, 6000)
+    return
+  }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
+
+  useEffect(() => {
+    if(!isAutosaveEnabled) return
+    if(currentPage !== 'editor') return
+
+    const timerId = window.setInterval(() =>{
+      if (isSavingPresentation) return
+
+      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false 
+      if (!hasUnsavedChanges) return
+
+      void presentationEditorRef.current?.savePresentation?.()
+    }, 1000)
+
+    return () => window.clearInterval(timerId)
+  }, [isAutosaveEnabled, currentPage, isSavingPresentation])
 
   useEffect(() => {
   if (!user && !guestMode) return
@@ -384,7 +465,13 @@ function App() {
     }
   }
 
+  // Håndterer åpningen av en eksisterende presentasjon ved å hente data fra backend og navigere til editoren, med tilstandshåndtering for innlastning og feil.
   const handleOpenPresentation = async (presentationId: string) => {
+    if (openingPresentationId !== null) return
+
+    setOpeningPresentationId(presentationId)
+    setPresentationsError(null)
+    
     try {
       const data = await api.getPresentation(presentationId)
       setActivePresentation(data.presentation)
@@ -393,9 +480,16 @@ function App() {
       setCurrentPage('editor')
     } catch {
       setPresentationsError('Kunne ikke åpne presentasjon')
-    }
+    } finally {
+      setOpeningPresentationId(null)
   }
+}
 
+  /* 
+   * Håndterer lagring av presentasjonen ved å sende oppdaterte data til backend og oppdatere lokal state, 
+   * med tilbakemelding til editoren når lagring er fullført. 
+   * Navigerer ikke bort fra editoren, da dette kan kalles både fra manuell lagring og autosave.
+   */
   const handleSavePresentation = async (payload: Record<string, unknown>) => {
     setIsSavingPresentation(true)
     try {
@@ -405,9 +499,16 @@ function App() {
         : await api.createPresentation(payload)
 
       setActivePresentation(data.presentation)
+      const summary = presentationToSummary(data.presentation as Record<string, unknown>)
+      setPresentations((previous) => {
+        const idx = previous.findIndex((item) => item.id === summary.id)
+        if (idx === -1) return [summary, ...previous]
+        const next = [...previous]
+        next[idx] = { ...next[idx], ...summary }
+        return next
+      })
       setHasSavedCurrentSession(true)
       setIsNewPresentationSession(false)
-      await loadPresentations()
       return data.presentation
     } finally {
       setIsSavingPresentation(false)
@@ -514,6 +615,7 @@ function App() {
     }
   }
 
+  // Viser dialog for permanent sletting av en presentasjon fra papirkurven, og hvis bekreftet, sletter den for godt.
   const handleDeletePermanently = (trashId: string) => {
     const trashedItem = trashedPresentations.find((item) => item.id === trashId)
     if (!trashedItem) return
@@ -567,8 +669,10 @@ function App() {
     )
   }
 
+  // Fjerner all session-relatert state ved utlogging.
   const clearSessionState = () => sessionStorage.removeItem('proslides_session')
 
+  // Håndterer oppstart av en live presentasjonsøkt ved å kommunisere med backend, sette relevant state og navigere til lobbyen.
   const handleStartLive = async (presentationId: string) => {
     setStartingLivePresentationId(presentationId)
     setPresentationsError(null)
@@ -586,6 +690,7 @@ function App() {
     }
   }
 
+  // Håndterer at en gjest blir med i en live presentasjonsøkt ved å sette relevant state og navigere til lobbyen.
   const handleGuestJoin = (presentationId: string | number) => {
     const normalizedPresentationId = String(presentationId)
     saveSessionState('lobby', normalizedPresentationId, null, true, false)
@@ -596,6 +701,7 @@ function App() {
     setCurrentPage('lobby')
   }
 
+  // Håndterer utlogging ved å rydde all relevant state, både lokalt og i sessionStorage, og navigere til login-siden.
   const handleLogout = async () => {
     await api.logout()
     dismissNavbarToast() // ikke la toast henge igjen etter utlogging
@@ -614,14 +720,19 @@ function App() {
     setCurrentPage('login')
   }
 
-  const handleGoHome = async () => {
-    if (currentPage === 'editor') {
+  // Håndterer navigering "hjem" fra editoren, med sjekk for usaved changes og visning av dialog for å velge mellom å lagre, forkaste eller avbryte navigering.
+  const handleGoHome =  () => {
+    if (isSavingPresentation || isDiscardingPresentation) return
+
+    const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false
+        
+    if (currentPage === 'editor' && hasUnsavedChanges) {
       setIsExitEditorDialogOpen(true)
       return
-        
     }
-
+    
     //Eksisterende presentasjon, ingen endringer - bare gå hjem
+    setIsExitEditorDialogOpen(false)
     clearSessionState()
     setLiveJoinCode(null)
     setLivePresentationId(null)
@@ -629,6 +740,8 @@ function App() {
     setCurrentPage('home')
   }
 
+
+  // Håndterer avslutning av en live presentasjonsøkt ved å kommunisere med backend for å avslutte økten, rydde session-relatert state og navigere hjem.
   const handleEndLiveSession = async () => {
     if (livePresentationId) {
       try {
@@ -643,11 +756,13 @@ function App() {
     setLivePresentationId(null)
   }
 
+  // Håndterer oppdatering av brukerens profilnavn ved å sende oppdaterte data til backend og oppdatere lokal state.
   const handleUpdateProfileName = async (name: string) => {
     const data = await api.updateProfile({ name })
     setUser((previous) => ({ ...(previous || {}), ...(data?.user || {}), name }))
   }
 
+  // Håndterer passordendring ved å sende nødvendig data til backend og oppdatere lokal state basert på responsen.
   const handleChangePassword = async (payload: {
     current_password?: string
     password: string
@@ -662,6 +777,7 @@ function App() {
     }
   }
 
+  // Håndterer forkasting av en presentasjon og navigering hjem, med sjekk for pågående lagring eller forkasting.
   const handleDiscardAndGoHome = async () => {
     if (isSavingPresentation || isDiscardingPresentation) return
 
@@ -684,6 +800,7 @@ function App() {
     }
   }
 
+  // Håndterer lagring av en presentasjon og navigering hjem, med sjekk for pågående lagring og om det faktisk var noe å lagre.
   const handleSaveAndGoHome = async () => {
     if (isSavingPresentation) return
 
@@ -697,11 +814,18 @@ function App() {
   }
 
   if (isAuthChecking) {
+    if (liveProjectorPresentationId) {
+      return <LivePresentationProjectorShell presentationId={liveProjectorPresentationId} />
+    }
     return (
       <div className='grid min-h-screen place-items-center bg-background text-foreground'>
         Laster...
       </div>
     )
+  }
+
+  if (liveProjectorPresentationId) {
+    return <LivePresentationProjectorShell presentationId={liveProjectorPresentationId} />
   }
 
   if (!user && !guestMode) {
@@ -768,6 +892,10 @@ function App() {
     )
   }
 
+  /*
+   Både live-økt og editor har behov for låst viewport-høyde slik at flex-1 og canvas får reell høyde å skalere i,
+   mens home og login kan ha vanlig min-h-screen som vokser med innhold.
+  */
   const isLiveSessionPage =
     currentPage === 'phoneinteraction' || currentPage === 'lobby' || currentPage === 'live'
 
@@ -778,9 +906,10 @@ function App() {
         currentPage === 'editor'
           ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
           : isLiveSessionPage
-            ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
-            : 'min-h-screen',
-      )}
+            ? isMobileDevice
+              ? 'flex min-h-screen flex-col'
+              : 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
+          : 'min-h-screen',)}
     >
       <Navbar
         currentPage={currentPage}
@@ -805,6 +934,8 @@ function App() {
                 isSaving: isSavingPresentation,
                 lastSavedAt: editorLastSavedAt,
                 saveFlash: editorSaveFlash,
+                autosaveEnabled: isAutosaveEnabled,
+                onToggleAutosave: () => setIsAutosaveEnabled((prev) => !prev),
               }
             : null
         }
@@ -912,11 +1043,16 @@ function App() {
                             size='sm'
                             variant='outline'
                             className='flex items-center justify-center gap-1.5 transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground dark:hover:bg-muted/35'
-                            disabled={deletingPresentationIds[presentation.id]}
-                            onClick={() => handleOpenPresentation(presentation.id)}
+                            disabled={deletingPresentationIds[presentation.id] || openingPresentationId !== null}
+                            aria-busy={openingPresentationId === presentation.id}
+                            onClick={() => void handleOpenPresentation(presentation.id)}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Rediger
+                            {openingPresentationId === presentation.id ? (
+                              <Loader2 className='h-3.5 w-3.5 shrink-0 animate-spin' aria-hidden />
+                            ) : (
+                              <Pencil className='h-3.5 w-3.5 shrink-0' aria-hidden />
+                            )}
+                            {openingPresentationId === presentation.id ? 'Redigerer…' : 'Rediger'}
                           </Button>
                           <Button
                             size='sm'
@@ -1023,7 +1159,7 @@ function App() {
           </Card>
         )}
 
-        {currentPage === 'polls' && <PollPage onNavigate={setCurrentPage} user={user} />}
+        {currentPage === 'polls' && <PollPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
 
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>
@@ -1076,6 +1212,7 @@ function App() {
             onSavePresentation={handleSavePresentation}
             isSaving={isSavingPresentation}
             onSaveComplete={handleEditorSaveComplete}
+            onDirtyChange={setEditorHasUnsavedChanges}
           />
         )}
       </main>

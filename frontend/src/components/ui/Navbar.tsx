@@ -20,6 +20,8 @@ export type NavbarEditorSave = {
   isSaving: boolean
   lastSavedAt: Date | null
   saveFlash: boolean
+  autosaveEnabled: boolean
+  onToggleAutosave: () => void
 }
 
 type NavbarProps = {
@@ -204,7 +206,7 @@ export default function Navbar({
                 </form>
 
                 <div className='space-y-2'>
-                  <Label>Passord</Label>
+                  <Label></Label>
                   {!showPasswordForm ? (
                     <Button
                       type='button'
@@ -297,37 +299,61 @@ export default function Navbar({
           </div>
 
           {editorSave ? (
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              disabled={editorSave.isSaving}
-              onClick={editorSave.onSave}
-              title={
-                editorSave.lastSavedAt
-                  ? `Sist lagret ${formatTime24h(editorSave.lastSavedAt)}`
-                  : 'Ikke lagret ennå'
-              }
-              className={cn(
-                'h-8 shrink-0 gap-2 border-emerald-500/30 bg-emerald-500/15 px-3 text-emerald-600 hover:border-input hover:bg-accent hover:text-accent-foreground',
-                editorSave.saveFlash &&
-                  'border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.35)] ring-2 ring-emerald-500/45'
-              )}
-            >
-              {editorSave.saveFlash ? (
-                <Check className='h-4 w-4 shrink-0' aria-hidden />
-              ) : (
-                <Save className='h-4 w-4 shrink-0' aria-hidden />
-              )}
-              <span className='flex min-w-0 items-center gap-2 text-xs leading-none'>
-                <span className='whitespace-nowrap'>
-                  {editorSave.isSaving ? 'Lagrer...' : editorSave.saveFlash ? 'Lagret' : 'Lagre'}
+            <div className='flex items-center gap-2'>
+              <div className='flex items-center gap-2 rounded-md border border-input px-2 py-1'>
+                <span className='text-xs text-muted-foreground'>Autosave</span>
+                <button
+                  type='button'
+                  role='switch'
+                  aria-checked={editorSave.autosaveEnabled}
+                  onClick={editorSave.onToggleAutosave}
+                  className={cn(
+                    'relative h-5 w-10 rounded-full transition-colors',
+                    editorSave.autosaveEnabled ? 'bg-emerald-500' : 'bg-muted'
+                  )}
+                  title={editorSave.autosaveEnabled ? 'Autosave på' : 'Autosave av'}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform',
+                      editorSave.autosaveEnabled && 'translate-x-5'
+                    )}
+                  />
+                </button>
+              </div>
+
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={editorSave.isSaving}
+                onClick={editorSave.onSave}
+                title={
+                  editorSave.lastSavedAt
+                    ? `Sist lagret ${formatTime24h(editorSave.lastSavedAt)}`
+                    : 'Ikke lagret ennå'
+                }
+                className={cn(
+                  'h-8 shrink-0 gap-2 border-emerald-500/30 bg-emerald-500/15 px-3 text-emerald-600 hover:border-input hover:bg-accent hover:text-accent-foreground',
+                  editorSave.saveFlash &&
+                    'border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.35)] ring-2 ring-emerald-500/45'
+                )}
+              >
+                {editorSave.saveFlash ? (
+                  <Check className='h-4 w-4 shrink-0' aria-hidden />
+                ) : (
+                  <Save className='h-4 w-4 shrink-0' aria-hidden />
+                )}
+                <span className='flex min-w-0 items-center gap-2 text-xs leading-none'>
+                  <span className='whitespace-nowrap'>
+                    {editorSave.isSaving ? 'Lagrer...' : editorSave.saveFlash ? 'Lagret' : 'Lagre'}
+                  </span>
+                  <span className='max-w-[4.5rem] min-w-0 truncate text-left text-[10px] font-normal text-muted-foreground sm:max-w-[6rem]'>
+                    {editorSave.lastSavedAt ? formatTime24h(editorSave.lastSavedAt) : '—'}
+                  </span>
                 </span>
-                <span className='max-w-[4.5rem] min-w-0 truncate text-left text-[10px] font-normal text-muted-foreground sm:max-w-[6rem]'>
-                  {editorSave.lastSavedAt ? formatTime24h(editorSave.lastSavedAt) : '—'}
-                </span>
-              </span>
-            </Button>
+              </Button>
+            </div>
           ) : null}
         </div>
         </div>
@@ -373,8 +399,11 @@ export default function Navbar({
             <LogOut className='h-4 w-4' />
             Logg ut
           </Button>
-        </div>
+        </div>      
       </div>
     </header>
+
+
+    
   )
 }

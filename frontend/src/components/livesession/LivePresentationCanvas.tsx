@@ -1,22 +1,37 @@
 import { useEffect, useRef } from 'react'
 import { StaticCanvas } from 'fabric'
+import type { ReactNode } from 'react'
 
 /** Standard lysbildestørrelse når JSON mangler eksplisitte mål (16:9). */
 const BASE_WIDTH = 960
 const BASE_HEIGHT = 540
 
+export type LiveSlideCanvasData = {
+  backgroundColor?: string
+  fabricData?: {
+    width?: number
+    height?: number
+    [key: string]: unknown
+  }
+}
+
 /**
  * Statisk Fabric-visning av ett lysbilde under live (presentatør eller publikum).
  * Skalerer proporsjonalt til foreldrens bredde/høyde via ResizeObserver.
  */
-const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
-  const canvasRef = useRef(null)
-  const fabricRef = useRef(null)
-  const containerRef = useRef(null)
-  const wrapperRef = useRef(null)
+const LivePresentationCanvas = ({
+  slideData,
+  presenterToolbar = null,
+}: {
+  slideData: LiveSlideCanvasData | null | undefined
+  presenterToolbar?: ReactNode
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const fabricRef = useRef<InstanceType<typeof StaticCanvas> | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
   const baseSizeRef = useRef({ width: BASE_WIDTH, height: BASE_HEIGHT })
 
-  /** Leser «logisk» slide-bredde/høyde fra fabricData, ellers fallback til BASE_*. */
   const resolveBaseSize = () => {
     const rawWidth = Number(slideData?.fabricData?.width)
     const rawHeight = Number(slideData?.fabricData?.height)
@@ -26,7 +41,6 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     return baseSizeRef.current
   }
 
-  /** Uniform skalering som «letterboxer» sliden innenfor beholderen (bevarer sideforhold). */
   const fitToContainer = () => {
     if (!containerRef.current || !wrapperRef.current || !fabricRef.current) return
 
@@ -42,7 +56,6 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     wrapperRef.current.style.width = `${targetWidth}px`
     wrapperRef.current.style.height = `${targetHeight}px`
 
-    // Tegner i basis-koordinater, skalert med viewportTransform (samme innhold, annen pikselstørrelse).
     fabricRef.current.setDimensions({ width: targetWidth, height: targetHeight })
     fabricRef.current.setViewportTransform([scale, 0, 0, scale, 0, 0])
     fabricRef.current.requestRenderAll()
@@ -60,7 +73,9 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
 
     return () => {
       fabricRef.current?.dispose()
+      fabricRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- én gang per mount; slide oppdateres i egen effekt
   }, [])
 
   useEffect(() => {
@@ -69,22 +84,21 @@ const LivePresentationCanvas = ({ slideData, presenterToolbar = null }) => {
     const renderData = async () => {
       const { width, height } = resolveBaseSize()
       if (slideData?.fabricData) {
-        await fabricRef.current.loadFromJSON(slideData.fabricData)
+        await fabricRef.current!.loadFromJSON(slideData.fabricData as object)
       } else {
-        fabricRef.current.clear()
+        fabricRef.current!.clear()
       }
 
-      fabricRef.current.setDimensions({ width, height })
-      fabricRef.current.setViewportTransform([1, 0, 0, 1, 0, 0])
-      fabricRef.current.backgroundColor = slideData?.backgroundColor || '#ffffff'
-      fabricRef.current.renderAll()
+      fabricRef.current!.setDimensions({ width, height })
+      fabricRef.current!.setViewportTransform([1, 0, 0, 1, 0, 0])
+      fabricRef.current!.backgroundColor = slideData?.backgroundColor || '#ffffff'
+      fabricRef.current!.renderAll()
       fitToContainer()
     }
 
-    renderData()
+    void renderData()
   }, [slideData])
 
-  // Oppdaterer skalering ved vindusendring eller når forelderen får ny høyde (f.eks. flex-layout).
   useEffect(() => {
     const observer = new ResizeObserver(() => fitToContainer())
     if (containerRef.current) observer.observe(containerRef.current)

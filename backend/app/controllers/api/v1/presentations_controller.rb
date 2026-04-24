@@ -25,6 +25,7 @@ module Api
           user_email: current_user.email
         )
         replace_slides!(presentation, slides_payload)
+        PresentationChannel.invalidate_questions_lookup_cache(presentation.id)
 
         render json: { presentation: presentation_payload(presentation.reload) }, status: :created
       end
@@ -35,11 +36,14 @@ module Api
           user_email: current_user.email
         )
         replace_slides!(@presentation, slides_payload)
+        PresentationChannel.invalidate_questions_lookup_cache(@presentation.id)
 
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
 
       def destroy
+        PresentationChannel.invalidate_questions_lookup_cache(@presentation.id)
+        PresentationChannel.invalidate_active_session_cache(@presentation.id)
         @presentation.destroy!
         render json: { message: 'Presentation deleted' }, status: :ok
       end
@@ -48,6 +52,7 @@ module Api
         @presentation.update!(is_live: true)
         @presentation.presentation_sessions.where(ended_at: nil).update_all(ended_at: Time.current)
         session = @presentation.presentation_sessions.create!(started_at: Time.current, started: false)
+        PresentationChannel.invalidate_active_session_cache(@presentation.id)
         render json: {
           presentation: presentation_payload(@presentation.reload),
           join_code: session.join_code
@@ -58,6 +63,7 @@ module Api
         @presentation.update!(is_live: false)
         active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
         active_session&.update!(ended_at: Time.current)
+        PresentationChannel.invalidate_active_session_cache(@presentation.id)
         safe_broadcast(@presentation, { type: 'session_ended' })
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
       end
@@ -88,12 +94,18 @@ module Api
         payload
       end
 
+      # Hjelpefunksjon for å normalisere og validere presentasjonsvariabler som kan brukes i tekstobjekter på lysbildene.
+      def presentation_variables_payload
+        normalize_presentation_variables(params.dig(:presentation, :variables))
+      end
+
       def replace_slides!(presentation, slides)
         normalized_slides = if slides.empty?
                               [default_slide_payload]
                             else
                               slides
                             end
+        shared_variables = presentation_variables_payload
 
         Presentation.transaction do
           existing_slide_ids = presentation.slides.pluck(:id)
@@ -105,7 +117,7 @@ module Api
             slide = presentation.slides.create!(
               slide_index: index,
               notes: normalize_slide_notes(source),
-              background: normalize_slide_background(slide_data, index)
+              background: normalize_slide_background(slide_data, index, shared_variables)
             )
 
             create_slide_polls!(slide, slide_data)
@@ -145,11 +157,12 @@ module Api
           'notes' => '',
           'backgroundColor' => '#ffffff',
           'fabricData' => nil,
-          'questions' => []
+          'questions' => [],
+          'variables' => []
         }
       end
 
-      def normalize_slide_background(slide_data, index)
+      def normalize_slide_background(slide_data, index, shared_variables = [])
         source = slide_data.is_a?(ActionController::Parameters) ? slide_data.to_unsafe_h : slide_data
 
         {
@@ -158,8 +171,26 @@ module Api
           backgroundColor: source['backgroundColor'].presence || source[:backgroundColor].presence || '#ffffff',
           fabricData: source['fabricData'] || source[:fabricData],
           previewImage: source['previewImage'] || source[:previewImage],
-          questions: normalize_slide_questions(source['questions'] || source[:questions])
+          questions: normalize_slide_questions(source['questions'] || source[:questions]),
+          variables: normalize_presentation_variables(source['variables'] || source[:variables] || shared_variables)
         }
+      end
+      # Normaliserer og validerer presentasjonsvariabler, som kan være definert på presentasjonsnivå eller slide-nivå. 
+      # Variabler må ha et gyldig navn for å inkluderes, og får en unik ID hvis den ikke er spesifisert.
+      def normalize_presentation_variables(variables)
+        return [] unless variables.is_a?(Array)
+
+        variables.filter_map do |variable_data|
+          source = variable_data.is_a?(ActionController::Parameters) ? variable_data.to_unsafe_h : variable_data
+          name = (source['name'] || source[:name]).to_s.strip
+          next if name.blank?
+
+          {
+            id: (source['id'] || source[:id] || "var-#{SecureRandom.hex(6)}").to_s,
+            name: name,
+            value: (source['value'] || source[:value]).to_s
+          }
+        end
       end
 
       def normalize_slide_notes(source)
@@ -234,21 +265,41 @@ module Api
       end
 
       def presentation_payload(presentation)
+        ordered_slides = presentation.slides.order(:slide_index).includes(polls: :poll_options).to_a
+        sessions = presentation.presentation_sessions.order(started_at: :desc).to_a
+        latest_session = sessions.first
+        counts_by_poll_and_session = build_response_counts(ordered_slides, sessions)
+
         {
           id: presentation.id,
           title: presentation.title,
           user_email: presentation.user_email,
           created_at: presentation.created_at,
           is_live: presentation.is_live,
-          slides: presentation.slides.order(:slide_index).map { |slide| slide_payload(slide) }
+          variables: presentation_variables_for(presentation),
+          slides: ordered_slides.map do |slide|
+            slide_payload(
+              slide,
+              latest_session: latest_session,
+              sessions: sessions,
+              counts_by_poll_and_session: counts_by_poll_and_session
+            )
+          end
         }
       end
 
-      def slide_payload(slide)
+      # Hjelpefunksjon for å hente og normalisere presentasjonsvariabler for en gitt presentasjon.
+      def presentation_variables_for(presentation)
+        first_slide = presentation.slides.order(:slide_index).first
+        return [] unless first_slide
+
+        payload = first_slide.background.is_a?(Hash) ? first_slide.background : {}
+        normalize_presentation_variables(payload['variables'] || payload[:variables])
+      end
+
+      def slide_payload(slide, latest_session:, sessions:, counts_by_poll_and_session:)
         payload = slide.background.is_a?(Hash) ? slide.background : {}
-        polls = slide.polls.includes(:poll_options, :poll_responses)
-        sessions = slide.presentation.presentation_sessions.order(started_at: :desc).to_a
-        latest_session = sessions.first
+        polls = slide.polls
 
         {
           id: slide.id,
@@ -259,13 +310,25 @@ module Api
           backgroundColor: payload['backgroundColor'] || '#ffffff',
           fabricData: payload['fabricData'],
           previewImage: payload_value(payload, 'previewImage'),
+          variables: normalize_presentation_variables(payload['variables'] || payload[:variables]),
           questions: normalize_slide_questions(payload['questions']),
-          polls: polls.map { |poll| poll_payload_for_editor(poll, latest_session, sessions) }
+          polls: polls.map do |poll|
+            poll_payload_for_editor(
+              poll,
+              latest_session,
+              sessions,
+              counts_by_poll_and_session: counts_by_poll_and_session
+            )
+          end
         }
       end
 
-      def poll_payload_for_editor(poll, latest_session, sessions)
-        latest_counts = counts_for_session(poll, latest_session)
+      def poll_payload_for_editor(poll, latest_session, sessions, counts_by_poll_and_session:)
+        latest_counts = counts_for_session(
+          poll,
+          latest_session,
+          counts_by_poll_and_session: counts_by_poll_and_session
+        )
 
         {
           id: poll.id,
@@ -279,20 +342,28 @@ module Api
           end,
           latestSessionId: latest_session&.id,
           sessionHistory: sessions.filter_map do |session|
-            payload = session_history_payload(poll, session)
+            payload = session_history_payload(
+              poll,
+              session,
+              counts_by_poll_and_session: counts_by_poll_and_session
+            )
             payload if payload[:total] > 0
           end
         }
       end
 
-      def counts_for_session(poll, session)
+      def counts_for_session(poll, session, counts_by_poll_and_session:)
         return {} unless session
 
-        poll.poll_responses.where(presentation_session_id: session.id).group(:answer).count
+        counts_by_poll_and_session.dig(poll.id, session.id) || {}
       end
 
-      def session_history_payload(poll, session)
-        counts = counts_for_session(poll, session)
+      def session_history_payload(poll, session, counts_by_poll_and_session:)
+        counts = counts_for_session(
+          poll,
+          session,
+          counts_by_poll_and_session: counts_by_poll_and_session
+        )
         total = counts.values.sum
 
         {
@@ -308,6 +379,22 @@ module Api
             }
           end
         }
+      end
+
+      def build_response_counts(slides, sessions)
+        poll_ids = slides.flat_map { |slide| slide.polls.map(&:id) }.compact
+        session_ids = sessions.map(&:id).compact
+        return {} if poll_ids.empty? || session_ids.empty?
+
+        grouped = PollResponse.where(poll_id: poll_ids, presentation_session_id: session_ids)
+                              .group(:poll_id, :presentation_session_id, :answer)
+                              .count
+
+        grouped.each_with_object({}) do |((poll_id, session_id, answer), votes), nested|
+          nested[poll_id] ||= {}
+          nested[poll_id][session_id] ||= {}
+          nested[poll_id][session_id][answer] = votes
+        end
       end
 
       def safe_broadcast(presentation, payload)
