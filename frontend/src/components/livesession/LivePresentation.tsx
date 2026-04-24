@@ -9,6 +9,7 @@ import {
 import api from '../../services/api'
 import LivePresentationAudience from './ui/LivePresentationAudience'
 import LivePresentationPresenter from './ui/LivePresentationPresenter'
+import type { PresenterSlideData } from './PresenterSlideViewport'
 
 type SlideRecord = Record<string, unknown> & {
   background?: Record<string, unknown>
@@ -19,6 +20,43 @@ type PresentationRecord = {
   title: string
   slides: SlideRecord[]
   variables?: PresentationVariable[]
+}
+
+type LiveQuestionType = 'single_choice' | 'open_text'
+
+type PollOption = { id: string | number; text: string }
+type ActivePoll = { id: string | number; question: string; options: PollOption[] }
+type ActiveQuestion = {
+  id: string | number
+  prompt: string
+  type?: string
+  options?: PollOption[]
+}
+
+type NormalizedQuestionAggregate = {
+  results?: Record<string, number>
+  total?: number
+  recent_answers?: string[]
+  question_type?: LiveQuestionType
+}
+
+const isActivePoll = (value: unknown): value is ActivePoll => {
+  if (!value || typeof value !== 'object') return false
+  const poll = value as Record<string, unknown>
+  return (
+    (typeof poll.id === 'string' || typeof poll.id === 'number') &&
+    typeof poll.question === 'string' &&
+    Array.isArray(poll.options)
+  )
+}
+
+const isActiveQuestion = (value: unknown): value is ActiveQuestion => {
+  if (!value || typeof value !== 'object') return false
+  const question = value as Record<string, unknown>
+  return (
+    (typeof question.id === 'string' || typeof question.id === 'number') &&
+    typeof question.prompt === 'string'
+  )
 }
 
 /**
@@ -102,54 +140,73 @@ const LivePresentation = ({
   const mergedSlideData = rawSlideData?.background
     ? ({ ...rawSlideData, ...rawSlideData.background } as typeof rawSlideData)
     : rawSlideData
-  const currentSlideData = mergedSlideData
+  const currentSlideData: PresenterSlideData = mergedSlideData
     ? ({
         ...mergedSlideData,
         title: resolveTextWithVariables(mergedSlideData.title, presentationVariables),
         content: resolveTextWithVariables(mergedSlideData.content, presentationVariables),
         fabricData: resolveFabricDataWithVariables(mergedSlideData.fabricData, presentationVariables),
-      } as typeof mergedSlideData)
-    : mergedSlideData
+      } as PresenterSlideData)
+    : null
 
-  const activePollResult = activePoll && typeof activePoll === 'object' && activePoll !== null && 'id' in activePoll
-    ? pollResults[String((activePoll as { id: string | number }).id)]
+  const typedActivePoll = isActivePoll(activePoll) ? activePoll : null
+  const typedActiveQuestion = isActiveQuestion(activeQuestion) ? activeQuestion : null
+
+  const normalizedQuestionResults = useMemo<Record<string, NormalizedQuestionAggregate>>(() => {
+    const entries = Object.entries(questionResults).map(([questionId, aggregate]) => {
+      const rawType = aggregate?.question_type
+      const normalizedType: LiveQuestionType | undefined =
+        rawType === 'single_choice' || rawType === 'open_text' ? rawType : undefined
+
+      return [
+        questionId,
+        {
+          ...aggregate,
+          question_type: normalizedType,
+        },
+      ] as const
+    })
+
+    return Object.fromEntries(entries)
+  }, [questionResults])
+
+  const activePollResult = typedActivePoll
+    ? pollResults[String(typedActivePoll.id)]
     : null
   const totalVotes = activePollResult?.total || 0
   const activePollId =
-    activePoll && typeof activePoll === 'object' && activePoll !== null && 'id' in activePoll
-      ? String((activePoll as { id: string | number }).id)
+    typedActivePoll
+      ? String(typedActivePoll.id)
       : ''
-  const hasAnsweredActivePoll = Boolean(activePoll && submittedPollIds[activePollId])
-  const activeQuestionResult =
-    activeQuestion && typeof activeQuestion === 'object' && activeQuestion !== null && 'id' in activeQuestion
-      ? questionResults[String((activeQuestion as { id: string | number }).id)]
+  const hasAnsweredActivePoll = Boolean(typedActivePoll && submittedPollIds[activePollId])
+  const activeQuestionResult = typedActiveQuestion
+      ? normalizedQuestionResults[String(typedActiveQuestion.id)]
       : null
   const totalQuestionAnswers = activeQuestionResult?.total || 0
-  const activeQuestionType = activeQuestionResult?.question_type || 'open_text'
+  const activeQuestionType: LiveQuestionType = activeQuestionResult?.question_type || 'open_text'
   const activeQuestionId =
-    activeQuestion && typeof activeQuestion === 'object' && activeQuestion !== null && 'id' in activeQuestion
-      ? String((activeQuestion as { id: string | number }).id)
+    typedActiveQuestion
+      ? String(typedActiveQuestion.id)
       : ''
-  const hasAnsweredActiveQuestion = Boolean(activeQuestion && submittedQuestionIds[activeQuestionId])
+  const hasAnsweredActiveQuestion = Boolean(typedActiveQuestion && submittedQuestionIds[activeQuestionId])
 
-  const hasActivePoll = Boolean(activePoll)
-  const hasActiveQuestion = Boolean(activeQuestion)
+  const hasActivePoll = Boolean(typedActivePoll)
+  const hasActiveQuestion = Boolean(typedActiveQuestion)
   const hasActiveInteraction = hasActivePoll || hasActiveQuestion
 
   const audienceResults = useMemo(() => {
-    if (!activePoll || typeof activePoll !== 'object' || activePoll === null || !('options' in activePoll)) return []
-    const opts = (activePoll as { options: Array<{ id: string | number; text: string }> }).options
+    if (!typedActivePoll) return []
+    const opts = typedActivePoll.options
     return opts.map((option) => {
       const votes = activePollResult?.results?.[option.text] || 0
       const percent = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0
       return { id: option.id, text: option.text, votes, percent }
     })
-  }, [activePoll, activePollResult, totalVotes])
+  }, [typedActivePoll, activePollResult, totalVotes])
 
   const activeQuestionChoiceResults = useMemo(() => {
-    if (!activeQuestion || activeQuestionType !== 'single_choice') return []
-    const q = activeQuestion as { options?: Array<{ id: string | number; text: string }> }
-    return (q.options || []).map((option) => {
+    if (!typedActiveQuestion || activeQuestionType !== 'single_choice') return []
+    return (typedActiveQuestion.options || []).map((option) => {
       const count = activeQuestionResult?.results?.[option.text] || 0
       const percent = totalQuestionAnswers > 0 ? Math.round((count / totalQuestionAnswers) * 100) : 0
       return {
@@ -159,16 +216,15 @@ const LivePresentation = ({
         percent,
       }
     })
-  }, [activeQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
+  }, [typedActiveQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
 
   const submitOpenQuestionAnswer = () => {
-    if (!activeQuestion || typeof activeQuestion !== 'object' || activeQuestion === null || !('id' in activeQuestion))
-      return
+    if (!typedActiveQuestion) return
 
     const trimmedAnswer = questionAnswer.trim()
     if (!trimmedAnswer) return
 
-    submitQuestionAnswer((activeQuestion as { id: string | number }).id, trimmedAnswer)
+    submitQuestionAnswer(typedActiveQuestion.id, trimmedAnswer)
     setQuestionAnswer('')
   }
 
@@ -190,10 +246,10 @@ const LivePresentation = ({
           participantCount={participantCount}
           liveboardForSlideIndex={liveboardForSlideIndex}
           hasActiveInteraction={hasActiveInteraction}
-          activePoll={activePoll}
-          activeQuestion={activeQuestion}
+          activePoll={typedActivePoll}
+          activeQuestion={typedActiveQuestion}
           pollResults={pollResults}
-          questionResults={questionResults}
+          questionResults={normalizedQuestionResults}
           sessionEnded={sessionEnded}
           submitPollAnswer={submitPollAnswer}
           submitQuestionAnswer={submitQuestionAnswer}

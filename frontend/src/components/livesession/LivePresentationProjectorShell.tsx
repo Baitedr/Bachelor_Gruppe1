@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Maximize, Minimize } from 'lucide-react'
 import { usePresentation } from '../../hooks/usePresentation'
 import { exitFullscreenDoc, getFullscreenElement, requestFullscreenEl } from '../../lib/fullscreenDisplay'
@@ -22,6 +22,14 @@ type PresentationRecord = {
   title: string
   slides: SlideRecord[]
   variables?: PresentationVariable[]
+}
+
+type LiveQuestionType = 'single_choice' | 'open_text'
+type NormalizedQuestionAggregate = {
+  results?: Record<string, number>
+  total?: number
+  recent_answers?: string[]
+  question_type?: LiveQuestionType
 }
 
 /**
@@ -103,6 +111,24 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
       }
     : mergedSlideData) as PresenterSlideData
 
+  const normalizedQuestionResults = useMemo<Record<string, NormalizedQuestionAggregate>>(() => {
+    const entries = Object.entries(questionResults).map(([questionId, aggregate]) => {
+      const rawType = aggregate?.question_type
+      const normalizedType: LiveQuestionType | undefined =
+        rawType === 'single_choice' || rawType === 'open_text' ? rawType : undefined
+
+      return [
+        questionId,
+        {
+          ...aggregate,
+          question_type: normalizedType,
+        },
+      ] as const
+    })
+
+    return Object.fromEntries(entries)
+  }, [questionResults])
+
   const {
     handleNextSlide,
     handlePrevSlide,
@@ -120,7 +146,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     showLiveboard,
     dismissLiveboard,
     pollResults,
-    questionResults,
+    questionResults: normalizedQuestionResults,
     activePoll,
     activeQuestion,
   })
@@ -239,7 +265,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
           inLiveboardPhase={inLiveboardPhase}
           sessionEnded={sessionEnded}
           pollResults={pollResults}
-          questionResults={questionResults}
+          questionResults={normalizedQuestionResults}
           onPrev={handlePrevSlide}
           onNext={handleNextSlide}
           canPrev={navCanGoPrev}
