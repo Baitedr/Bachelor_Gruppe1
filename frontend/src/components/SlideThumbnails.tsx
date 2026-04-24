@@ -1,5 +1,5 @@
 import '../CSScomponents/SlideThumbnails.css'
-import { resolveTextWithVariables } from '../lib/utils'
+import { resolveTextWithVariables, type PresentationVariable } from '../lib/utils'
 import { Button } from './ui/button'
 import { BarChart2, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
 import {
@@ -8,6 +8,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type DragEndEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -16,13 +17,53 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-const slideHasQuestions = (slide) =>
+type SlideObject = {
+  templateText?: string
+  text?: string
+}
+
+type SlideData = {
+  id: string
+  title: string
+  content?: string
+  backgroundColor?: string
+  variables?: PresentationVariable[]
+  questions?: unknown[]
+  polls?: unknown[]
+  fabricData?: {
+    objects?: SlideObject[]
+  } | null
+}
+
+type SlidePreviewMap = Record<string, string | null | undefined>
+
+type SortableSlideThumbnailProps = {
+  slide: SlideData
+  index: number
+  currentSlideIndex: number
+  onSlideSelect: (index: number) => void
+  onSlideDelete: (index: number) => void
+  onSlideDuplicate: (index: number) => void
+  slidePreviewImages: SlidePreviewMap
+}
+
+type SlideThumbnailsProps = {
+  slides: SlideData[]
+  slidePreviewImages?: SlidePreviewMap
+  currentSlideIndex: number
+  onSlideSelect: (index: number) => void
+  onSlideDelete: (index: number) => void
+  onSlideDuplicate: (index: number) => void
+  onSlideReorder?: (fromIndex: number, toIndex: number) => void
+}
+
+const slideHasQuestions = (slide: SlideData) =>
   Array.isArray(slide?.questions) && slide.questions.length > 0
 
-const slideHasPolls = (slide) =>
+const slideHasPolls = (slide: SlideData) =>
   Array.isArray(slide?.polls) && slide.polls.length > 0
 
-const getSlidePreviewContent = (slide) => {
+const getSlidePreviewContent = (slide: SlideData | null | undefined) => {
   if (!slide) return 'Ingen innhold enda'
 
   if (slide.content && slide.content.trim()) {
@@ -59,7 +100,7 @@ function SortableSlideThumbnail({
   onSlideDelete,
   onSlideDuplicate,
   slidePreviewImages,
-}) {
+}: SortableSlideThumbnailProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id })
 
@@ -128,7 +169,7 @@ function SortableSlideThumbnail({
 
         {slidePreviewImages[slide.id] ? (
           <img
-            src={slidePreviewImages[slide.id]}
+            src={slidePreviewImages[slide.id] || undefined}
             alt={`${slide.title} forhåndsvisning`}
             className="thumbnail-preview-image"
           />
@@ -181,14 +222,14 @@ function SlideThumbnails({
   onSlideDelete,
   onSlideDuplicate,
   onSlideReorder,
-}) {
+}: SlideThumbnailsProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
     })
   )
 
-  const handleDragEnd = ({ active, over }) => {
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return
     const fromIndex = slides.findIndex((s) => s.id === active.id)
     const toIndex = slides.findIndex((s) => s.id === over.id)

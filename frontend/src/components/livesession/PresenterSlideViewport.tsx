@@ -21,7 +21,7 @@ export type PresenterSlideData = {
   content?: string
   notes?: string
   backgroundColor?: string
-  fabricData?: unknown
+  fabricData?: { [key: string]: unknown; width?: number; height?: number }
   polls?: Array<{ id: string | number; question: string }>
   questions?: Array<{
     id: string | number
@@ -236,7 +236,7 @@ export function PresenterSlideViewport({
           </div>
         )
       ) : (
-        <div className='flex h-full min-h-[12rem] w-full items-center justify-center rounded-lg border border-dashed border-border/60 p-6'>
+        <div className='flex h-full min-h-48 w-full items-center justify-center rounded-lg border border-dashed border-border/60 p-6'>
           <p className='text-sm text-muted-foreground'>Ingen data for dette lysbildet.</p>
         </div>
       )}

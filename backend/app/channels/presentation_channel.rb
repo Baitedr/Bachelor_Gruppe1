@@ -1,5 +1,26 @@
 class PresentationChannel < ApplicationCable::Channel
-  
+  ACTIVE_SESSION_CACHE_VERSION = 'v1'.freeze
+  QUESTIONS_LOOKUP_CACHE_VERSION = 'v1'.freeze
+  ACTIVE_SESSION_CACHE_TTL = 30.seconds
+  QUESTIONS_LOOKUP_CACHE_TTL = 10.minutes
+
+  # Exposed so controllers can bust caches when the underlying data changes.
+  def self.active_session_cache_key(presentation_id)
+    "active_session_id:#{ACTIVE_SESSION_CACHE_VERSION}:#{presentation_id}"
+  end
+
+  def self.questions_lookup_cache_key(presentation_id)
+    "presentation_questions_map:#{QUESTIONS_LOOKUP_CACHE_VERSION}:#{presentation_id}"
+  end
+
+  def self.invalidate_active_session_cache(presentation_id)
+    Rails.cache.delete(active_session_cache_key(presentation_id))
+  end
+
+  def self.invalidate_questions_lookup_cache(presentation_id)
+    Rails.cache.delete(questions_lookup_cache_key(presentation_id))
+  end
+
   # WS-kanal for sanntidsinteraksjoner i presentasjonsøkter, inkludert deltakelse, lysbildeendringer, spørsmål og avstemninger.
   def subscribed
     presentation = Presentation.find_by(id: params[:presentation_id])
@@ -9,8 +30,6 @@ class PresentationChannel < ApplicationCable::Channel
 
     active_session = active_session_for_presentation(presentation)
     return unless active_session && presentation.is_live
-
-    participant_count = active_session.session_participants.count
 
     if current_user.id != presentation.owner_id
       SessionParticipant.find_or_create_by(
@@ -23,6 +42,8 @@ class PresentationChannel < ApplicationCable::Channel
         presentation,
         { type: 'participant_joined', count: participant_count }
       )
+    else
+      participant_count = active_session.session_participants.count
     end
 
     transmit(
@@ -47,20 +68,21 @@ class PresentationChannel < ApplicationCable::Channel
     return unless active_session
 
     active_session.update!(started: true)
+    participant_count = active_session.session_participants.count
 
     PresentationChannel.broadcast_to(
       presentation,
       {
         type: 'session_started',
         session_started: true,
-        participant_count: active_session.session_participants.count
+        participant_count: participant_count
       }
     )
     PresentationChannel.broadcast_to(
       presentation,
       {
         type: 'session_state',
-        participant_count: active_session.session_participants.count,
+        participant_count: participant_count,
         session_started: true,
         session_ended: false
       }
@@ -187,7 +209,7 @@ class PresentationChannel < ApplicationCable::Channel
       store['recent_answers'] << answer
       store['recent_answers'] = store['recent_answers'].last(20)
     end
-  
+
     Rails.cache.write(question_store_key(active_session.id, question[:id]), store, expires_in: 12.hours)
     broadcast_question_results(presentation, active_session, question)
   end
@@ -197,7 +219,7 @@ class PresentationChannel < ApplicationCable::Channel
     "presentation_session:#{params[:presentation_id]}:session:#{session_id}:question:#{question_id}"
   end
 
-  # Hjelpemetode for å hente eller initialisere lagringsstruktur for spørsmålssvar i cache, som inkluderer resultater, 
+  # Hjelpemetode for å hente eller initialisere lagringsstruktur for spørsmålssvar i cache, som inkluderer resultater,
   # total antall svar, individuelle bruker-svar og nylige åpne tekst-svar.
   def question_store_for_session(session_id, question_id)
     Rails.cache.fetch(question_store_key(session_id, question_id)) do
@@ -205,31 +227,44 @@ class PresentationChannel < ApplicationCable::Channel
     end
   end
 
-  # Hjelpemetode for å finne et spørsmål i en presentasjon basert på spørsmål-ID, 
-  # ved å iterere gjennom lysbildene og deres bakgrunnsdata for å finne matchende spørsmål.
+  # Henter et spørsmål fra presentasjonen basert på ID. Bygger et cachet oppslagskart over
+  # alle spørsmål i slides en gang, slik at gjentatte WS-interaksjoner ikke skanner alle slides hver gang.
   def find_question_in_presentation(presentation, question_id)
     target_id = question_id.to_s
-    presentation.slides.each do |slide|
+    return nil if target_id.blank?
+
+    lookup = Rails.cache.fetch(
+      self.class.questions_lookup_cache_key(presentation.id),
+      expires_in: QUESTIONS_LOOKUP_CACHE_TTL
+    ) do
+      build_questions_lookup(presentation)
+    end
+
+    lookup[target_id]
+  end
+
+  def build_questions_lookup(presentation)
+    presentation.slides.order(:slide_index).each_with_object({}) do |slide, hash|
       payload = slide.background.is_a?(Hash) ? slide.background : {}
       questions = payload['questions'] || payload[:questions] || []
       questions.each do |q|
         qh = q.is_a?(Hash) ? q : {}
-        next unless (qh['id'] || qh[:id]).to_s == target_id
+        id = (qh['id'] || qh[:id]).to_s
+        next if id.blank?
 
         options = (qh['options'] || qh[:options] || []).map do |opt|
           oh = opt.is_a?(Hash) ? opt : {}
           { id: (oh['id'] || oh[:id]).to_s, text: (oh['text'] || oh[:text]).to_s }
         end
 
-        return {
-          id: (qh['id'] || qh[:id]).to_s,
+        hash[id] = {
+          id: id,
           prompt: (qh['prompt'] || qh[:prompt]).to_s,
           type: ((qh['type'] || qh[:type]).to_s == 'single_choice' ? 'single_choice' : 'open_text'),
           options: options
         }
       end
     end
-    nil
   end
 
   # Hjelpemetode for å formatere et spørsmål i en standard struktur for sending til klienter, inkludert ID, prompt, type og alternativer.
@@ -263,20 +298,22 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
-    poll = Poll.includes(:poll_options, :poll_responses, :slide).find(data['poll_id'])
+    poll = Poll.includes(:poll_options, :slide).find(data['poll_id'])
     poll.slide.polls.update_all(is_active: false)
     poll.update!(is_active: true)
+
+    active_session = active_session_for_presentation(presentation)
 
     PresentationChannel.broadcast_to(
       presentation,
       {
         type: 'poll_activated',
         poll_id: poll.id,
-        poll: serialize_poll(poll, active_session_for_presentation(presentation))
+        poll: serialize_poll(poll, active_session)
       }
     )
 
-    broadcast_poll_results(poll, active_session_for_presentation(presentation))
+    broadcast_poll_results(poll, active_session)
   end
 
   # Deltaker sender svar på en poll, som lagres i databasen og oppdateres i sanntid for alle deltakere.
@@ -310,18 +347,41 @@ class PresentationChannel < ApplicationCable::Channel
 
   private
 
-  # Hjelpemetode for å finne den aktive presentasjonsøkten for en gitt presentasjon, som er nødvendig for å håndtere deltakelse og interaksjoner i sanntid.
+  # Cacher id-en til den aktive økten i 30 sekunder slik at hver eneste WS-interaksjon
+  # ikke treffer DB for et oppslag mot presentation_sessions. Cachen blir ugyldiggjort
+  # eksplisitt av kontrollere når en økt startes/avsluttes. I tillegg validerer vi alltid
+  # at den cachede økten fortsatt er aktiv før den brukes videre.
   def active_session_for_presentation(presentation)
-    presentation.presentation_sessions.find_by(ended_at: nil)
+    cache_key = self.class.active_session_cache_key(presentation.id)
+    cached_id = Rails.cache.fetch(cache_key, expires_in: ACTIVE_SESSION_CACHE_TTL) do
+      presentation.presentation_sessions.where(ended_at: nil).pick(:id)
+    end
+
+    return nil unless cached_id
+
+    session = PresentationSession.find_by(id: cached_id, ended_at: nil)
+    unless session
+      Rails.cache.delete(cache_key)
+      # En ny økt kan ha blitt opprettet selv om den cachede var avsluttet.
+      fresh_id = presentation.presentation_sessions.where(ended_at: nil).pick(:id)
+      return nil unless fresh_id
+
+      Rails.cache.write(cache_key, fresh_id, expires_in: ACTIVE_SESSION_CACHE_TTL)
+      session = PresentationSession.find_by(id: fresh_id, ended_at: nil)
+    end
+
+    session
   end
 
   # Hjelpemetode for å sende oppdaterte resultater for en poll til alle deltakere i sanntid, basert på svarene som er lagret i databasen for den aktive økten.
   def broadcast_poll_results(poll, active_session)
     return unless active_session
 
-    scoped = poll.poll_responses.where(presentation_session_id: active_session.id)
-    results = scoped.group(:answer).count
-    total = scoped.count
+    results = poll.poll_responses
+                  .where(presentation_session_id: active_session.id)
+                  .group(:answer)
+                  .count
+    total = results.values.sum
 
     PresentationChannel.broadcast_to(
       poll.slide.presentation,

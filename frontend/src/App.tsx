@@ -22,6 +22,7 @@ import {
 import api from './services/api'
 import { createDefaultSlideFabricData } from './lib/fabricDefaults'
 import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 type Page =
   | 'login'
@@ -63,6 +64,14 @@ type PresentationSummary = {
   }>
 }
 
+type LiveSlidePayload = {
+  title?: string
+  content?: string
+  notes?: string
+  backgroundColor?: string
+  previewImage?: string
+}
+
 type TrashItem = {
   id: string
   presentation: PresentationSummary
@@ -81,6 +90,14 @@ type PersistedPageState = {
 const MOBILE_BREAKPOINT = 768
 // Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
 const DELETE_UNDO_TIMEOUT_MS = 16_000
+
+function parseLiveJoinCodeFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/live\/join\/([^/?#]+)/i)
+  if (!match) return null
+  const decoded = decodeURIComponent(match[1] || '').trim().toUpperCase()
+  if (!decoded) return null
+  return decoded.startsWith('LIVE-') ? decoded : `LIVE-${decoded}`
+}
 
 // Intern toast-state: Navbar får kun message + actions
 type NavbarUndoToastState = {
@@ -116,7 +133,6 @@ function App() {
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
-  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
 
   const AUTOSAVE_DEBOUNCE_MS = 8000
   const autosaveTimerRef = useRef<number | null>(null)
@@ -147,7 +163,19 @@ function App() {
   // Husker hvilken presentasjon editoren viser, så vi ikke nullstiller ved nytt objekt med samme id etter lagring
   const editorPresentationIdRef = useRef<string | undefined>(undefined)
 
+  //Autosave timer(toggle autosave)
+  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
+  const autosaveTimerRef = useRef<number | null>(null)
+
+
   const PAGE_STATE_KEY = 'proslides_page_state'
+
+  //Rydder for autosave 
+  const clearAutosaveTimer = () => {
+    if (!autosaveTimerRef.current) return
+    window.clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = null
+  }
 
   const loadPageState = (): PersistedPageState | null => {
     try {
@@ -180,6 +208,27 @@ function App() {
     if (!editorSaveFlashTimerRef.current) return
     window.clearTimeout(editorSaveFlashTimerRef.current)
     editorSaveFlashTimerRef.current = null
+  }
+
+  const presentationToSummary = (presentation: Record<string, unknown>): PresentationSummary => {
+    const slides = Array.isArray(presentation.slides) ? (presentation.slides as LiveSlidePayload[]) : []
+    const firstSlide = slides[0]
+
+    return {
+      id: String(presentation.id || ''),
+      title: String(presentation.title || 'Untitled Presentation'),
+      created_at: String(presentation.created_at || new Date().toISOString()),
+      slide_count: slides.length,
+      first_slide: firstSlide
+        ? {
+            title: firstSlide.title || 'Lysbilde 1',
+            content: firstSlide.content || '',
+            notes: firstSlide.notes || '',
+            backgroundColor: firstSlide.backgroundColor || '#ffffff',
+            previewImage: firstSlide.previewImage,
+          }
+        : undefined,
+    }
   }
 
   // Oppdaterer tid + kort «Lagret»-blink i navbar etter vellykket lagring fra editoren
@@ -217,12 +266,23 @@ function App() {
   })
 
   // Sjekker om brukeren benytter en mobil enhet basert på skjermstørrelse og touch-mulighet.
-  const isMobileDevice = () => {
-    const hasSmallViewport = window.innerWidth <= MOBILE_BREAKPOINT
-    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
-    const userAgentIsMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    return hasSmallViewport || isTouchDevice || userAgentIsMobile
-  }
+  const isMobileDevice = useIsMobileDevice()
+
+  // Aktiverer autosave hvis brukeren er på en ikke-mobil enhet og har åpnet editoren (forutsatt at det ikke allerede er aktivert).
+  useEffect(() => {
+    clearAutosaveTimer()
+
+    if (!isAutosaveEnabled) return
+    if (currentPage !== 'editor') return
+    if (isSavingPresentation) return
+    if (!editorHasUnsavedChanges) return
+
+    autosaveTimerRef.current = window.setTimeout(() =>{
+      void presentationEditorRef.current?.savePresentation?.()
+      autosaveTimerRef.current = null
+    }, 6000)
+    return
+  }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
 
   useEffect(() => {
     if (autosaveTimerRef.current) {
@@ -276,6 +336,28 @@ function App() {
   const savedRaw = sessionStorage.getItem('proslides_session')
   const saved = savedRaw ? JSON.parse(savedRaw) : null
   const savedPage = loadPageState()
+  const qrJoinCode = parseLiveJoinCodeFromPath(loc.pathname)
+
+  if (qrJoinCode) {
+    try {
+      const data = await api.guestJoin(qrJoinCode)
+      const presentationId = String(data.presentation_id)
+      const nextPage: Page = data.session_started ? 'live' : 'lobby'
+      saveSessionState(nextPage, presentationId, null, true, false)
+      setLivePresentationId(presentationId)
+      setLiveJoinCode(null)
+      setLiveIsPresenter(false)
+      setGuestMode(true)
+      setCurrentPage(nextPage)
+      window.history.replaceState({}, '', '/')
+      setIsAuthChecking(false)
+      return
+    } catch {
+      setCurrentPage('login')
+      setIsAuthChecking(false)
+      return
+    }
+  }
 
   if (saved?.guestMode) {
     setLivePresentationId(saved.presentationId)
@@ -457,9 +539,16 @@ function App() {
         : await api.createPresentation(payload)
 
       setActivePresentation(data.presentation)
+      const summary = presentationToSummary(data.presentation as Record<string, unknown>)
+      setPresentations((previous) => {
+        const idx = previous.findIndex((item) => item.id === summary.id)
+        if (idx === -1) return [summary, ...previous]
+        const next = [...previous]
+        next[idx] = { ...next[idx], ...summary }
+        return next
+      })
       setHasSavedCurrentSession(true)
       setIsNewPresentationSession(false)
-      await loadPresentations()
       return data.presentation
     } finally {
       setIsSavingPresentation(false)
@@ -857,9 +946,10 @@ function App() {
         currentPage === 'editor'
           ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
           : isLiveSessionPage
-            ? 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
-            : 'min-h-screen',
-      )}
+            ? isMobileDevice
+              ? 'flex min-h-screen flex-col'
+              : 'flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden'
+          : 'min-h-screen',)}
     >
       <Navbar
         currentPage={currentPage}
@@ -1109,7 +1199,7 @@ function App() {
           </Card>
         )}
 
-        {currentPage === 'polls' && <PollPage onNavigate={setCurrentPage} user={user} />}
+        {currentPage === 'polls' && <PollPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
 
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>
@@ -1162,6 +1252,7 @@ function App() {
             onSavePresentation={handleSavePresentation}
             isSaving={isSavingPresentation}
             onSaveComplete={handleEditorSaveComplete}
+            onDirtyChange={setEditorHasUnsavedChanges}
           />
         )}
       </main>

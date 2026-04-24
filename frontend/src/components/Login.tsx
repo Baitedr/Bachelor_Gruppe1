@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 function sanitizeLiveCodeSuffix(raw: string): string {
   let s = raw.trim().toUpperCase().replace(/^LIVE-?/, '')
@@ -38,6 +39,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const isMobileDevice = useIsMobileDevice()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -124,10 +126,55 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
     }
   }
 
+  const guestJoinCard = isLogin ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Bli med som gjest</CardTitle>
+        <CardDescription>
+          Skriv inn de fire tegnene etter «LIVE-» som presentatøren viser.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleGuestJoin}>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="guestCode">Øktkode</Label>
+            <div className="flex overflow-hidden rounded-md border border-input shadow-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background">
+              <span
+                className="inline-flex items-center border-r border-input bg-muted px-3 font-mono text-sm text-muted-foreground"
+                aria-hidden
+              >
+                LIVE-
+              </span>
+              <Input
+                id="guestCode"
+                placeholder="AB12"
+                value={guestCode}
+                onChange={(e) => setGuestCode(sanitizeLiveCodeSuffix(e.target.value))}
+                required
+                className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none font-mono uppercase"
+                maxLength={4}
+                inputMode="text"
+                spellCheck={false}
+              />
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" className="w-full flex items-center gap-2" variant="outline" disabled={isLoading}>
+            {!isLoading && <Users className="h-4 w-4" />}
+            {isLoading ? 'Blir med...' : 'Bli med i økten'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  ) : null
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6 md:p-10">
       <div className="w-full max-w-sm flex flex-col gap-6">
         <h1 className="text-center text-4xl font-extrabold tracking-tight leading-none">ProSlides</h1>
+
+        {isMobileDevice && guestJoinCard}
 
         <Card>
           <CardHeader>
@@ -289,7 +336,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
           </form>
         </Card>
 
-        {isLogin && (
+        {!isMobileDevice && isLogin && (
           <Card>
             <CardHeader>
               <CardTitle>Bli med som gjest</CardTitle>
