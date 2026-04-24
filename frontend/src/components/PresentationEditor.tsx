@@ -296,6 +296,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
+    const skipHistoryResetRef = useRef(false);
     const [presentationVariables, setPresentationVariables] = useState<PresentationVariable[]>([]);
     const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
     const [fontFamily, setFontFamily] = useState('Arial, sans-serif');
@@ -453,7 +454,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             const element = videoObject.getElement();
             if (!(element instanceof HTMLVideoElement)) return;
 
-            // Muted autoplay gjÃ¸r at videoene kan starte uten ekstra brukerklikk.
+            // Muted autoplay gjør at videoene kan starte uten ekstra brukerklikk.
             element.loop = true;
             element.muted = true;
             element.playsInline = true;
@@ -583,7 +584,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             setSlides([defaultSlide()]);
             setPresentationVariables([]);
             setCurrentSlideIndex(0);
-            hasUnsavedChangesRef.current = false;
+            setDirtyState(false);
             return;
         }
 
@@ -612,7 +613,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
-        hasUnsavedChangesRef.current = false;
+        setDirtyState(false);
     }, [presentation]);
 
     // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
@@ -699,6 +700,9 @@ ref: ForwardedRef<PresentationEditorHandle>
 
     // Laster aktivt lysbilde inn i Fabric ved bytte av slide.
     useEffect(() => {
+        const shouldSkipHistoryReset = skipHistoryResetRef.current;
+        skipHistoryResetRef.current = false;
+
         if (fabricCanvasRef.current && slides[currentSlideIndex]) {
             const currentSlide = slides[currentSlideIndex];
 
@@ -714,7 +718,10 @@ ref: ForwardedRef<PresentationEditorHandle>
                     fabricCanvasRef.current.renderAll();
                     syncCanvasVideos();
                     isApplyingCanvasStateRef.current = false;
-                    resetHistoryWithSnapshot(createCanvasSnapshot());
+
+                    if (!shouldSkipHistoryReset) {
+                        resetHistoryWithSnapshot(createCanvasSnapshot());
+                    }
                 });
             } else {
                 fabricCanvasRef.current.clear();
@@ -722,11 +729,16 @@ ref: ForwardedRef<PresentationEditorHandle>
                 fabricCanvasRef.current.renderAll();
                 stopVideoRenderLoop();
                 isApplyingCanvasStateRef.current = false;
-                resetHistoryWithSnapshot(createCanvasSnapshot());
+
+                if (!shouldSkipHistoryReset) {
+                    resetHistoryWithSnapshot(createCanvasSnapshot());
+                }
             }
         } else {
-            setUndoStack([]);
-            setRedoStack([]);
+            if (!shouldSkipHistoryReset) {
+                setUndoStack([]);
+                setRedoStack([]);
+            }
         }
     }, [currentSlideIndex, slides]);
 
@@ -838,7 +850,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
-        canvas.on('text:changed', updatePreview);
+        canvas.on('text:changed', handleCanvasChangeWithPreview);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
         canvas.on('selection:cleared', handleGuideReset);
@@ -850,7 +862,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
-            canvas.off('text:changed', updatePreview);
+            canvas.off('text:changed', handleCanvasChangeWithPreview);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
             canvas.off('selection:cleared', handleGuideReset);
@@ -1087,9 +1099,9 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
-    const saveCurrentSlide = () => {
+    const saveCurrentSlide = (persistToState = true) => {
         const newSlides = buildSlidesWithCurrentCanvasState();
-        setSlides(newSlides);
+        if (persistToState) setSlides(newSlides);
         return newSlides;
     };
 
@@ -1705,14 +1717,14 @@ useEffect(() => {
     // Klargjør og lagrer hele presentasjonen, inkludert state og et preview-bilde av første lysbilde
     // ...existing code...
 
-const handleSavePresentation = async (): Promise<boolean> => {
-  if (!onSavePresentation || isSaving) return false
+        const handleSavePresentation = async (): Promise<boolean> => {
+    if (!onSavePresentation || isSaving) return false
 
   try {
     setSaveError(null)
 
     // Current canvas er med i neste save 
-    const slidesToSave = saveCurrentSlide()
+    const slidesToSave = saveCurrentSlide(false)
         const currentSlide = slidesToSave[currentSlideIndex]
         const currentSlidePreview = captureCanvasPreview()
         const slidePreviewsById = { ...slidePreviewImages }
@@ -1765,13 +1777,14 @@ const handleSavePresentation = async (): Promise<boolean> => {
             questions: Array.isArray(slide?.questions) ? slide.questions : [],
       }))
 
+            skipHistoryResetRef.current = true;
       setSlides(normalizedSlides)
       setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
     }
 
     const savedAt = new Date();
     onSaveComplete?.(savedAt);
-    hasUnsavedChangesRef.current = false;
+        setDirtyState(false);
     return true
   } catch (err) {
     console.error('Save presentation failed:', err)
