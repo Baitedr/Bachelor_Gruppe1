@@ -32,6 +32,13 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
+// hjelpefunksjoner for å normalisere og håndtere presentasjonsvariabler
+import {
+    normalizePresentationVariables,
+    normalizeVariableName,
+    resolveFabricDataWithVariables,
+    type PresentationVariable,
+} from '../lib/utils';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -157,6 +164,7 @@ type Poll = {
 };
 
 type QuestionType = 'open_text' | 'single_choice';
+type OpenTextDisplayMode = 'word_cloud' | 'answer_list';
 
 type QuestionOption = {
     id: string;
@@ -167,6 +175,7 @@ type QuestionItem = {
     id: string;
     prompt: string;
     type: QuestionType;
+    openTextDisplayMode?: OpenTextDisplayMode;
     required: boolean;
     options: QuestionOption[];
     createdAt: string;
@@ -194,13 +203,26 @@ type Slide = {
 type PresentationData = {
     id?: string | number | null;
     title?: string;
-    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[] }>;
+    variables?: PresentationVariable[];
+    slides?: Array<Partial<Slide> & { polls?: unknown[]; questions?: unknown[]; variables?: unknown[] }>;
+};
+
+type SaveSlidePayload = {
+    title: string;
+    content: string;
+    notes: string;
+    backgroundColor: string;
+    fabricData: unknown;
+    previewImage?: string | null;
+    polls: Poll[];
+    questions: QuestionItem[];
 };
 
 type SavePresentationPayload = {
     id: string | number | null;
     title: string;
-    slides: Slide[];
+    variables: PresentationVariable[];
+    slides: SaveSlidePayload[];
 };
 
 type SavePresentationResult = {
@@ -224,15 +246,15 @@ export type PresentationEditorHandle = {
 };
 
 type PresentationEditorProps = {
-    presentation?: PresentationData | null;
-    onSavePresentation?: (payload: any) => Promise<any>;
-    isSaving?: boolean;
-    /** Kalles etter vellykket lagring (navbar oppdaterer «sist lagret») */
-    onSaveComplete?: (savedAt: Date) => void;
+   presentation: any 
+   onSavePresentation: (payload: Record<string, unknown>) => Promise<any>
+   isSaving: boolean
+   onSaveComplete?: (savedAt: Date) => void
+   onDirtyChange?: (isDirty: boolean) => void
 };
 
 const PresentationEditor = (
-{ presentation, onSavePresentation, isSaving, onSaveComplete }: PresentationEditorProps,
+{ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange }: PresentationEditorProps,
 ref: ForwardedRef<PresentationEditorHandle>
 ) => {
     // Referanser og grunnstate for editoren.
@@ -260,16 +282,6 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
     const [hasSelectedText, setHasSelectedText] = useState(false);
-    const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
-    const [isListMenuOpen, setIsListMenuOpen] = useState(false);
-    const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
-    const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
-    const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
-    const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
-    const [fontFamily, setFontFamily] = useState<string>(FONT_FAMILIES[0].value);
-    const [isTextBold, setIsTextBold] = useState(false);
-    const [isTextItalic, setIsTextItalic] = useState(false);
-    const textMenuRef = useRef<HTMLDivElement | null>(null);
 
     // Sidebar-tilstand: manuell kollaps + responsiv auto-kollaps.
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
@@ -284,6 +296,26 @@ ref: ForwardedRef<PresentationEditorHandle>
     const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
+    const [presentationVariables, setPresentationVariables] = useState<PresentationVariable[]>([]);
+    const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
+    const [fontFamily, setFontFamily] = useState('Arial, sans-serif');
+    const [isTextBold, setIsTextBold] = useState(false);
+    const [isTextItalic, setIsTextItalic] = useState(false);
+    const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
+    const [isListMenuOpen, setIsListMenuOpen] = useState(false);
+    const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
+    const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
+    const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
+    const textMenuRef = useRef<HTMLDivElement | null>(null);
+
+    //Sjekker dirtystate for å aktivere autosave
+    const setDirtyState = (next: boolean) => {
+        if (hasUnsavedChangesRef.current === next) return
+        hasUnsavedChangesRef.current = next
+        onDirtyChange?.(next)
+    }
+
+
 
     // Regner ut hvor mye 16:9-canvas kan skaleres innenfor tilgjengelig plass.
     const updateCanvasScale = useCallback(() => {
@@ -302,7 +334,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     }, []);
 
     const markDirty = () => {
-        hasUnsavedChangesRef.current = true;
+        setDirtyState(true)
     };
 
     const captureCanvasPreview = () => {
@@ -315,34 +347,12 @@ ref: ForwardedRef<PresentationEditorHandle>
         });
     };
 
-    const serializeCanvasData = () => {
-        if (!fabricCanvasRef.current) return null;
-
-        return (fabricCanvasRef.current as any).toJSON(['listStyleType', 'fontFamily']);
-    };
-
-    const isValidHexColor = (value: string) => /^#([0-9A-Fa-f]{6})$/.test(value);
-
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
-    const isTextObject = (obj: unknown): obj is FabricTextObject =>
-        obj instanceof FabricText || obj instanceof IText || obj instanceof Textbox;
-    const isEditableTextObject = (obj: unknown): obj is FabricEditableTextObject =>
-        obj instanceof IText || obj instanceof Textbox;
+    const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
     const isVideoObject = (obj: any) => obj?.type === 'video';
-    const isBoldFontWeight = (value: unknown) => {
-        if (typeof value === 'number') {
-            return value >= 600;
-        }
-
-        if (typeof value === 'string') {
-            if (value === 'bold') return true;
-
-            const numericWeight = Number(value);
-            return Number.isFinite(numericWeight) && numericWeight >= 600;
-        }
-
-        return false;
-    };
+    const isEditableTextObject = (obj: any): obj is FabricEditableTextObject => obj?.type === 'i-text' || obj?.type === 'textbox';
+    const isBoldFontWeight = (weight: any) => weight === 'bold' || Number(weight) >= 700;
+    const handleGuideReset = () => setGuideLines([]);
 
     const syncHasSelectedShape = () => {
         const canvas = fabricCanvasRef.current;
@@ -372,13 +382,12 @@ ref: ForwardedRef<PresentationEditorHandle>
             setTextColor(selectedText.fill);
         }
 
-        if (selectedText && typeof selectedText.fontFamily === 'string') {
-            setFontFamily(selectedText.fontFamily);
+        if (selectedText && typeof (selectedText as any).fontFamily === 'string') {
+            setFontFamily((selectedText as any).fontFamily);
         }
-
         if (selectedText) {
-            setIsTextBold(isBoldFontWeight(selectedText.fontWeight));
-            setIsTextItalic(selectedText.fontStyle === 'italic');
+            setIsTextBold(isBoldFontWeight((selectedText as any).fontWeight));
+            setIsTextItalic((selectedText as any).fontStyle === 'italic');
         }
     };
 
@@ -488,7 +497,7 @@ ref: ForwardedRef<PresentationEditorHandle>
 
         return {
             backgroundColor: typeof canvasBackgroundColor === 'string' ? canvasBackgroundColor : '#ffffff',
-            fabricData: serializeCanvasData(),
+            fabricData: fabricCanvasRef.current.toJSON(),
         };
     };
 
@@ -572,10 +581,15 @@ ref: ForwardedRef<PresentationEditorHandle>
             setPresentationId(null);
             setPresentationTitle('Uten navn');
             setSlides([defaultSlide()]);
+            setPresentationVariables([]);
             setCurrentSlideIndex(0);
             hasUnsavedChangesRef.current = false;
             return;
         }
+
+        const normalizedVariables = normalizePresentationVariables(
+            presentation.variables || presentation.slides?.[0]?.variables || []
+        );
 
         const normalizedSlides = (presentation.slides || []).map((slide, index) => ({
             id: slide.id || `local-${Date.now()}-${index}`,
@@ -594,6 +608,7 @@ ref: ForwardedRef<PresentationEditorHandle>
 
         setPresentationId(presentation.id || null);
         setPresentationTitle(presentation.title || 'Uten navn');
+        setPresentationVariables(normalizedVariables);
         setSlides(normalizedSlides.length ? normalizedSlides : [defaultSlide()]);
         setCurrentSlideIndex(0);
         setSaveError(null);
@@ -694,15 +709,6 @@ ref: ForwardedRef<PresentationEditorHandle>
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
-                    // Ensure all text objects have proper fill color after loading from JSON
-                    fabricCanvasRef.current.getObjects().forEach((obj: any) => {
-                        if (isTextObject(obj) && !obj.listStyleType) {
-                            // Only fix text objects that are NOT list items - list items should keep their color
-                            if (typeof obj.fill === 'string' && (obj.fill === '#6b7280' || obj.fill === 'rgb(107, 114, 128)')) {
-                                obj.set({ fill: '#000000' });
-                            }
-                        }
-                    });
                     clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
@@ -722,7 +728,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             setUndoStack([]);
             setRedoStack([]);
         }
-    }, [clearGuideLines, currentSlideIndex, slides, stopVideoRenderLoop, syncCanvasVideos]);
+    }, [currentSlideIndex, slides]);
 
     // Lyttere for endringer på lerretet (legge til, flytte eller fjerne objekter) for å bygge opp angre-historikken
     useEffect(() => {
@@ -827,48 +833,12 @@ ref: ForwardedRef<PresentationEditorHandle>
         const handleCanvasChangeWithPreview = () => {
             handleCanvasChange();
             updatePreview();
-            syncCanvasVideos();
-        };
-
-        const handleGuideReset = () => {
-            clearGuideLines();
-        };
-
-        const handleTextChange = () => {
-            const activeObject = canvas.getActiveObject() as any;
-
-            if (
-                activeObject &&
-                activeObject.isEditing &&
-                isEditableTextObject(activeObject) &&
-                typeof activeObject.text === 'string'
-            ) {
-                const currentText = activeObject.text;
-                const cursorPosition =
-                    typeof activeObject.selectionStart === 'number'
-                        ? activeObject.selectionStart
-                        : currentText.length;
-
-                const lineStart = currentText.lastIndexOf('\n', Math.max(0, cursorPosition - 1)) + 1;
-                const typedAtLineStart = currentText.slice(lineStart, cursorPosition);
-
-                // Markdown-like shortcut: '- ' at the beginning of a line turns on dash-list mode.
-                if (typedAtLineStart === '- ') {
-                    activeObject.set('listStyleType', 'dash');
-                    setListStyleType('dash');
-                }
-            }
-
-            markDirty();
-            updatePreview();
         };
 
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
-        canvas.on('object:moving', handleObjectMoving);
-        canvas.on('mouse:up', handleGuideReset);
-        canvas.on('text:changed', handleTextChange);
+        canvas.on('text:changed', updatePreview);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
         canvas.on('selection:cleared', handleGuideReset);
@@ -880,9 +850,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
-            canvas.off('object:moving', handleObjectMoving);
-            canvas.off('mouse:up', handleGuideReset);
-            canvas.off('text:changed', handleTextChange);
+            canvas.off('text:changed', updatePreview);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
             canvas.off('selection:cleared', handleGuideReset);
@@ -905,7 +873,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         newSlides[currentSlideIndex] = {
             ...currentSlide,
             backgroundColor,
-            fabricData: serializeCanvasData(),
+            fabricData: fabricCanvasRef.current.toJSON(),
         };
 
         return newSlides;
@@ -925,7 +893,7 @@ ref: ForwardedRef<PresentationEditorHandle>
 
         try {
             if (slide?.fabricData) {
-                await tempFabricCanvas.loadFromJSON(slide.fabricData);
+                await tempFabricCanvas.loadFromJSON(resolveFabricDataWithVariables(slide.fabricData, presentationVariables));
             }
 
             tempFabricCanvas.backgroundColor = slide?.backgroundColor || '#ffffff';
@@ -972,7 +940,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         return () => {
             isCancelled = true;
         };
-    }, [slides]);
+    }, [slides, presentationVariables]);
 
     // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
     useEffect(() => {
@@ -1080,6 +1048,43 @@ ref: ForwardedRef<PresentationEditorHandle>
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+    
+    // Håndterer opprettelse, oppdatering og sletting av presentasjonsvariabler som kan brukes i tekstobjekter på lysbildene.
+    const addVariable = () => {
+        markDirty();
+        setPresentationVariables((previous) => ([
+            ...previous,
+            {
+                id: `variable-${Date.now()}-${previous.length}`,
+                name: `tall_${previous.length + 1}`,
+                value: '0',
+            },
+        ]));
+    };
+
+    const updateVariable = (variableId: string, field: 'name' | 'value', value: string) => {
+        markDirty();
+        setPresentationVariables((previous) => previous.map((variable) => {
+            if (variable.id !== variableId) return variable;
+
+            if (field === 'name') {
+                return {
+                    ...variable,
+                    name: normalizeVariableName(value),
+                };
+            }
+
+            return {
+                ...variable,
+                value,
+            };
+        }));
+    };
+
+    const deleteVariable = (variableId: string) => {
+        markDirty();
+        setPresentationVariables((previous) => previous.filter((variable) => variable.id !== variableId));
+    };
 
     // Lagrer gjeldende lysbilde til lokal state før endringer eller oppdateringer
     const saveCurrentSlide = () => {
@@ -1219,6 +1224,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             fontWeight: isTextBold ? 'bold' : 'normal',
             fontStyle: isTextItalic ? 'italic' : 'normal',
             lineHeight: 1.2,
+            templateText: 'Klikk for å redigere',
         });
         
         fabricCanvasRef.current.add(text);
@@ -1243,6 +1249,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             fontWeight: 'bold',
             fontStyle: isTextItalic ? 'italic' : 'normal',
             lineHeight: 1.16,
+            templateText: 'Tittel',
         });
         
         fabricCanvasRef.current.add(text);
@@ -1632,6 +1639,17 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
+    const changeBackgroundColor = (color: string) => {
+        applyBackgroundColorLive(color);
+        commitBackgroundColorChange(color);
+    };
+    const changeSelectedShapeColor = (color: string) => {
+        applySelectedShapeColorLive(color);
+    };
+    const changeSelectedTextColor = (color: string) => {
+        applySelectedTextColorLive(color);
+    };
+
     const handleUndo = async () => {
         if (undoStack.length <= 1) return;
 
@@ -1703,9 +1721,10 @@ const handleSavePresentation = async (): Promise<boolean> => {
             slidePreviewsById[currentSlide.id] = currentSlidePreview
         }
 
-    const payload = {
+    const payload: SavePresentationPayload = {
       id: presentationId ?? undefined,
       title: (presentationTitle || 'Untitled Presentation').trim() || 'Untitled Presentation',
+      variables: normalizePresentationVariables(presentationVariables),
       slides: slidesToSave.map((slide, index) => ({
         title: slide?.title || `Slide ${index + 1}`,
         content: slide?.content || '',
@@ -1727,6 +1746,10 @@ const handleSavePresentation = async (): Promise<boolean> => {
 
     if (typeof savedPresentation?.title === 'string') {
       setPresentationTitle(savedPresentation.title)
+    }
+
+    if (savedPresentation?.variables) {
+      setPresentationVariables(normalizePresentationVariables(savedPresentation.variables))
     }
 
     if (Array.isArray(savedPresentation?.slides) && savedPresentation.slides.length > 0) {
@@ -1893,6 +1916,24 @@ const handleSavePresentation = async (): Promise<boolean> => {
         hasUnsavedChanges: () => hasUnsavedChangesRef.current,
     }));
 
+    const handleSlideReorder = (fromIndex: number, toIndex: number) => {
+        const currentSlides = saveCurrentSlide();
+        const reordered = [...currentSlides];
+        const [moved] = reordered.splice(fromIndex, 1);
+        reordered.splice(toIndex, 0, moved);
+        markDirty();
+        setSlides(reordered);
+
+        if (currentSlideIndex === fromIndex) {
+            setCurrentSlideIndex(toIndex);
+        } else if (fromIndex < currentSlideIndex && toIndex >= currentSlideIndex) {
+            setCurrentSlideIndex(currentSlideIndex - 1);
+        } else if (fromIndex > currentSlideIndex && toIndex <= currentSlideIndex) {
+            setCurrentSlideIndex(currentSlideIndex + 1);
+        }
+    };
+
+
     return (
         <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
@@ -1966,6 +2007,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onSlideSelect={handleSlideSelect}
                                 onSlideDelete={deleteSlide}
                                 onSlideDuplicate={duplicateSlide}
+                                onSlideReorder={handleSlideReorder}
                             />
                         </div>
                     </div>
@@ -2012,55 +2054,46 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         >
                             <Redo2 className="h-3.5 w-3.5" /> Gjør om
                         </Button>
-
-<div ref={textMenuRef} className="relative order-3">
-    <Button
-        onClick={() => setIsTextMenuOpen((prev) => !prev)}
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-1.5"
-        aria-haspopup="menu"
-        aria-expanded={isTextMenuOpen}
-    >
-        <Type className="h-3.5 w-3.5" />
-        Tekststil
-        <ChevronDown className="h-3.5 w-3.5" />
-    </Button>
-
-    {isTextMenuOpen && (
-        <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
-            
-            <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                    addTitle();
-                    setIsTextMenuOpen(false);
-                }}
-            >
-                <TypeIcon className="h-4 w-4" />
-                <span>Tittel</span>
-            </button>
-
-            <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                    addText();
-                    setIsTextMenuOpen(false);
-                }}
-            >
-                <Type className="h-4 w-4" />
-                <span>Tekst</span>
-            </button>
-
-        </div>
-    )}
-</div>
-
-
-                        
-                        
+                        <div ref={textMenuRef} className="relative order-3">
+                            <Button
+                                onClick={() => setIsTextMenuOpen((prev) => !prev)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-1.5"
+                                aria-haspopup="menu"
+                                aria-expanded={isTextMenuOpen}
+                            >
+                                <Type className="h-3.5 w-3.5" />
+                                Tekststil
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            {isTextMenuOpen && (
+                                <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            addTitle();
+                                            setIsTextMenuOpen(false);
+                                        }}
+                                    >
+                                        <TypeIcon className="h-4 w-4" />
+                                        <span>Tittel</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            addText();
+                                            setIsTextMenuOpen(false);
+                                        }}
+                                    >
+                                        <Type className="h-4 w-4" />
+                                        <span>Tekst</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         <div ref={listMenuRef} className="relative order-7">
                             <Button
@@ -2117,11 +2150,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         </div>
                         <div className="order-8 basis-full" />
                         <Button onClick={addImage} variant="outline" size="sm" className="order-9 flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Media</Button>
-                        
-                        {/* Dropdown-meny for å legge til former, rektangel eller sirkel, som er de to formene vi tilbyr i første versjon. Kan enkelt utvides med flere former senere ved behov. */}
+
                         <div ref={shapeMenuRef} className="relative order-10">
                             <Button
-                                //Åpner og lukker menyen med tilgjengelige former
                                 onClick={() => setIsShapeMenuOpen((prev) => !prev)}
                                 variant="outline"
                                 size="sm"
@@ -2132,10 +2163,8 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <Square className="h-3.5 w-3.5" /> Former
                                 <ChevronDown className="h-3.5 w-3.5" />
                             </Button>
-                            {/* Viser valg for hvilke former brukeren kan sette inn */}
                             {isShapeMenuOpen && (
                                 <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
-                                    {/* Legger til rektangel eller sirkel og menyen lukker seg etter */}
                                     <button
                                         type="button"
                                         className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
@@ -2278,7 +2307,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onChange={(e) => {
                                     const nextFontFamily = e.target.value;
                                     setFontFamily(nextFontFamily);
-
                                     if (hasSelectedText) {
                                         applySelectedTextStylesLive({ fontFamily: nextFontFamily });
                                         commitCanvasColorChange();
@@ -2298,7 +2326,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onClick={() => {
                                     const nextIsTextBold = !isTextBold;
                                     setIsTextBold(nextIsTextBold);
-
                                     if (hasSelectedText) {
                                         applySelectedTextStylesLive({ fontWeight: nextIsTextBold ? 'bold' : 'normal' });
                                         commitCanvasColorChange();
@@ -2314,7 +2341,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 onClick={() => {
                                     const nextIsTextItalic = !isTextItalic;
                                     setIsTextItalic(nextIsTextItalic);
-
                                     if (hasSelectedText) {
                                         applySelectedTextStylesLive({ fontStyle: nextIsTextItalic ? 'italic' : 'normal' });
                                         commitCanvasColorChange();
@@ -2324,9 +2350,6 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 I
                             </Button>
                         </div>
-
-                            
-                    
                     </div>
                 </div>
                 {saveError && (
@@ -2373,34 +2396,30 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         </div>
                     </div>
                 </div>
-                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col gap-2 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6">
-                    <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor="slide-notes" className="text-sm font-semibold text-foreground">
-                            Notater for presentatør
-                        </Label>
-                        <span className="text-xs text-muted-foreground">
-                            Vises kun i presentatørvisning
-                        </span>
-                    </div>
+
+                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+                    <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Notater for slides</Label>
                     <Textarea
-                        id="slide-notes"
+                        id="presenter-notes"
                         value={slides[currentSlideIndex]?.notes || ''}
-                        onChange={(event) => {
-                            const value = event.target.value;
-                            setSlides((previousSlides) => {
-                                const nextSlides = [...previousSlides];
-                                if (!nextSlides[currentSlideIndex]) return previousSlides;
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            markDirty();
+                            setSlides((prevSlides) => {
+                                const nextSlides = [...prevSlides];
+                                const current = nextSlides[currentSlideIndex];
+                                if (!current) return prevSlides;
 
                                 nextSlides[currentSlideIndex] = {
-                                    ...nextSlides[currentSlideIndex],
+                                    ...current,
                                     notes: value,
                                 };
+
                                 return nextSlides;
                             });
-                            markDirty();
                         }}
-                        placeholder="Legg til stikkord, manus eller påminnelser for dette lysbildet..."
-                        className="min-h-24 resize-y"
+                        placeholder="Skriv notater for deg selv som vises i live presentatørmodus"
+                        className="min-h-21 resize-y"
                     />
                 </div>
             </div>
@@ -2452,9 +2471,65 @@ const handleSavePresentation = async (): Promise<boolean> => {
                     </div>
                 )}
 
-                {!isRightSidebarCollapsed && (
-                    <div className="flex-1 overflow-y-auto p-4">
+                {!isRightSidebarCollapsed && <div className="flex-1 overflow-y-auto p-4">
                     <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-semibold">Variabler</h4>
+                            <Button onClick={addVariable} size="sm" variant="outline" className="h-8 flex items-center justify-center gap-1.5">
+                                <Plus className="h-3.5 w-3.5" /> Ny
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                            Bruk variabler i tekstbokser med <code className="rounded bg-muted px-1 py-0.5 font-mono">{'{{navn}}'}</code>
+                        </p>
+                        {presentationVariables.length === 0 ? (
+                            <div className="text-center mt-4 border border-dashed border-border rounded-xl p-4">
+                                <strong className="block text-foreground mb-1">Ingen variabler</strong>
+                                <span className="text-sm text-muted-foreground">Legg til variabler for dynamisk innhold i presentasjonen.</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                {presentationVariables.map((variable) => (
+                                    <div key={variable.id} className="border border-border rounded-xl p-3 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <label className="w-12 shrink-0 text-xs text-muted-foreground">Navn</label>
+                                                <input
+                                                    type="text"
+                                                    className="h-7 flex-1 min-w-0 rounded-md border border-border bg-input px-2 text-xs text-foreground"
+                                                    value={variable.name}
+                                                    onChange={(e) => updateVariable(variable.id, 'name', e.target.value)}
+                                                    placeholder="variabelnavn"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <label className="w-12 shrink-0 text-xs text-muted-foreground">Verdi</label>
+                                                <input
+                                                    type="text"
+                                                    className="h-7 flex-1 min-w-0 rounded-md border border-border bg-input px-2 text-xs text-foreground"
+                                                    value={variable.value}
+                                                    onChange={(e) => updateVariable(variable.id, 'value', e.target.value)}
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end pt-2 mt-1 border-t border-border">
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => deleteVariable(variable.id)}
+                                                className="h-7 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
+                                            >
+                                                Slett
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-border pt-4 mb-6">
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-sm font-semibold">Spørsmål</h4>
                             <Button onClick={openCreateQuestion} size="sm" variant="outline" className="h-8 flex items-center justify-center gap-1.5">
@@ -2477,6 +2552,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                             </div>
                                             <span className="text-xs text-muted-foreground">
                                                 {question.type === 'single_choice' ? 'Single choice' : 'Åpent svar'}
+                                                {question.type === 'open_text'
+                                                    ? ` • ${question.openTextDisplayMode === 'answer_list' ? 'Svarliste' : 'Word cloud'}`
+                                                    : ''}
                                                 {question.required ? ' • Obligatorisk' : ''}
                                             </span>
                                         </div>
@@ -2484,7 +2562,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                             <Button variant="secondary" size="sm" onClick={() => openEditQuestion(index)} className="flex-1 h-8 text-xs">
                                                 Rediger
                                             </Button>
-                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs">
+                                            <Button variant="destructive" size="sm" onClick={() => setQuestionToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
                                                 Slett
                                             </Button>
                                         </div>
@@ -2549,7 +2627,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                                 <Button variant="secondary" size="sm" onClick={() => openEditPoll(index)} className="flex-1 h-8 text-xs">
                                                     Rediger
                                                 </Button>
-                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs">
+                                                <Button variant="destructive" size="sm" onClick={() => setPollToDeleteIndex(index)} className="flex-1 h-8 text-xs bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors">
                                                     Slett
                                                 </Button>
                                             </div>
@@ -2560,7 +2638,7 @@ const handleSavePresentation = async (): Promise<boolean> => {
                         )}
                     </div>
                     </div>
-                )}
+                }
             </div>
                     
 
@@ -2593,9 +2671,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="destructive"
+                                variant="outline"
                                 onClick={confirmDeleteQuestion}
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
@@ -2632,9 +2710,9 @@ const handleSavePresentation = async (): Promise<boolean> => {
                                 <X className="h-4 w-4" /> Avbryt
                             </Button>
                             <Button
-                                variant="destructive"
+                                variant="outline"
                                 onClick={confirmDeletePoll}
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1.5 bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25 hover:text-destructive hover:border-destructive/40 transition-colors"
                             >
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
@@ -2660,12 +2738,19 @@ const normalizeQuestionOption = (option: unknown, questionIndex: number, optionI
 const normalizeQuestion = (question: unknown, questionIndex: number): QuestionItem => {
     const rawQuestion = (typeof question === 'object' && question !== null ? question : {}) as Partial<QuestionItem> & {
         options?: unknown[];
+        open_text_display_mode?: OpenTextDisplayMode;
     };
+
+    const openTextDisplayMode: OpenTextDisplayMode =
+        rawQuestion.openTextDisplayMode === 'answer_list' || rawQuestion.open_text_display_mode === 'answer_list'
+            ? 'answer_list'
+            : 'word_cloud';
 
     return {
         id: rawQuestion.id || `local-question-${Date.now()}-${questionIndex}`,
         prompt: rawQuestion.prompt || '',
         type: rawQuestion.type === 'single_choice' ? 'single_choice' : 'open_text',
+        openTextDisplayMode,
         required: Boolean(rawQuestion.required),
         options: Array.isArray(rawQuestion.options)
             ? rawQuestion.options
