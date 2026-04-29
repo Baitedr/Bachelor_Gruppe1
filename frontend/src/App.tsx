@@ -514,7 +514,9 @@ function App() {
         ? await api.updatePresentation(presentationId, payload)
         : await api.createPresentation(payload)
 
+      if (currentPage !== 'editor') {  
       setActivePresentation(data.presentation)
+      }
       const summary = presentationToSummary(data.presentation as Record<string, unknown>)
       setPresentations((previous) => {
         const idx = previous.findIndex((item) => item.id === summary.id)

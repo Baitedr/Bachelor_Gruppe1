@@ -614,7 +614,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         setCurrentSlideIndex(0);
         setSaveError(null);
         setDirtyState(false);
-    }, [presentation]);
+    }, [presentation?.id]);
 
     // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
     useEffect(() => {
@@ -1764,23 +1764,7 @@ useEffect(() => {
       setPresentationVariables(normalizePresentationVariables(savedPresentation.variables))
     }
 
-    if (Array.isArray(savedPresentation?.slides) && savedPresentation.slides.length > 0) {
-      const normalizedSlides = savedPresentation.slides.map((slide: any, index: number) => ({
-        id: slide?.id ?? `local-${Date.now()}-${index}`,
-        title: slide?.title || `Slide ${index + 1}`,
-        content: slide?.content || '',
-        notes: slide?.notes || '',
-        backgroundColor: slide?.backgroundColor || '#ffffff',
-        fabricData: slide?.fabricData ?? null,
-                previewImage: slide?.previewImage || null,
-        polls: Array.isArray(slide?.polls) ? slide.polls : [],
-            questions: Array.isArray(slide?.questions) ? slide.questions : [],
-      }))
-
-            skipHistoryResetRef.current = true;
-      setSlides(normalizedSlides)
-      setCurrentSlideIndex((prev) => Math.min(prev, normalizedSlides.length - 1))
-    }
+    
 
     const savedAt = new Date();
     onSaveComplete?.(savedAt);
