@@ -9,6 +9,12 @@ const normalizeSlideIndex = (value: unknown): number | null => {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
+const normalizeParticipantCount = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.max(0, parsed)
+}
+
 type CableReceived = {
   type?: string
   slide_index?: unknown
@@ -118,11 +124,11 @@ export const usePresentation = (presentationId: string | number | null, token: s
               }))
               break
             case 'participant_joined':
-              setParticipantCount(data.count || 0)
+              setParticipantCount(normalizeParticipantCount(data.count))
               lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'session_state':
-              setParticipantCount(data.participant_count || 0)
+              setParticipantCount(normalizeParticipantCount(data.participant_count))
               setSessionStarted(Boolean(data.session_started))
               setSessionEnded(Boolean(data.session_ended))
               lastRealtimeSessionStateAtRef.current = Date.now()
@@ -130,7 +136,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
             case 'session_started':
               setSessionStarted(true)
               if (typeof data.participant_count === 'number') {
-                setParticipantCount(data.participant_count)
+                setParticipantCount(normalizeParticipantCount(data.participant_count))
               }
               lastRealtimeSessionStateAtRef.current = Date.now()
               break
@@ -185,7 +191,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
         if (cancelled || !state) return
 
         if (typeof state.participant_count === 'number') {
-          setParticipantCount(state.participant_count)
+          setParticipantCount(normalizeParticipantCount(state.participant_count))
         }
         setSessionStarted(Boolean(state.session_started))
         setSessionEnded(Boolean(state.session_ended))

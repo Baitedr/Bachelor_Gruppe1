@@ -74,10 +74,15 @@ module Api
                     return render json: { error: 'Ingen aktiv sesjon.' }, status: :not_found
                 end
 
-                SessionParticipant.find_or_create_by!(
-                    session_id: session.id,
-                    user_id: @current_user.id
-                )
+                if @current_user.id == presentation.owner_id
+                    # Owner/presenter skal ikke telles som deltaker.
+                    SessionParticipant.where(session_id: session.id, user_id: @current_user.id).delete_all
+                else
+                    SessionParticipant.find_or_create_by!(
+                        session_id: session.id,
+                        user_id: @current_user.id
+                    )
+                end
                 broadcast_session_state(session)
 
                 render json: {
