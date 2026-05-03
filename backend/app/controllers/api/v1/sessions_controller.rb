@@ -5,7 +5,7 @@ module Api
             before_action :load_current_user_from_token, only: [:join_by_code]
 
             # POST /api/v1/sessions/guest_join
-            # No auth required – creates a temporary guest user and returns a JWT.
+            # Ingen token kreves, da dette er for gjester som ikke har en konto. De får en midlertidig "gjestebruker" som slettes når sesjonen avsluttes.
             def guest_join
                 session = PresentationSession.find_by(
                     join_code: params[:code]&.upcase,
@@ -37,7 +37,7 @@ module Api
             end
 
             # POST /api/v1/sessions/join_by_code
-            # Called by PhoneInteraction – no presentation_id needed, just the code.
+            # Ingen token kreves – dette kalles av PhoneInteraction, ingen presentation_id nødvendig, bare koden.
             def join_by_code
                 session = PresentationSession.find_by(
                     join_code: params[:code]&.upcase,
@@ -65,7 +65,7 @@ module Api
             end
 
             # POST /api/v1/presentations/:presentation_id/join
-            # Called when the participant already knows the presentation_id.
+            # Ingen token kreves – dette kalles når deltakeren allerede kjenner presentation_id.
             def join
                 presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.find_by(ended_at: nil)
@@ -211,7 +211,7 @@ module Api
             end
 
             def build_guest_password
-                # Meets User complexity validation: lowercase, uppercase, and digit.
+                # Generer et komplekst passord for gjestebrukere for å unngå at de kan logge inn på andre kontoer ved en feil.
                 "Guest#{SecureRandom.alphanumeric(10)}1aA"
             end
 
