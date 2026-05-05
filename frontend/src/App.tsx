@@ -280,24 +280,10 @@ function App() {
       void presentationEditorRef.current?.savePresentation?.()
       autosaveTimerRef.current = null
     }, 6000)
-    return
+    return () => {
+      clearAutosaveTimer()
+    }
   }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
-
-  useEffect(() => {
-    if(!isAutosaveEnabled) return
-    if(currentPage !== 'editor') return
-
-    const timerId = window.setInterval(() =>{
-      if (isSavingPresentation) return
-
-      const hasUnsavedChanges = presentationEditorRef.current?.hasUnsavedChanges?.() ?? false 
-      if (!hasUnsavedChanges) return
-
-      void presentationEditorRef.current?.savePresentation?.()
-    }, 1000)
-
-    return () => window.clearInterval(timerId)
-  }, [isAutosaveEnabled, currentPage, isSavingPresentation])
 
   useEffect(() => {
   if (!user && !guestMode) return
@@ -528,7 +514,9 @@ function App() {
         ? await api.updatePresentation(presentationId, payload)
         : await api.createPresentation(payload)
 
+      if (currentPage !== 'editor') {  
       setActivePresentation(data.presentation)
+      }
       const summary = presentationToSummary(data.presentation as Record<string, unknown>)
       setPresentations((previous) => {
         const idx = previous.findIndex((item) => item.id === summary.id)
