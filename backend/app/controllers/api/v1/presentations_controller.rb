@@ -62,7 +62,10 @@ module Api
       def end_session
         @presentation.update!(is_live: false)
         active_session = @presentation.presentation_sessions.find_by(ended_at: nil)
-        active_session&.update!(ended_at: Time.current)
+        if active_session
+          active_session.update!(ended_at: Time.current)
+          delete_guest_users_from_session(active_session)
+        end
         PresentationChannel.invalidate_active_session_cache(@presentation.id)
         safe_broadcast(@presentation, { type: 'session_ended' })
         render json: { presentation: presentation_payload(@presentation.reload) }, status: :ok
@@ -74,6 +77,13 @@ module Api
         @presentation = current_user.presentations.find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: 'Presentation not found' }, status: :not_found
+      end
+
+      def delete_guest_users_from_session(session)
+        session.session_participants.each do |participant|
+          user = participant.user
+          user.destroy if user.email.end_with?('@guest.proslides')
+        end
       end
 
       def limit_param
