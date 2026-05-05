@@ -4,7 +4,6 @@ class PresentationChannel < ApplicationCable::Channel
   ACTIVE_SESSION_CACHE_TTL = 30.seconds
   QUESTIONS_LOOKUP_CACHE_TTL = 10.minutes
 
-  # Exposed so controllers can bust caches when the underlying data changes.
   def self.active_session_cache_key(presentation_id)
     "active_session_id:#{ACTIVE_SESSION_CACHE_VERSION}:#{presentation_id}"
   end

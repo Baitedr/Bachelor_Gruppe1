@@ -5,7 +5,7 @@ module Api
             before_action :load_current_user_from_token, only: [:join_by_code]
 
             # POST /api/v1/sessions/guest_join
-            # No auth required – creates a temporary guest user and returns a JWT.
+            # Ingen autentisering kreves her. Deltaker opprettes som "gjest".
             def guest_join
                 session = PresentationSession.find_by(
                     join_code: params[:code]&.upcase,
@@ -37,7 +37,7 @@ module Api
             end
 
             # POST /api/v1/sessions/join_by_code
-            # Called by PhoneInteraction – no presentation_id needed, just the code.
+            # Kalles av PhoneInteraction – ingen presentation_id nødvendig, bare koden.
             def join_by_code
                 session = PresentationSession.find_by(
                     join_code: params[:code]&.upcase,
@@ -65,7 +65,7 @@ module Api
             end
 
             # POST /api/v1/presentations/:presentation_id/join
-            # Called when the participant already knows the presentation_id.
+            # Kalles av frontend når en bruker klikker "Bli med" på en live-presentasjon. Krever autentisering.
             def join
                 presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.find_by(ended_at: nil)
@@ -94,7 +94,9 @@ module Api
                     participant_count: session.session_participants.count
                 }, status: :ok
             end
-
+            # POST /api/v1/presentations/:id/end_session
+            # Kalles av frontend når presentatøren avslutter en live-presentasjon. 
+            # Krever autentisering og at brukeren er eier av presentasjonen.
             def end_session
                 presentation = Presentation.find(params[:id])
 
@@ -123,7 +125,9 @@ module Api
                     })
                 }
             end
-
+            # GET /api/v1/presentations/:id/participants
+            # Kalles av frontend for å hente deltakerliste til en live-presentasjon. 
+            # Krever autentisering og at brukeren er eier av presentasjonen.
             def participants
                 presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.where(ended_at: nil).last
@@ -142,7 +146,9 @@ module Api
                     render json: { participants: [] }
                 end
             end
-
+            # GET /api/v1/presentations/:id/session_state
+            # Kalles av frontend for å sjekke om det er en aktiv sesjon for presentasjonen. 
+            # Krever autentisering.
             def session_state
                 presentation = Presentation.find(params[:id])
                 session = presentation.presentation_sessions.find_by(ended_at: nil)
@@ -165,7 +171,7 @@ module Api
             end
 
             private
-
+            
             def load_current_user_from_token
                 auth_header = request.headers['Authorization']
                 token = auth_header&.split(' ')&.last
@@ -176,7 +182,7 @@ module Api
 
                 @current_user = User.find_by(id: decoded[:user_id])
             end
-
+            # Oppretter en midlertidig "gjest" bruker som kan delta i en sesjon uten å ha en vanlig konto.
             def create_guest_user!
                 User.create!(
                     email: "guest_#{SecureRandom.hex(6)}@guest.proslides",
@@ -184,37 +190,37 @@ module Api
                     name: 'Gjest'
                 )
             end
-
+            # Sletter gjestebruker som deltar i en sesjon.
             def delete_guest_user(user)
                 return unless user.email.end_with?('@guest.proslides')
 
                 user.destroy
             end
-
+            # Sletter alle gjestebrukere som deltar i en sesjon når den avsluttes.
             def delete_guest_users_from_session(session)
                 session.session_participants.each do |participant|
                     delete_guest_user(participant.user)
                 end
             end
-
+            # Sletter alle data knyttet til en sesjon, inkludert deltakere og svar, når en sesjon avsluttes.
             def delete_session_data(session)
                 PollResponse.where(presentation_session_id: session.id).destroy_all
                 SessionParticipant.where(session_id: session.id).destroy_all
 
                 session.destroy!
             end
-
+            # Sletter alle aktive sesjoner knyttet til en presentasjon, for eksempel når en presentasjon slettes.
             def delete_live_session_from_presentation(presentation)
                 presentation.presentation_sessions.where.not(ended_at: nil).each do |session|
                     delete_session_data(session)
                 end
             end
-
+            # Bygger et komplekst passord for gjestebrukere som oppfyller vanlige krav til passordstyrke.
             def build_guest_password
-                # Meets User complexity validation: lowercase, uppercase, and digit.
+                # møter kravene til minimum 12 tegn, både store og små bokstaver, tall og spesialtegn.
                 "Guest#{SecureRandom.alphanumeric(10)}1aA"
             end
-
+            # Sender sanntidsoppdateringer til alle klienter som er koblet til presentasjonen når en deltaker blir med eller når sesjonstilstanden endres.
             def broadcast_session_state(session)
                 count = session.session_participants.count
                 payload = {
@@ -226,7 +232,7 @@ module Api
                 safe_broadcast(session.presentation, { type: 'participant_joined', count: count })
                 safe_broadcast(session.presentation, { type: 'session_state' }.merge(payload))
             end
-
+            # Sender sanntidsoppdateringer til alle klienter som er koblet til presentasjonen.
             def safe_broadcast(presentation, payload)
                 PresentationChannel.broadcast_to(presentation, payload)
             rescue StandardError => e
@@ -235,7 +241,7 @@ module Api
                     "event=#{payload[:type] || payload['type']} error=#{e.class}: #{e.message}"
                 )
             end
-
+            
             def live_presentation_payload(presentation)
                 slides = presentation.slides.order(:slide_index).includes(polls: :poll_options)
 
@@ -246,7 +252,7 @@ module Api
                     variables: live_presentation_variables(slides.first)
                 }
             end
-
+            
             def live_slide_payload(slide)
                 payload = slide.background.is_a?(Hash) ? slide.background : {}
 
