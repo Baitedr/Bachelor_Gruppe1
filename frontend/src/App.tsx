@@ -88,8 +88,12 @@ type PersistedPageState = {
   guestMode: boolean
 }
 
-const formatPresentationTimestamp = (iso: string) =>
-  new Date(iso).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })
+const formatPresentationTimestamp = (iso: string) => {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })
+}
 
 const MOBILE_BREAKPOINT = 768
 // Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
@@ -216,11 +220,15 @@ function App() {
   const presentationToSummary = (presentation: Record<string, unknown>): PresentationSummary => {
     const slides = Array.isArray(presentation.slides) ? (presentation.slides as LiveSlidePayload[]) : []
     const firstSlide = slides[0]
+    const createdRaw = presentation.created_at ?? presentation.createdAt
+    const updatedRaw = presentation.updated_at ?? presentation.updatedAt ?? createdRaw
+    const fallbackIso = new Date().toISOString()
 
     return {
       id: String(presentation.id || ''),
       title: String(presentation.title || 'Untitled Presentation'),
-      created_at: String(presentation.created_at || new Date().toISOString()),
+      created_at: String(createdRaw || fallbackIso),
+      updated_at: String(updatedRaw || fallbackIso),
       slide_count: slides.length,
       first_slide: firstSlide
         ? {
