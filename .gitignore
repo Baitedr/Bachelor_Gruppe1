@@ -18,6 +18,15 @@ backend/tmp/*
 backend/db/*.sqlite3
 backend/db/*.sqlite3-*
 backend/vendor/
+# Backend is a Ruby/Rails app (uses Gemfile/Bundler), so any npm artifacts here are accidental
+backend/package.json
+backend/package-lock.json
+backend/node_modules/
+
+# Editor / IDE / local tooling
+.cursor/
+.idea/
+.vscode/*.local.json
 
 # Frontend
 frontend/node_modules/

@@ -52,6 +52,7 @@ type PresentationSummary = {
   id: string
   title: string
   created_at: string
+  updated_at: string
   slide_count: number
   first_slide?: SlidePreview
   slides?: Array<{
@@ -86,6 +87,9 @@ type PersistedPageState = {
   liveIsPresenter: boolean
   guestMode: boolean
 }
+
+const formatPresentationTimestamp = (iso: string) =>
+  new Date(iso).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })
 
 const MOBILE_BREAKPOINT = 768
 // Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
@@ -1051,8 +1055,16 @@ function App() {
                         <div className='space-y-1'>
                           <h3 className='line-clamp-1 text-sm font-semibold'>{presentation.title}</h3>
                           <p className='text-xs text-muted-foreground'>
-                            {presentation.slide_count} lysbilde(r) ·{' '}
-                            {new Date(presentation.created_at).toLocaleString()}
+                            {presentation.slide_count} lysbilde(r)
+                          </p>
+                          <p className='text-xs text-muted-foreground'>
+                            Opprettet {formatPresentationTimestamp(presentation.created_at)}
+                          </p>
+                          <p className='text-xs text-muted-foreground'>
+                            Sist endret{' '}
+                            {formatPresentationTimestamp(
+                              presentation.updated_at ?? presentation.created_at,
+                            )}
                           </p>
                         </div>
 
