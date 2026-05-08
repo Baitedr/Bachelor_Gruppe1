@@ -24,7 +24,7 @@ module Api
           title: title_param,
           user_email: current_user.email
         )
-        replace_slides!(presentation, slides_payload)
+        replace_slides!(presentation, slides_payload, touch_updated_at: false)
 
         render json: { presentation: presentation_payload(presentation.reload) }, status: :created
       end
@@ -93,7 +93,7 @@ module Api
         normalize_presentation_variables(params.dig(:presentation, :variables))
       end
 
-      def replace_slides!(presentation, slides)
+      def replace_slides!(presentation, slides, touch_updated_at: true)
         normalized_slides = if slides.empty?
                               [default_slide_payload]
                             else
@@ -116,6 +116,8 @@ module Api
 
             create_slide_polls!(slide, slide_data)
           end
+
+          presentation.touch if touch_updated_at
         end
       end
 
@@ -236,6 +238,7 @@ module Api
           title: presentation.title,
           user_email: presentation.user_email,
           created_at: presentation.created_at,
+          updated_at: presentation.updated_at,
           is_live: presentation.is_live,
           slide_count: presentation.slides.size,
           first_slide: first_slide_preview(first_slide)
@@ -264,6 +267,7 @@ module Api
           title: presentation.title,
           user_email: presentation.user_email,
           created_at: presentation.created_at,
+          updated_at: presentation.updated_at,
           is_live: presentation.is_live,
           variables: presentation_variables_for(presentation),
           slides: presentation.slides.order(:slide_index).map { |slide| slide_payload(slide) }
