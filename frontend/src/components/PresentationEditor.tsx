@@ -23,7 +23,9 @@ import {
     Undo2,
     Video,
     X,
-    BadgeRussianRubleIcon,
+    Play,
+    MonitorPlay,
+    Loader2,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './polls/PollCreator';
@@ -188,10 +190,13 @@ type PresentationEditorProps = {
    isSaving: boolean
    onSaveComplete?: (savedAt: Date) => void
    onDirtyChange?: (isDirty: boolean) => void
+   onStartLive?: () => void
+   onStartLocalPresentation?: () => void
+   isStartingLive?: boolean
 };
 
 const PresentationEditor = (
-{ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange }: PresentationEditorProps,
+{ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange, onStartLive, onStartLocalPresentation, isStartingLive }: PresentationEditorProps,
 ref: ForwardedRef<PresentationEditorHandle>
 ) => {
     // Referanser og grunnstate for editoren.
@@ -245,12 +250,15 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
     const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
+    // Meny for "Presenter"-knappen (live-lobby og "presenter nå"-valg).
+    const [isPresentMenuOpen, setIsPresentMenuOpen] = useState(false);
     const [embedDialogKind, setEmbedDialogKind] = useState<'youtube' | 'vimeo' | null>(null);
     const [embedUrlInput, setEmbedUrlInput] = useState('');
     const [embedUrlError, setEmbedUrlError] = useState<string | null>(null);
     const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
     const mediaMenuRef = useRef<HTMLDivElement | null>(null);
+    const presentMenuRef = useRef<HTMLDivElement | null>(null);
 
     //Sjekker dirtystate for å aktivere autosave
     const setDirtyState = (next: boolean) => {
@@ -1413,6 +1421,24 @@ useEffect(() => {
     }, [isMediaMenuOpen]);
 
     useEffect(() => {
+        const handleOutsideClick = (event: MouseEvent) => {
+            const target = event.target as Node | null;
+            if (isPresentMenuOpen && presentMenuRef.current && target && !presentMenuRef.current.contains(target)) {
+                setIsPresentMenuOpen(false);
+            }
+        };
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsPresentMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [isPresentMenuOpen]);
+
+    useEffect(() => {
         if (!embedDialogKind) return;
 
         const handleEscape = (event: KeyboardEvent) => {
@@ -1426,6 +1452,11 @@ useEffect(() => {
         window.addEventListener('keydown', handleEscape);
         return () => window.removeEventListener('keydown', handleEscape);
     }, [embedDialogKind]);
+
+    const runPresentMenuAction = (action?: () => void) => {
+        setIsPresentMenuOpen(false);
+        action?.();
+    };
 
     const addImageObject = async (source: string) => {
         if (!fabricCanvasRef.current) return;
@@ -2122,6 +2153,48 @@ useEffect(() => {
                                 Lysbilde {currentSlideIndex + 1} av {slides.length}
                             </span>
                             {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                            <div ref={presentMenuRef} className="relative">
+                                <Button
+                                    onClick={() => setIsPresentMenuOpen((prev) => !prev)}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isStartingLive}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isPresentMenuOpen}
+                                    className="h-8 shrink-0 gap-2 border-emerald-500/30 bg-emerald-500/15 px-3 text-emerald-600 hover:border-input hover:bg-accent hover:text-accent-foreground"
+                                >
+                                    {isStartingLive ? (
+                                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                                    ) : (
+                                        <Play className="h-4 w-4 shrink-0" />
+                                    )}
+                                    Presenter
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isPresentMenuOpen && (
+                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-56 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                        <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Presenter</p>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                            disabled={isStartingLive}
+                                            onClick={() => runPresentMenuAction(onStartLive)}
+                                        >
+                                            <MonitorPlay className="h-4 w-4 shrink-0 text-emerald-500" />
+                                            <span>Start live (med lobby)</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                            disabled={isStartingLive}
+                                            onClick={() => runPresentMenuAction(onStartLocalPresentation)}
+                                        >
+                                            <Play className="h-4 w-4 shrink-0 text-emerald-500" />
+                                            <span>Start nå (uten lobby)</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">

@@ -11,7 +11,7 @@ import Navbar from './components/ui/Navbar'
 import { ModeToggle } from '@/components/ui/mode-toggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, LogOut, MonitorPlay, Pencil, Trash2, RotateCcw, Plus, Save, X } from 'lucide-react'
+import { Loader2, LogOut, MonitorPlay, Pencil, Plus, RotateCcw, Save, Trash2, X, Zap } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -95,9 +95,11 @@ const formatPresentationTimestamp = (iso: string) => {
     : d.toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-const MOBILE_BREAKPOINT = 768
 // Hvor lenge «slettet»-toast med angre vises før den forsvinner av seg selv
 const DELETE_UNDO_TIMEOUT_MS = 16_000
+
+const LIVE_SESSION_START_ERROR = 'Kunne ikke starte live-økt'
+const PRESENT_WITHOUT_LOBBY_ERROR = 'Kunne ikke starte presentasjon'
 
 function parseLiveJoinCodeFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/live\/join\/([^/?#]+)/i)
@@ -138,6 +140,8 @@ function App() {
   const [liveIsPresenter, setLiveIsPresenter] = useState(false)
   /** Hvilken presentasjon som akkurat nå starter live (API-kall pågår). */
   const [startingLivePresentationId, setStartingLivePresentationId] = useState<string | null>(null)
+  /** Presenter åpnet live uten lobby — trigge `start_session` på kanalen når LivePresentation er klar. */
+  const [liveAutoStartPresenterSession, setLiveAutoStartPresenterSession] = useState(false)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
@@ -170,14 +174,14 @@ function App() {
   // Husker hvilken presentasjon editoren viser, så vi ikke nullstiller ved nytt objekt med samme id etter lagring
   const editorPresentationIdRef = useRef<string | undefined>(undefined)
 
-  //Autosave timer(toggle autosave)
+  // Autosave: dirty-flag fra editoren (kobles til toggle i navbar)
   const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false)
   const autosaveTimerRef = useRef<number | null>(null)
 
 
   const PAGE_STATE_KEY = 'proslides_page_state'
 
-  //Rydder for autosave 
+  // Rydder autosave-timer ved avbrudd eller ny planlegging
   const clearAutosaveTimer = () => {
     if (!autosaveTimerRef.current) return
     window.clearTimeout(autosaveTimerRef.current)
@@ -187,7 +191,7 @@ function App() {
   const loadPageState = (): PersistedPageState | null => {
     try {
       const raw = sessionStorage.getItem(PAGE_STATE_KEY)
-      return raw ? (JSON.parse(raw) as PersistedPageState): null
+      return raw ? (JSON.parse(raw) as PersistedPageState) : null
     } catch {
       return null
     }
@@ -198,6 +202,26 @@ function App() {
   }
 
   const clearPageState = () => sessionStorage.removeItem(PAGE_STATE_KEY)
+
+  /** Skriver til sessionStorage med én gang slik at rask refresh ikke gjenåpner editor etter «Hjem». */
+  const persistHomePageState = (guestModeFlag: boolean) => {
+    savePageState({
+      currentPage: 'home',
+      activePresentationId: null,
+      livePresentationId: null,
+      liveJoinCode: null,
+      liveIsPresenter: false,
+      guestMode: guestModeFlag,
+    })
+  }
+
+  /** Nullstiller live-relatert state når vi forlater lobby/live-flyt. */
+  const resetLiveRuntimeState = () => {
+    setLiveJoinCode(null)
+    setLivePresentationId(null)
+    setLiveIsPresenter(false)
+    setLiveAutoStartPresenterSession(false)
+  }
 
   const clearNavbarToastTimer = () => {
     if (!navbarToastTimerRef.current) return
@@ -288,7 +312,7 @@ function App() {
     if (isSavingPresentation) return
     if (!editorHasUnsavedChanges) return
 
-    autosaveTimerRef.current = window.setTimeout(() =>{
+    autosaveTimerRef.current = window.setTimeout(() => {
       void presentationEditorRef.current?.savePresentation?.()
       autosaveTimerRef.current = null
     }, 6000)
@@ -298,16 +322,16 @@ function App() {
   }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
 
   useEffect(() => {
-  if (!user && !guestMode) return
-  savePageState({
-    currentPage,
-    activePresentationId: activePresentation?.id ?? null,
-    livePresentationId,
-    liveJoinCode,
-    liveIsPresenter,
-    guestMode,
-  })
-}, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, liveIsPresenter, guestMode, user])
+    if (!user && !guestMode) return
+    savePageState({
+      currentPage,
+      activePresentationId: activePresentation?.id ?? null,
+      livePresentationId,
+      liveJoinCode,
+      liveIsPresenter,
+      guestMode,
+    })
+  }, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, liveIsPresenter, guestMode, user])
 
   useEffect(() => {
     const loc = window.location
@@ -319,86 +343,88 @@ function App() {
       }
     }
 
-    // Sjekker om det finnes en aktiv økt eller token ved oppstart
-  const restoreSession = async () => {
-  const savedRaw = sessionStorage.getItem('proslides_session')
-  const saved = savedRaw ? JSON.parse(savedRaw) : null
-  const savedPage = loadPageState()
-  const qrJoinCode = parseLiveJoinCodeFromPath(loc.pathname)
+    // Sjekker aktiv økt / token ved oppstart (inkl. QR-gjest og sessionStorage)
+    const restoreSession = async () => {
+      const savedRaw = sessionStorage.getItem('proslides_session')
+      const saved = savedRaw ? JSON.parse(savedRaw) : null
+      const savedPage = loadPageState()
+      const qrJoinCode = parseLiveJoinCodeFromPath(loc.pathname)
 
-  if (qrJoinCode) {
-    try {
-      const data = await api.guestJoin(qrJoinCode)
-      const presentationId = String(data.presentation_id)
-      const nextPage: Page = data.session_started ? 'live' : 'lobby'
-      saveSessionState(nextPage, presentationId, null, true, false)
-      setLivePresentationId(presentationId)
-      setLiveJoinCode(null)
-      setLiveIsPresenter(false)
-      setGuestMode(true)
-      setCurrentPage(nextPage)
-      window.history.replaceState({}, '', '/')
-      setIsAuthChecking(false)
-      return
-    } catch {
-      setCurrentPage('login')
-      setIsAuthChecking(false)
-      return
-    }
-  }
-
-  if (saved?.guestMode) {
-    setLivePresentationId(saved.presentationId)
-    setLiveIsPresenter(false)
-    setGuestMode(true)
-    setCurrentPage(saved.page)
-    setIsAuthChecking(false)
-    return
-  }
-
-  if (!api.hasToken()) {
-    setIsAuthChecking(false)
-    return
-  }
-
-  try {
-    const data = await api.me()
-    setUser(data.user)
-
-    if (saved?.page === 'lobby' || saved?.page === 'live') {
-      setLivePresentationId(saved.presentationId)
-      setLiveJoinCode(saved.joinCode ?? null)
-      setLiveIsPresenter(Boolean(saved.isPresenter ?? saved.joinCode))
-      setCurrentPage(saved.page)
-    } else if (savedPage) {
-      setLivePresentationId(savedPage.livePresentationId)
-      setLiveJoinCode(savedPage.liveJoinCode)
-      setLiveIsPresenter(Boolean(savedPage.liveIsPresenter ?? savedPage.liveJoinCode))
-      setGuestMode(savedPage.guestMode)
-
-      if (savedPage.currentPage === 'editor' && savedPage.activePresentationId) {
+      if (qrJoinCode) {
         try {
-          const p = await api.getPresentation(savedPage.activePresentationId)
-          setActivePresentation(p.presentation)
-          setCurrentPage('editor')
+          const data = await api.guestJoin(qrJoinCode)
+          const presentationId = String(data.presentation_id)
+          const nextPage: Page = data.session_started ? 'live' : 'lobby'
+          saveSessionState(nextPage, presentationId, null, true, false)
+          setLivePresentationId(presentationId)
+          setLiveJoinCode(null)
+          setLiveIsPresenter(false)
+          setGuestMode(true)
+          setCurrentPage(nextPage)
+          window.history.replaceState({}, '', '/')
+          setIsAuthChecking(false)
+          return
         } catch {
+          setCurrentPage('login')
+          setIsAuthChecking(false)
+          return
+        }
+      }
+
+      if (saved?.guestMode) {
+        setLivePresentationId(saved.presentationId)
+        setLiveIsPresenter(false)
+        setGuestMode(true)
+        setCurrentPage(saved.page)
+        setIsAuthChecking(false)
+        return
+      }
+
+      if (!api.hasToken()) {
+        setIsAuthChecking(false)
+        return
+      }
+
+      try {
+        const data = await api.me()
+        setUser(data.user)
+
+        if (saved?.page === 'lobby' || saved?.page === 'live') {
+          setLivePresentationId(saved.presentationId)
+          setLiveJoinCode(saved.joinCode ?? null)
+          setLiveIsPresenter(Boolean(saved.isPresenter ?? saved.joinCode))
+          setCurrentPage(saved.page)
+        } else if (savedPage) {
+          setLivePresentationId(savedPage.livePresentationId)
+          setLiveJoinCode(savedPage.liveJoinCode)
+          setLiveIsPresenter(Boolean(savedPage.liveIsPresenter ?? savedPage.liveJoinCode))
+          setGuestMode(savedPage.guestMode)
+
+          if (savedPage.currentPage === 'editor' && savedPage.activePresentationId) {
+            try {
+              const p = await api.getPresentation(savedPage.activePresentationId)
+              setActivePresentation(p.presentation)
+              setCurrentPage('editor')
+            } catch {
+              setCurrentPage('home')
+            }
+          } else {
+            let nextPage: Page = savedPage.currentPage === 'login' ? 'home' : savedPage.currentPage
+            if (nextPage === 'editor' && !savedPage.activePresentationId) nextPage = 'home'
+            setCurrentPage(nextPage)
+          }
+        } else {
           setCurrentPage('home')
         }
-      } else {
-        setCurrentPage(savedPage.currentPage === 'login' ? 'home' : savedPage.currentPage)
+      } catch {
+        await api.logout()
+        setUser(null)
+      } finally {
+        setIsAuthChecking(false)
       }
-    } else {
-      setCurrentPage('home')
     }
-  } catch {
-    await api.logout()
-    setUser(null)
-  } finally {
-    setIsAuthChecking(false)
-  }
-}
 
-    restoreSession()
+    void restoreSession()
   }, [])
 
   useEffect(() => {
@@ -677,6 +703,7 @@ function App() {
 
   const handleLoginSuccess = (userData: UserRecord) => {
     setUser(userData)
+    persistHomePageState(false)
     setCurrentPage('home')
   }
 
@@ -702,8 +729,21 @@ function App() {
   // Fjerner all session-relatert state ved utlogging.
   const clearSessionState = () => sessionStorage.removeItem('proslides_session')
 
-  // Håndterer oppstart av en live presentasjonsøkt ved å kommunisere med backend, sette relevant state og navigere til lobbyen.
+  // Oppretter live-økt på server; lobby eller direkte til lysbilde velges med nextPage.
   const handleStartLive = async (presentationId: string) => {
+    await startPresenterSession(presentationId, {
+      nextPage: 'lobby',
+      errorMessage: LIVE_SESSION_START_ERROR,
+    })
+  }
+
+  async function startPresenterSession(
+    presentationId: string,
+    {
+      nextPage,
+      errorMessage,
+    }: { nextPage: 'lobby' | 'live'; errorMessage: string }
+  ) {
     setStartingLivePresentationId(presentationId)
     setPresentationsError(null)
     try {
@@ -711,13 +751,43 @@ function App() {
       setLivePresentationId(presentationId)
       setLiveJoinCode(data.join_code)
       setLiveIsPresenter(true)
-      saveSessionState('lobby', presentationId, data.join_code, false, true)
-      setCurrentPage('lobby')
+      setLiveAutoStartPresenterSession(nextPage === 'live')
+      saveSessionState(nextPage, presentationId, data.join_code, false, true)
+      setCurrentPage(nextPage)
     } catch {
-      setPresentationsError('Kunne ikke starte live-økt')
+      setPresentationsError(errorMessage)
+      setLiveAutoStartPresenterSession(false)
     } finally {
       setStartingLivePresentationId(null)
     }
+  }
+
+  /** Hjemskort: start som presentatør uten lobby (første lysbilde etter at kanalen er klar). */
+  const handleStartLiveDirectFromHome = async (presentationId: string) => {
+    await startPresenterSession(presentationId, {
+      nextPage: 'live',
+      errorMessage: LIVE_SESSION_START_ERROR,
+    })
+  }
+
+  const handleStartLiveFromEditor = async () => {
+    if (!activePresentation?.id) return
+    const didSave = await presentationEditorRef.current?.savePresentation?.()
+    if (!didSave) return
+    await startPresenterSession(activePresentation.id, {
+      nextPage: 'lobby',
+      errorMessage: LIVE_SESSION_START_ERROR,
+    })
+  }
+
+  const handleStartPresentNow = async () => {
+    if (!activePresentation?.id) return
+    const didSave = await presentationEditorRef.current?.savePresentation?.()
+    if (!didSave) return
+    await startPresenterSession(activePresentation.id, {
+      nextPage: 'live',
+      errorMessage: PRESENT_WITHOUT_LOBBY_ERROR,
+    })
   }
 
   // Håndterer at en gjest blir med i en live presentasjonsøkt ved å sette relevant state og navigere til lobbyen.
@@ -741,10 +811,11 @@ function App() {
     clearSessionState()
     clearPageState()
     setUser(null)
+    setGuestMode(false)
     setPresentations([])
     setTrashedPresentations([])
     setActivePresentation(null)
-    setLiveIsPresenter(false)
+    resetLiveRuntimeState()
     setIsNewPresentationSession(false)
     setHasSavedCurrentSession(false)
     setCurrentPage('login')
@@ -764,9 +835,9 @@ function App() {
     //Eksisterende presentasjon, ingen endringer - bare gå hjem
     setIsExitEditorDialogOpen(false)
     clearSessionState()
-    setLiveJoinCode(null)
-    setLivePresentationId(null)
-    setLiveIsPresenter(false)
+    persistHomePageState(guestMode)
+    setActivePresentation(null)
+    resetLiveRuntimeState()
     setCurrentPage('home')
   }
 
@@ -781,9 +852,10 @@ function App() {
       }
     }
     clearSessionState()
+    persistHomePageState(guestMode)
+    setActivePresentation(null)
     setCurrentPage('home')
-    setLiveJoinCode(null)
-    setLivePresentationId(null)
+    resetLiveRuntimeState()
   }
 
   // Håndterer oppdatering av brukerens profilnavn ved å sende oppdaterte data til backend og oppdatere lokal state.
@@ -822,6 +894,8 @@ function App() {
 
       setIsExitEditorDialogOpen(false)
       clearSessionState()
+      persistHomePageState(guestMode)
+      setActivePresentation(null)
       setCurrentPage('home')
     } catch {
       setPresentationsError('Kunne ikke forkaste presentasjonen')
@@ -835,12 +909,13 @@ function App() {
     if (isSavingPresentation) return
 
     const didSave = await presentationEditorRef.current?.savePresentation?.()
-    if (!didSave) return 
-      
-      setIsExitEditorDialogOpen(false)
-      clearSessionState()
-      setCurrentPage('home')
-    
+    if (!didSave) return
+
+    setIsExitEditorDialogOpen(false)
+    clearSessionState()
+    persistHomePageState(guestMode)
+    setActivePresentation(null)
+    setCurrentPage('home')
   }
 
   if (isAuthChecking) {
@@ -1020,11 +1095,11 @@ function App() {
                   {presentations.map((presentation) => (
                     <Card
                       key={presentation.id}
-                      className='group relative overflow-hidden border border-border bg-transparent text-card-foreground shadow-none transition-[border-color] duration-200 hover:border-primary/55 dark:border-white/20 dark:hover:border-primary/75'
+                      className='group/card relative overflow-hidden border border-border bg-transparent text-card-foreground shadow-none transition-[border-color] duration-200 hover:border-primary/55 dark:border-white/20 dark:hover:border-primary/75'
                     >
                       <div
                         aria-hidden
-                        className='pointer-events-none absolute inset-0 z-0 rounded-xl bg-card shadow-sm transition-[box-shadow,background-color] duration-200 dark:bg-[oklch(0.235_0.022_268)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.07),0_2px_10px_rgba(0,0,0,0.28)] group-hover:bg-accent/45 group-hover:shadow-lg dark:group-hover:bg-[oklch(0.28_0.035_277)] dark:group-hover:shadow-[0_0_0_1px_rgba(167,139,250,0.4),0_6px_22px_rgba(0,0,0,0.38),0_0_28px_rgba(124,58,237,0.18)]'
+                        className='pointer-events-none absolute inset-0 z-0 rounded-xl bg-card shadow-sm transition-[box-shadow,background-color] duration-200 dark:bg-[oklch(0.235_0.022_268)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.07),0_2px_10px_rgba(0,0,0,0.28)] group-hover/card:bg-accent/45 group-hover/card:shadow-lg dark:group-hover/card:bg-[oklch(0.28_0.035_277)] dark:group-hover/card:shadow-[0_0_0_1px_rgba(167,139,250,0.4),0_6px_22px_rgba(0,0,0,0.38),0_0_28px_rgba(124,58,237,0.18)]'
                       />
                       <CardContent
                         className='relative z-10 space-y-4 rounded-lg p-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
@@ -1076,11 +1151,22 @@ function App() {
                           </p>
                         </div>
 
-                        <div className='grid grid-cols-3 gap-2'>
+                        {/* Knapperekke: ikon synlig alltid; tekstlabel glir ut ved hover/fokus (group/btn). */}
+                        <div className='flex min-w-0 w-full gap-2 rounded-md'>
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground dark:hover:bg-muted/35'
+                            aria-label={
+                              openingPresentationId === presentation.id ? 'Redigerer' : 'Rediger presentasjon'
+                            }
+                            title='Rediger'
+                            className={cn(
+                              'group/btn relative h-9 min-w-8 flex-1 basis-0 gap-0 overflow-hidden px-0',
+                              'flex flex-row items-center justify-center',
+                              'transition-colors duration-200 ease-out',
+                              'hover:z-10 focus-visible:z-10',
+                              'hover:border-border hover:bg-muted/55 hover:text-foreground dark:hover:bg-muted/35',
+                            )}
                             disabled={deletingPresentationIds[presentation.id] || openingPresentationId !== null}
                             aria-busy={openingPresentationId === presentation.id}
                             onClick={() => void handleOpenPresentation(presentation.id)}
@@ -1090,12 +1176,31 @@ function App() {
                             ) : (
                               <Pencil className='h-3.5 w-3.5 shrink-0' aria-hidden />
                             )}
-                            {openingPresentationId === presentation.id ? 'Redigerer…' : 'Rediger'}
+                            <span
+                              className={cn(
+                                'inline-block max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0',
+                                'transition-[max-width,opacity,margin] duration-200 ease-out',
+                                'group-hover/btn:ml-1.5 group-hover/btn:max-w-[5.75rem] group-hover/btn:opacity-100',
+                                'group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[5.75rem] group-focus-visible/btn:opacity-100',
+                              )}
+                            >
+                              {openingPresentationId === presentation.id ? 'Redigerer…' : 'Rediger'}
+                            </span>
                           </Button>
                           <Button
                             size='sm'
                             variant='outline'
-                            className='flex items-center justify-center gap-1.5 border-emerald-500/30 bg-emerald-500/15 text-emerald-500 transition-colors hover:border-emerald-500/45 hover:bg-emerald-500/22 hover:text-emerald-600 dark:hover:bg-emerald-500/14 dark:hover:text-emerald-300'
+                            aria-label={
+                              startingLivePresentationId === presentation.id ? 'Starter live' : 'Start live'
+                            }
+                            title='Start live'
+                            className={cn(
+                              'group/btn relative h-9 min-w-8 flex-1 basis-0 gap-0 overflow-hidden border-emerald-500/30 bg-emerald-500/15 px-0 text-emerald-600',
+                              'flex flex-row items-center justify-center',
+                              'transition-colors duration-200 ease-out',
+                              'hover:z-10 focus-visible:z-10',
+                              'hover:border-emerald-500/45 hover:bg-emerald-500/22 hover:text-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-500/14',
+                            )}
                             disabled={
                               deletingPresentationIds[presentation.id] ||
                               startingLivePresentationId !== null
@@ -1108,17 +1213,82 @@ function App() {
                             ) : (
                               <MonitorPlay className='h-3.5 w-3.5 shrink-0' aria-hidden />
                             )}
-                            {startingLivePresentationId === presentation.id ? 'Starter live…' : 'Start live'}
+                            <span
+                              className={cn(
+                                'inline-block max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0',
+                                'transition-[max-width,opacity,margin] duration-200 ease-out',
+                                'group-hover/btn:ml-1.5 group-hover/btn:max-w-[7rem] group-hover/btn:opacity-100',
+                                'group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[7rem] group-focus-visible/btn:opacity-100',
+                              )}
+                            >
+                              {startingLivePresentationId === presentation.id ? 'Starter live…' : 'Start live'}
+                            </span>
                           </Button>
                           <Button
                             size='sm'
                             variant='outline'
-                            className={logoutStyleDestructiveButtonClassName}
+                            aria-label={
+                              startingLivePresentationId === presentation.id
+                                ? 'Starter nå'
+                                : 'Start nå uten lobby'
+                            }
+                            title='Start nå uten lobby — hopper over lobby og åpner presentasjonen'
+                            className={cn(
+                              'group/btn relative h-9 min-w-8 flex-1 basis-0 gap-0 overflow-hidden border-amber-500/35 bg-amber-500/12 px-0 text-amber-800',
+                              'flex flex-row items-center justify-center',
+                              'transition-colors duration-200 ease-out',
+                              'hover:z-10 focus-visible:z-10',
+                              'hover:border-amber-500/50 hover:bg-amber-500/18 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-500/14 dark:hover:text-amber-200',
+                            )}
+                            disabled={
+                              deletingPresentationIds[presentation.id] ||
+                              startingLivePresentationId !== null
+                            }
+                            aria-busy={startingLivePresentationId === presentation.id}
+                            onClick={() => void handleStartLiveDirectFromHome(presentation.id)}
+                          >
+                            {startingLivePresentationId === presentation.id ? (
+                              <Loader2 className='h-3.5 w-3.5 shrink-0 animate-spin' aria-hidden />
+                            ) : (
+                              <Zap className='h-3.5 w-3.5 shrink-0' aria-hidden />
+                            )}
+                            <span
+                              className={cn(
+                                'inline-block max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0',
+                                'transition-[max-width,opacity,margin] duration-200 ease-out',
+                                'group-hover/btn:ml-1.5 group-hover/btn:max-w-[4.75rem] group-hover/btn:opacity-100',
+                                'group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[4.75rem] group-focus-visible/btn:opacity-100',
+                              )}
+                            >
+                              {startingLivePresentationId === presentation.id ? 'Starter…' : 'Start nå'}
+                            </span>
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            aria-label='Slett presentasjon'
+                            title='Slett'
+                            className={cn(
+                              logoutStyleDestructiveButtonClassName,
+                              'group/btn relative h-9 min-w-8 flex-1 basis-0 gap-0 overflow-hidden px-0',
+                              'flex flex-row items-center justify-center',
+                              'transition-colors duration-200 ease-out',
+                              'hover:z-10 focus-visible:z-10',
+                            )}
                             disabled={deletingPresentationIds[presentation.id]}
                             onClick={() => handleDeletePresentation(presentation.id)}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Slett
+                            <Trash2 className='h-3.5 w-3.5 shrink-0' aria-hidden />
+                            <span
+                              className={cn(
+                                'inline-block max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0',
+                                'transition-[max-width,opacity,margin] duration-200 ease-out',
+                                'group-hover/btn:ml-1.5 group-hover/btn:max-w-[3.25rem] group-hover/btn:opacity-100',
+                                'group-focus-visible/btn:ml-1.5 group-focus-visible/btn:max-w-[3.25rem] group-focus-visible/btn:opacity-100',
+                              )}
+                            >
+                              Slett
+                            </span>
                           </Button>
                         </div>
                       </CardContent>
@@ -1222,6 +1392,7 @@ function App() {
               joinCode={liveJoinCode}
               isPresenter={liveIsPresenter}
               onSessionStarted={() => {
+                setLiveAutoStartPresenterSession(false)
                 saveSessionState('live', livePresentationId, liveJoinCode, false, liveIsPresenter)
                 setCurrentPage('live')
               }}
@@ -1239,6 +1410,7 @@ function App() {
               onEndLiveSession={handleEndLiveSession}
               onSessionEnd={handleGoHome}
               onLeaveSession={liveIsPresenter ? undefined : handleGoHome}
+              autoStartPresenterSession={liveAutoStartPresenterSession}
             />
           </div>
         )}
@@ -1251,8 +1423,12 @@ function App() {
             isSaving={isSavingPresentation}
             onSaveComplete={handleEditorSaveComplete}
             onDirtyChange={setEditorHasUnsavedChanges}
+            onStartLive={handleStartLiveFromEditor}
+            onStartLocalPresentation={handleStartPresentNow}
+            isStartingLive={startingLivePresentationId !== null}
           />
         )}
+
       </main>
 
       {isExitEditorDialogOpen && (
@@ -1315,6 +1491,7 @@ function App() {
           </Card>
         </div>
       )}
+
     </div>
   )
 }

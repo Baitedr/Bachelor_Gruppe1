@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import {
   normalizePresentationVariables,
@@ -59,10 +59,7 @@ const isActiveQuestion = (value: unknown): value is ActiveQuestion => {
   )
 }
 
-/**
- * Inngang for live-økt: laster presentasjon, kobler til kanal via `usePresentation` (ActionCable),
- * og rendrer enten presentatør- eller publikumsvisning. App.tsx bruker denne én komponent for begge roller.
- */
+/** Live-visning: laster presentasjon, kanal via usePresentation, presentatør eller publikum. */
 const LivePresentation = ({
   presentationId,
   isPresenter,
@@ -70,6 +67,7 @@ const LivePresentation = ({
   onEndLiveSession,
   onSessionEnd,
   onLeaveSession,
+  autoStartPresenterSession = false,
 }: {
   presentationId: string | number
   isPresenter: boolean
@@ -77,6 +75,8 @@ const LivePresentation = ({
   onEndLiveSession?: () => void
   onSessionEnd?: () => void
   onLeaveSession?: () => void
+  /** Presentatør uten lobby: start_session på kanalen én gang når data er klart. */
+  autoStartPresenterSession?: boolean
 }) => {
   const [presentation, setPresentation] = useState<PresentationRecord | null>(null)
   const [loading, setLoading] = useState(true)
@@ -93,6 +93,8 @@ const LivePresentation = ({
     activatePoll,
     submitPollAnswer,
     sessionEnded,
+    sessionStarted,
+    startSession,
     submittedPollIds,
     activeQuestion,
     questionResults,
@@ -103,6 +105,8 @@ const LivePresentation = ({
     broadcastEmbedPlayback,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
   const [questionAnswer, setQuestionAnswer] = useState('')
+  /** Hindrer dobbel `start_session` dersom samme render-effekt fyres flere ganger. */
+  const autoPresenterStartedRef = useRef(false)
 
   const AUDIENCE_EMBED_VOL_KEY = 'proslides-audience-embed-volume-v1'
   const [audienceVolLevel, setAudienceVolLevelState] = useState(90)
@@ -169,6 +173,30 @@ const LivePresentation = ({
   }, [sessionEnded, onSessionEnd])
 
   useEffect(() => {
+    autoPresenterStartedRef.current = false
+  }, [presentationId, autoStartPresenterSession])
+
+  useEffect(() => {
+    if (!autoStartPresenterSession || !isPresenter) return
+    if (loading || !presentation) return
+    if (sessionStarted) return
+    if (autoPresenterStartedRef.current) return
+    const timer = window.setTimeout(() => {
+      startSession()
+      autoPresenterStartedRef.current = true
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [
+    autoStartPresenterSession,
+    isPresenter,
+    loading,
+    presentation,
+    sessionStarted,
+    startSession,
+  ])
+
+  useEffect(() => {
+    // Last inn presentasjonen via samme endpoint som vanlige deltakere bruker.
     const loadPresentation = async () => {
       try {
         const response = await api.joinPresentation(presentationId)
