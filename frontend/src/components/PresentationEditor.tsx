@@ -1,11 +1,12 @@
 import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText, classRegistry } from 'fabric';
+import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText } from 'fabric';
 import {
     BarChart3,
     Circle as CircleIcon,
     ArrowRight,
     ChevronDown,
     Image as ImageIcon,
+    Link2,
     List,
     Minus,
     PanelLeftClose,
@@ -20,6 +21,7 @@ import {
     Type,
     Type as TypeIcon,
     Undo2,
+    Video,
     X,
     BadgeRussianRubleIcon,
 } from 'lucide-react';
@@ -39,6 +41,9 @@ import {
     resolveFabricDataWithVariables,
     type PresentationVariable,
 } from '../lib/utils';
+import { parseYoutubeId, parseVimeoId } from '../lib/embedUrls';
+import { FabricEmbed, FabricVideo, createVideoElement } from '../lib/fabricSlideObjects';
+import SlideEmbedOverlays from './SlideEmbedOverlays';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -56,11 +61,6 @@ const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
 
 type MediaKind = 'image' | 'video';
 
-type SerializedVideoProps = {
-    mediaType?: 'video';
-    src?: string;
-};
-
 type GuideLine = {
     orientation: 'horizontal' | 'vertical';
     position: number;
@@ -72,69 +72,6 @@ type AlignmentPoint = {
 };
 
 const ALIGNMENT_TOLERANCE = 6;
-
-const createVideoElement = (src: string) =>
-    new Promise<HTMLVideoElement>((resolve, reject) => {
-        const video = document.createElement('video');
-        let settled = false;
-
-        const cleanup = () => {
-            video.removeEventListener('loadeddata', handleLoadedData);
-            video.removeEventListener('error', handleError);
-        };
-
-        const finish = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            resolve(video);
-        };
-
-        const fail = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            reject(new Error('Kunne ikke laste video'));
-        };
-
-        const handleLoadedData = () => finish();
-        const handleError = () => fail();
-
-        video.preload = 'auto';
-        video.loop = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.crossOrigin = 'anonymous';
-        video.addEventListener('loadeddata', handleLoadedData, { once: true });
-        video.addEventListener('error', handleError, { once: true });
-        video.src = src;
-        video.load();
-    });
-
-// Utvid Fabric.Object for å inkludere mediaType
-class FabricVideo extends FabricImage {
-    static type = 'video';
-
-    constructor(element: HTMLVideoElement, options: Record<string, unknown> = {}) {
-        // Video skal rendres direkte fra elementet i stedet for et stillbilde-cache.
-        super(element, {
-            ...options,
-            objectCaching: false,
-        });
-    }
-
-    static async fromObject(
-        { src, mediaType, ...object }: SerializedVideoProps & Record<string, any>,
-    ) {
-        const videoElement = await createVideoElement(src || '');
-        return new this(videoElement, {
-            ...object,
-            src,
-        });
-    }
-}
-
-classRegistry.setClass(FabricVideo, 'video');
 
 type CanvasSnapshot = {
     backgroundColor: string;
@@ -307,7 +244,13 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
+    const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
+    const [embedDialogKind, setEmbedDialogKind] = useState<'youtube' | 'vimeo' | null>(null);
+    const [embedUrlInput, setEmbedUrlInput] = useState('');
+    const [embedUrlError, setEmbedUrlError] = useState<string | null>(null);
+    const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
+    const mediaMenuRef = useRef<HTMLDivElement | null>(null);
 
     //Sjekker dirtystate for å aktivere autosave
     const setDirtyState = (next: boolean) => {
@@ -718,6 +661,7 @@ ref: ForwardedRef<PresentationEditorHandle>
                     fabricCanvasRef.current.renderAll();
                     syncCanvasVideos();
                     isApplyingCanvasStateRef.current = false;
+                    setEmbedLayoutRevision((x) => x + 1);
 
                     if (!shouldSkipHistoryReset) {
                         resetHistoryWithSnapshot(createCanvasSnapshot());
@@ -729,6 +673,7 @@ ref: ForwardedRef<PresentationEditorHandle>
                 fabricCanvasRef.current.renderAll();
                 stopVideoRenderLoop();
                 isApplyingCanvasStateRef.current = false;
+                setEmbedLayoutRevision((x) => x + 1);
 
                 if (!shouldSkipHistoryReset) {
                     resetHistoryWithSnapshot(createCanvasSnapshot());
@@ -1443,6 +1388,45 @@ useEffect(() => {
     };
 }, [isShapeMenuOpen, isShapeColorPickerOpen]);
 
+    useEffect(() => {
+        const handleOutsideClick = (event: MouseEvent) => {
+            const target = event.target as Node | null;
+
+            if (isMediaMenuOpen && mediaMenuRef.current && target && !mediaMenuRef.current.contains(target)) {
+                setIsMediaMenuOpen(false);
+            }
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsMediaMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [isMediaMenuOpen]);
+
+    useEffect(() => {
+        if (!embedDialogKind) return;
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setEmbedDialogKind(null);
+                setEmbedUrlInput('');
+                setEmbedUrlError(null);
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [embedDialogKind]);
+
     const addImageObject = async (source: string) => {
         if (!fabricCanvasRef.current) return;
 
@@ -1474,6 +1458,33 @@ useEffect(() => {
         syncCanvasVideos();
     };
 
+    const addEmbedObject = (provider: 'youtube' | 'vimeo', id: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const width = 480;
+        const height = 270;
+        const pos = getSafePosition(80, 150, width, height);
+        const embed = new FabricEmbed({
+            left: pos.left,
+            top: pos.top,
+            width,
+            height,
+            embedProvider: provider,
+            embedId: id,
+            fill: 'rgba(15, 23, 42, 0.22)',
+            stroke: '#64748b',
+            strokeWidth: 2,
+            rx: 6,
+            ry: 6,
+        });
+
+        fabricCanvasRef.current.add(embed);
+        fabricCanvasRef.current.setActiveObject(embed);
+        fabricCanvasRef.current.renderAll();
+        markDirty();
+        setEmbedLayoutRevision((x) => x + 1);
+    };
+
     const handleMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !fabricCanvasRef.current) return;
@@ -1501,9 +1512,36 @@ useEffect(() => {
         event.target.value = '';
     };
 
-    const addImage = () => {
+    const openLocalMediaFilePicker = () => {
+        setIsMediaMenuOpen(false);
         mediaUploadInputRef.current?.click();
     };
+
+    const closeEmbedDialog = () => {
+        setEmbedDialogKind(null);
+        setEmbedUrlInput('');
+        setEmbedUrlError(null);
+    };
+
+    const commitEmbedFromDialog = () => {
+        if (!embedDialogKind) return;
+
+        const id =
+            embedDialogKind === 'youtube' ? parseYoutubeId(embedUrlInput) : parseVimeoId(embedUrlInput);
+
+        if (!id) {
+            setEmbedUrlError(
+                embedDialogKind === 'youtube'
+                    ? 'Fant ingen gyldig YouTube-video-ID. Lim inn lenke eller 11-tegns ID.'
+                    : 'Fant ingen gyldig Vimeo-video-ID. Lim inn lenke eller numerisk ID.',
+            );
+            return;
+        }
+
+        addEmbedObject(embedDialogKind, id);
+        closeEmbedDialog();
+    };
+
     // Legger til en valgt form, rektangel eller sirkel
     const addShape = (shapeType: 'rectangle' | 'circle') => {
         if (!fabricCanvasRef.current) return;
@@ -1941,6 +1979,60 @@ useEffect(() => {
                 onChange={handleMediaFileChange}
             />
 
+            {embedDialogKind && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="embed-dialog-title"
+                    onClick={() => closeEmbedDialog()}
+                >
+                    <div
+                        className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <h2 id="embed-dialog-title" className="text-base font-semibold text-foreground">
+                                {embedDialogKind === 'youtube' ? 'YouTube' : 'Vimeo'}
+                            </h2>
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => closeEmbedDialog()} aria-label="Lukk">
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <p className="mb-2 text-sm text-muted-foreground">
+                            {embedDialogKind === 'youtube'
+                                ? 'Lim inn YouTube-lenke'
+                                : 'Lim inn Vimeo-lenke'}
+                        </p>
+                        <Input
+                            autoFocus
+                            value={embedUrlInput}
+                            onChange={(e) => {
+                                setEmbedUrlInput(e.target.value);
+                                setEmbedUrlError(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    commitEmbedFromDialog();
+                                }
+                            }}
+                            placeholder={embedDialogKind === 'youtube' ? 'https://www.youtube.com/watch?v=…' : 'https://vimeo.com/…'}
+                            className="mb-2"
+                        />
+                        {embedUrlError && <p className="mb-3 text-sm text-destructive">{embedUrlError}</p>}
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" onClick={() => closeEmbedDialog()}>
+                                Avbryt
+                            </Button>
+                            <Button type="button" onClick={() => commitEmbedFromDialog()}>
+                                Legg til
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_14px_rgba(0,0,0,0.05)] ring-1 ring-border/30 transition-all duration-200`}>
                 <div className="flex items-center justify-between border-b border-border p-3">
                     {!isLeftSidebarCollapsed && <h3 className="text-lg text-foreground">Lysbilder</h3>}
@@ -2146,7 +2238,61 @@ useEffect(() => {
                             )}
                         </div>
                         <div className="order-8 basis-full" />
-                        <Button onClick={addImage} variant="outline" size="sm" className="order-9 flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Media</Button>
+                        <div ref={mediaMenuRef} className="relative order-9">
+                            <Button
+                                type="button"
+                                onClick={() => setIsMediaMenuOpen((prev) => !prev)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-1.5"
+                                aria-haspopup="menu"
+                                aria-expanded={isMediaMenuOpen}
+                            >
+                                <ImageIcon className="h-3.5 w-3.5" />
+                                Media
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            {isMediaMenuOpen && (
+                                <div className="absolute left-0 top-full z-20 mt-2 min-w-52 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setIsMediaMenuOpen(false);
+                                            setEmbedUrlInput('');
+                                            setEmbedUrlError(null);
+                                            setEmbedDialogKind('youtube');
+                                        }}
+                                    >
+                                        <Video className="h-4 w-4 shrink-0" />
+                                        <span>YouTube</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setIsMediaMenuOpen(false);
+                                            setEmbedUrlInput('');
+                                            setEmbedUrlError(null);
+                                            setEmbedDialogKind('vimeo');
+                                        }}
+                                    >
+                                        <Link2 className="h-4 w-4 shrink-0" />
+                                        <span>Vimeo</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            openLocalMediaFilePicker();
+                                        }}
+                                    >
+                                        <ImageIcon className="h-4 w-4 shrink-0" />
+                                        <span>Fra datamaskin</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         <div ref={shapeMenuRef} className="relative order-10">
                             <Button
@@ -2365,7 +2511,13 @@ useEffect(() => {
                             className="relative h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
                         >
                             <canvas ref={canvasRef} />
-                            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
+                            <SlideEmbedOverlays
+                                fabricCanvasRef={fabricCanvasRef}
+                                variant="editor"
+                                layoutRevision={embedLayoutRevision}
+                                sceneSize={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+                            />
+                            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
                                 {guideLines.map((line, index) => (
                                     <div
                                         key={`${line.orientation}-${line.position}-${index}`}

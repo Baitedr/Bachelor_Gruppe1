@@ -99,6 +99,8 @@ const LivePresentation = ({
     activateQuestion,
     submitQuestionAnswer,
     submittedQuestionIds,
+    embedPlayback,
+    broadcastEmbedPlayback,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
   const [questionAnswer, setQuestionAnswer] = useState('')
 
@@ -228,6 +230,25 @@ const LivePresentation = ({
     setQuestionAnswer('')
   }
 
+  const embedLivePresenter = useMemo(
+    () => ({
+      role: 'presenter' as const,
+      slideIndex: currentSlide,
+      embedPlayback,
+      broadcastEmbedPlayback,
+    }),
+    [currentSlide, embedPlayback, broadcastEmbedPlayback],
+  )
+
+  const embedLiveAudience = useMemo(
+    () => ({
+      role: 'audience' as const,
+      slideIndex: currentSlide,
+      embedPlayback,
+    }),
+    [currentSlide, embedPlayback],
+  )
+
   if (loading) {
     return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
   }
@@ -264,6 +285,7 @@ const LivePresentation = ({
           setQuestionAnswer={setQuestionAnswer}
           submitOpenQuestionAnswer={submitOpenQuestionAnswer}
           onLeaveSession={onLeaveSession}
+          embedLive={embedLiveAudience}
         />
       </div>
     )
@@ -288,6 +310,7 @@ const LivePresentation = ({
       pollResults={pollResults}
       questionResults={questionResults}
       sessionEnded={sessionEnded}
+      embedLive={embedLivePresenter}
     />
   )
 }
