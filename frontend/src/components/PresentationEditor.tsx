@@ -1174,11 +1174,13 @@ ref: ForwardedRef<PresentationEditorHandle>
         setCurrentSlideIndex(index + 1);
     };
 
+    //Lagrer gjeldende slide's state og bytter med en selected slide index
     const handleSlideSelect = (index: number) => {
         saveCurrentSlide();
         setCurrentSlideIndex(index);
     };
 
+    //Sikkerer at det gitte objektet blir innenfor the synlige canvas området ved å justerer posisjonen sin hvis den overflower canvas
     const clampObjectToCanvas = (object: any) => {
         object.setCoords();
         const bounds = object.getBoundingRect();
@@ -1224,12 +1226,12 @@ ref: ForwardedRef<PresentationEditorHandle>
         };
     };
 
-    // Fabric.js Tools
+    // Fabric.js Tools. Legger til en ny teskstboks til canvaset på en sikker måte. Legger til nåværende tekst style
     const addText = () => {
         if (!fabricCanvasRef.current) return;
         
         const pos = getSafePosition(80, 150, 420, 80);
-        const text = new Textbox('Klikk for å redigere', { // Click to edit
+        const text = new Textbox('Klikk for å redigere', { 
             left: pos.left,
             top: pos.top,
             width: 420,
@@ -1251,6 +1253,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         text.selectAll();
     };
 
+    //Fabric.js Tools. Legger til et ny title object til canvaset på en sikker måte.
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
@@ -1275,6 +1278,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         text.enterEditing();
         text.selectAll();
     };
+
     const getListMarker = (styleType: ListStyleType) => {
         switch (styleType) {
             case 'dash':
@@ -1287,6 +1291,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         }
     };
 
+    //Bestemmer list style type(bullet, arrow, dash)
     const getListStyleFromText = (text: string): ListStyleType | null => {
         const firstContentLine = text
             .split(/\r?\n/)
@@ -1321,6 +1326,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             .join('\n');
     };
 
+    //Sjekker om musepeker er på en linje som starter med list marker, for å bestemme om "Enter" skal lage en ny bullet eller bare en ny linje
     const isCursorOnListLine = (text: string, cursorPosition: number, styleType: ListStyleType) => {
         const marker = getListMarker(styleType);
         const safeCursor = Math.max(0, Math.min(cursorPosition, text.length));
@@ -1332,6 +1338,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         return currentLine.startsWith(`${marker} `);
     };
 
+    //Legger til en ny bullet list til canvaset på en sikker måte
     const addBulletList = (styleType: ListStyleType = listStyleType) => {
         if (!fabricCanvasRef.current) return;
 
@@ -1357,6 +1364,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         text.selectAll();
     };
 
+    //Håndterer lukking av list style meny når brukeren klikker utenfor eller trykker esc
  useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         if (!isListMenuOpen) return;
@@ -1382,6 +1390,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 }, [isListMenuOpen]);
 
+//Lukker tekstmenyen når brukeren klikker utenfor eller trykker esc
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1406,7 +1415,7 @@ useEffect(() => {
     };
 }, [isTextMenuOpen]);
 
-// Holder menyene lukket når brukeren klikker utenfor eller avbryter med Escape.
+// Holder menyene lukket når brukeren klikker utenfor eller avbryter med esc.
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1448,6 +1457,7 @@ useEffect(() => {
     };
 }, [isShapeMenuOpen, isShapeColorPickerOpen]);
 
+    //Legger til et nytt bilde til canvas i en sikker posisjon, og setter det som et aktivt objekt
     const addImageObject = async (source: string) => {
         if (!fabricCanvasRef.current) return;
 
@@ -1461,6 +1471,7 @@ useEffect(() => {
         fabricCanvasRef.current.renderAll();
     };
 
+    //Legger til video til canvas i en trygg posisjon. Setter video object som aktiv og starter video
     const addVideoObject = async (source: string) => {
         if (!fabricCanvasRef.current) return;
 
