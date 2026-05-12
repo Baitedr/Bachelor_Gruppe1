@@ -490,7 +490,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         }
     }, [stopVideoRenderLoop]);
 
-    // Snapshot brukes for angre/gjør om uten å mutere lerretet direkte.
+    // Snapshot brukes for angre/gjør om uten å legge lerretet sammen direkte.
     const createCanvasSnapshot = (): CanvasSnapshot | null => {
         if (!fabricCanvasRef.current) return null;
 
@@ -541,6 +541,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         commitCanvasColorChange();
     };
 
+    //Resetter undo/redo historie stacks til et singelt snapshot, eller tømmer dem hvis snapshot er null
     const resetHistoryWithSnapshot = (snapshot: CanvasSnapshot | null) => {
         if (!snapshot) {
             setUndoStack([]);
@@ -822,12 +823,14 @@ ref: ForwardedRef<PresentationEditorHandle>
             }
         };
 
+        //Håndterer endringer i canvas: legger til en ny undo snaoshot og markerer editor som som "dirty", med mindre en state blir brukt
         const handleCanvasChange = () => {
             if (isApplyingCanvasStateRef.current) return;
             pushHistorySnapshot(createCanvasSnapshot());
             markDirty();
         };
 
+        //Oppdaterer preview bildet for current slide, med mindre lerretet er i ferd med å laste inn en state
         const updatePreview = () => {
             if (isApplyingCanvasStateRef.current) return;
 
@@ -842,6 +845,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             }
         };
 
+        //Håndterer en endring i canvas og oppdaterer slide preview bilde 
         const handleCanvasChangeWithPreview = () => {
             handleCanvasChange();
             updatePreview();
@@ -921,6 +925,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         }
     };
 
+    //Bygger opp preview bilde for alle slides når slides eller presentasjonsvariabler endres
     useEffect(() => {
         let isCancelled = false;
 
