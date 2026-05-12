@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import {
   normalizePresentationVariables,
@@ -103,6 +103,66 @@ const LivePresentation = ({
     broadcastEmbedPlayback,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
   const [questionAnswer, setQuestionAnswer] = useState('')
+
+  const AUDIENCE_EMBED_VOL_KEY = 'proslides-audience-embed-volume-v1'
+  const [audienceVolLevel, setAudienceVolLevelState] = useState(90)
+  const [audienceVolMuted, setAudienceVolMuted] = useState(false)
+  const [audienceVolHydrated, setAudienceVolHydrated] = useState(false)
+
+  useEffect(() => {
+    if (isPresenter) return
+    try {
+      const raw = localStorage.getItem(AUDIENCE_EMBED_VOL_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { level?: unknown; muted?: unknown }
+        const n = typeof parsed.level === 'number' ? parsed.level : Number(parsed.level)
+        if (Number.isFinite(n)) setAudienceVolLevelState(Math.max(0, Math.min(100, Math.round(n))))
+        if (parsed.muted === true) setAudienceVolMuted(true)
+      }
+    } catch {
+      // ignorer korrupt lagring
+    } finally {
+      setAudienceVolHydrated(true)
+    }
+  }, [isPresenter])
+
+  useEffect(() => {
+    if (isPresenter || !audienceVolHydrated) return
+    try {
+      localStorage.setItem(
+        AUDIENCE_EMBED_VOL_KEY,
+        JSON.stringify({ level: audienceVolLevel, muted: audienceVolMuted }),
+      )
+    } catch {
+      // private mode / full disk
+    }
+  }, [isPresenter, audienceVolHydrated, audienceVolLevel, audienceVolMuted])
+
+  const setAudienceVolLevel = useCallback((value: number) => {
+    const next = Math.max(0, Math.min(100, Math.round(value)))
+    setAudienceVolLevelState(next)
+    if (next > 0) setAudienceVolMuted(false)
+  }, [])
+
+  const toggleAudienceMute = useCallback(() => {
+    setAudienceVolMuted((prevMuted) => {
+      if (prevMuted) {
+        setAudienceVolLevelState((lev) => (lev === 0 ? 85 : lev))
+        return false
+      }
+      return true
+    })
+  }, [])
+
+  const audienceVolumeUi = useMemo(
+    () => ({
+      level: audienceVolLevel,
+      muted: audienceVolMuted,
+      setLevel: setAudienceVolLevel,
+      toggleMute: toggleAudienceMute,
+    }),
+    [audienceVolLevel, audienceVolMuted, setAudienceVolLevel, toggleAudienceMute],
+  )
 
   useEffect(() => {
     if (sessionEnded && onSessionEnd) onSessionEnd()
@@ -245,8 +305,10 @@ const LivePresentation = ({
       role: 'audience' as const,
       slideIndex: currentSlide,
       embedPlayback,
+      audienceHostedVolume: audienceVolMuted ? 0 : audienceVolLevel,
+      audienceVolumeUi,
     }),
-    [currentSlide, embedPlayback],
+    [currentSlide, embedPlayback, audienceVolLevel, audienceVolMuted, audienceVolumeUi],
   )
 
   if (loading) {

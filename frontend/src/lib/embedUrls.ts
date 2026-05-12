@@ -62,6 +62,13 @@ export type EmbedIframeOptions = {
     hideControls?: boolean;
     /** Slå på JS-API / postMessage (nødvendig for synk i live). */
     enableApi?: boolean;
+    /**
+     * Ekstra URL-tags for minimert YouTube-chrome (fullstendig uten overlay er ikke mulig i vanlig embed).
+     * Brukes når `hideControls` allerede er sann (publikum).
+     */
+    minimalChrome?: boolean;
+    /** Autoplay: lar spilleren laste og starte umiddelbart (reduserer buffering for publikum). */
+    autoplay?: boolean;
 };
 
 /** Bygger embed-URL med riktige query-parametre for YouTube nocookie / Vimeo player. */
@@ -71,12 +78,20 @@ export function getEmbedIframeSrc(provider: EmbedProvider, id: string, options: 
     const enableApi = Boolean(options.enableApi);
 
     if (provider === 'youtube') {
-        const params = new URLSearchParams({ rel: '0' });
+        const params = new URLSearchParams({ rel: '0', playsinline: '1' });
         if (enableApi) {
             params.set('enablejsapi', '1');
             if (origin) params.set('origin', origin);
         }
         if (hideControls) params.set('controls', '0');
+        if (options.autoplay) params.set('autoplay', '1');
+        const minimal = Boolean(options.minimalChrome);
+        if (minimal) {
+            params.set('modestbranding', '1');
+            params.set('iv_load_policy', '3');
+            params.set('disablekb', '1');
+            params.set('fs', '0');
+        }
         const qs = params.toString();
         return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?${qs}`;
     }
@@ -84,7 +99,13 @@ export function getEmbedIframeSrc(provider: EmbedProvider, id: string, options: 
     const vParams = new URLSearchParams();
     if (enableApi) vParams.set('api', '1');
     if (hideControls) vParams.set('controls', '0');
+    if (options.autoplay) vParams.set('autoplay', '1');
     vParams.set('playsinline', '1');
+    if (hideControls && options.minimalChrome) {
+        vParams.set('title', '0');
+        vParams.set('byline', '0');
+        vParams.set('portrait', '0');
+    }
     const vQs = vParams.toString();
     return `https://player.vimeo.com/video/${encodeURIComponent(id)}?${vQs}`;
 }

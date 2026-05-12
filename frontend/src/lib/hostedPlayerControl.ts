@@ -16,21 +16,108 @@ export function postVimeoMethod(iframe: HTMLIFrameElement, method: string, value
     w.postMessage(JSON.stringify(payload), '*');
 }
 
-/** Spol og spill/pause uten å bruke UI i iframe (brukes på publikum). */
+/**
+ * Publikum: sett volum (0–100) via postMessage uten synlige spillerkontroller.
+ * YouTube bruker 0–100; Vimeo forventer 0–1.
+ */
+export function applyHostedVolumeToIframe(iframe: HTMLIFrameElement, provider: EmbedProvider, volumePercent: number) {
+    const clamped = Math.max(0, Math.min(100, Math.round(volumePercent)));
+    if (provider === 'youtube') {
+        postYoutubeCommand(iframe, 'setVolume', [clamped]);
+        postYoutubeCommand(iframe, clamped > 0 ? 'unMute' : 'mute', []);
+        return;
+    }
+    postVimeoMethod(iframe, 'setVolume', clamped / 100);
+}
+
+/**
+ * How far the audience playhead can drift from the presenter before we force a re-seek.
+ * Generous threshold avoids micro-seeks that trigger rebuffering.
+ */
+export const EMBED_PLAYHEAD_RESYNC_THRESHOLD_SEC = 3.5;
+
+export type EmbedPlaybackCoalesceState = {
+    lastAppliedState: 'play' | 'pause' | null;
+    lastAppliedTime: number;
+    /** Wall-clock timestamp (ms) when we last applied a command, used to estimate local playhead. */
+    lastAppliedAt: number;
+};
+
+/**
+ * Apply playback to the audience iframe. Key design:
+ * - On pause→play or first-ever: seek + play (unavoidable initial buffer).
+ * - On play→play (periodic sync): estimate where the local player should be now using
+ *   wall-clock elapsed since we last applied. Only re-seek if the presenter drifted
+ *   beyond EMBED_PLAYHEAD_RESYNC_THRESHOLD_SEC from where we estimate the local player is.
+ *   If within threshold: do NOTHING (no seekTo, no playVideo). This is the key fix —
+ *   every playVideo/play call makes the embedded player re-enter its loading state.
+ */
 export function applyHostedPlaybackToIframe(
     iframe: HTMLIFrameElement,
     provider: EmbedProvider,
     state: 'play' | 'pause',
     timeSeconds: number,
+    coalesce: EmbedPlaybackCoalesceState,
 ) {
     const t = Math.max(0, timeSeconds);
+    const now = Date.now();
+
     if (provider === 'youtube') {
-        postYoutubeCommand(iframe, 'seekTo', [t, true]);
-        postYoutubeCommand(iframe, state === 'play' ? 'playVideo' : 'pauseVideo', []);
+        if (state === 'pause') {
+            postYoutubeCommand(iframe, 'seekTo', [t, true]);
+            postYoutubeCommand(iframe, 'pauseVideo', []);
+            coalesce.lastAppliedState = 'pause';
+            coalesce.lastAppliedTime = t;
+            coalesce.lastAppliedAt = now;
+            return;
+        }
+        // First play or resuming from pause — must seek + play.
+        if (coalesce.lastAppliedState === null || coalesce.lastAppliedState === 'pause') {
+            postYoutubeCommand(iframe, 'seekTo', [t, true]);
+            postYoutubeCommand(iframe, 'playVideo', []);
+            coalesce.lastAppliedState = 'play';
+            coalesce.lastAppliedTime = t;
+            coalesce.lastAppliedAt = now;
+            return;
+        }
+        // Already playing — estimate where the local player should be.
+        const elapsedSec = (now - coalesce.lastAppliedAt) / 1000;
+        const estimatedLocal = coalesce.lastAppliedTime + elapsedSec;
+        if (Math.abs(t - estimatedLocal) >= EMBED_PLAYHEAD_RESYNC_THRESHOLD_SEC) {
+            postYoutubeCommand(iframe, 'seekTo', [t, true]);
+            postYoutubeCommand(iframe, 'playVideo', []);
+            coalesce.lastAppliedTime = t;
+            coalesce.lastAppliedAt = now;
+        }
+        // Otherwise: do nothing. Player is playing and roughly in sync.
         return;
     }
-    postVimeoMethod(iframe, 'setCurrentTime', t);
-    postVimeoMethod(iframe, state === 'play' ? 'play' : 'pause');
+
+    // Vimeo
+    if (state === 'pause') {
+        postVimeoMethod(iframe, 'setCurrentTime', t);
+        postVimeoMethod(iframe, 'pause');
+        coalesce.lastAppliedState = 'pause';
+        coalesce.lastAppliedTime = t;
+        coalesce.lastAppliedAt = now;
+        return;
+    }
+    if (coalesce.lastAppliedState === null || coalesce.lastAppliedState === 'pause') {
+        postVimeoMethod(iframe, 'setCurrentTime', t);
+        postVimeoMethod(iframe, 'play');
+        coalesce.lastAppliedState = 'play';
+        coalesce.lastAppliedTime = t;
+        coalesce.lastAppliedAt = now;
+        return;
+    }
+    const elapsedSec = (now - coalesce.lastAppliedAt) / 1000;
+    const estimatedLocal = coalesce.lastAppliedTime + elapsedSec;
+    if (Math.abs(t - estimatedLocal) >= EMBED_PLAYHEAD_RESYNC_THRESHOLD_SEC) {
+        postVimeoMethod(iframe, 'setCurrentTime', t);
+        postVimeoMethod(iframe, 'play');
+        coalesce.lastAppliedTime = t;
+        coalesce.lastAppliedAt = now;
+    }
 }
 
 type HostedVimeoPlayer = {

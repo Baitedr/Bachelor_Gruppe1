@@ -14,6 +14,15 @@ export type SlideEmbedLiveContext = {
     slideIndex: number;
     embedPlayback: EmbedPlaybackPayload | null;
     broadcastEmbedPlayback?: (payload: EmbedPlaybackPayload) => void;
+    /** Publikum: 0–100 til postMessage setVolume (etter muting). */
+    audienceHostedVolume?: number;
+    /** Publikum: volumkontroll over video (kun når lysbildet har Fabric/embed). */
+    audienceVolumeUi?: {
+        level: number;
+        muted: boolean;
+        setLevel: (value: number) => void;
+        toggleMute: () => void;
+    };
 };
 
 type LayoutItem = {
@@ -190,6 +199,7 @@ export default function SlideEmbedOverlays({
                             broadcastEmbedPlayback={
                                 embedLive.role === 'presenter' ? embedLive.broadcastEmbedPlayback : undefined
                             }
+                            audienceHostedVolume={embedLive.audienceHostedVolume}
                         />
                     );
                 }

@@ -4,8 +4,10 @@ import { getEmbedIframeSrc } from '../lib/embedUrls';
 import type { EmbedPlaybackPayload } from '../lib/embedLiveShared';
 import {
     applyHostedPlaybackToIframe,
+    applyHostedVolumeToIframe,
     ensureVimeoPlayerScript,
     ensureYoutubeIframeApi,
+    type EmbedPlaybackCoalesceState,
 } from '../lib/hostedPlayerControl';
 
 type LayoutPct = {
@@ -15,7 +17,16 @@ type LayoutPct = {
     heightPct: number;
 };
 
+const YT_ENDED = 0;
 const YT_PLAYING = 1;
+const YT_PAUSED = 2;
+const YT_BUFFERING = 3;
+
+/**
+ * Delay after iframe `onLoad` before we consider the embedded player ready for postMessage.
+ * YouTube's internal JS needs to boot after the HTML loads — commands sent before that are silently lost.
+ */
+const PLAYER_READY_DELAY_MS = 1200;
 
 /** Stabil nøkkel som matcher WebSocket-payload (`provider:id:indeks`). */
 function buildEmbedKey(provider: EmbedProvider, embedId: string, embedIndex: number) {
@@ -48,6 +59,7 @@ export default function SyncedHostedEmbed({
     mode,
     embedPlayback,
     broadcastEmbedPlayback,
+    audienceHostedVolume,
 }: {
     layout: LayoutPct;
     provider: EmbedProvider;
@@ -57,6 +69,7 @@ export default function SyncedHostedEmbed({
     mode: 'presenter' | 'audience';
     embedPlayback: EmbedPlaybackPayload | null;
     broadcastEmbedPlayback?: (payload: EmbedPlaybackPayload) => void;
+    audienceHostedVolume?: number;
 }) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const reactId = useId().replace(/:/g, '');
@@ -64,19 +77,74 @@ export default function SyncedHostedEmbed({
     const embedKey = buildEmbedKey(provider, embedId, embedIndex);
     const seqRef = useRef(0);
     const lastAppliedSeqRef = useRef(-1);
+    const playbackCoalesceRef = useRef<EmbedPlaybackCoalesceState>({
+        lastAppliedState: null,
+        lastAppliedTime: 0,
+        lastAppliedAt: 0,
+    });
     const ytPlayerRef = useRef<YtPlayerLike | null>(null);
     const vimeoPlayerRef = useRef<VimeoPlayerLike | null>(null);
     const syncTimerRef = useRef<number | null>(null);
     const [iframeLoaded, setIframeLoaded] = useState(false);
 
+    // Audience: true once iframe loaded AND player-ready delay elapsed.
+    const [playerReady, setPlayerReady] = useState(false);
+    const playerReadyTimerRef = useRef<number | null>(null);
+
+    // Audience: buffer the latest pending playback payload so we can replay it once the player is ready.
+    const pendingPlaybackRef = useRef<EmbedPlaybackPayload | null>(null);
+
     // Ny kilde eller lysbilde: nullstill sekvens slik at første synk-melding ikke droppes.
     useEffect(() => {
         lastAppliedSeqRef.current = -1;
+        playbackCoalesceRef.current = { lastAppliedState: null, lastAppliedTime: 0, lastAppliedAt: 0 };
+        pendingPlaybackRef.current = null;
         setIframeLoaded(false);
+        setPlayerReady(false);
+        if (playerReadyTimerRef.current !== null) {
+            window.clearTimeout(playerReadyTimerRef.current);
+            playerReadyTimerRef.current = null;
+        }
     }, [slideIndex, embedId, provider]);
 
+    // When iframeLoaded turns true, start the player-ready delay.
+    useEffect(() => {
+        if (!iframeLoaded || mode !== 'audience') {
+            setPlayerReady(false);
+            return;
+        }
+        playerReadyTimerRef.current = window.setTimeout(() => {
+            setPlayerReady(true);
+            playerReadyTimerRef.current = null;
+        }, PLAYER_READY_DELAY_MS);
+        return () => {
+            if (playerReadyTimerRef.current !== null) {
+                window.clearTimeout(playerReadyTimerRef.current);
+                playerReadyTimerRef.current = null;
+            }
+        };
+    }, [iframeLoaded, mode]);
+
+    // When playerReady becomes true, flush the pending playback command.
+    useEffect(() => {
+        if (!playerReady || mode !== 'audience') return;
+        const pending = pendingPlaybackRef.current;
+        if (!pending) return;
+        const iframe = iframeRef.current;
+        if (!iframe?.contentWindow) return;
+
+        playbackCoalesceRef.current = { lastAppliedState: null, lastAppliedTime: 0, lastAppliedAt: 0 };
+        lastAppliedSeqRef.current = pending.seq;
+        applyHostedPlaybackToIframe(iframe, provider, pending.state, pending.time, playbackCoalesceRef.current);
+        pendingPlaybackRef.current = null;
+    }, [playerReady, mode, provider]);
+
     const hideControls = mode === 'audience';
-    const src = getEmbedIframeSrc(provider, embedId, { hideControls, enableApi: true });
+    const src = getEmbedIframeSrc(provider, embedId, {
+        hideControls,
+        enableApi: true,
+        minimalChrome: hideControls,
+    });
 
     const sendBroadcast = useCallback(
         (state: 'play' | 'pause', time: number) => {
@@ -100,7 +168,6 @@ export default function SyncedHostedEmbed({
         }
     };
 
-    /** Periodisk posisjon mens video spiller (holder publikum omtrent i takt). */
     const startYoutubeSyncTimer = () => {
         clearSyncTimer();
         syncTimerRef.current = window.setInterval(() => {
@@ -108,7 +175,7 @@ export default function SyncedHostedEmbed({
             if (!p || p.getPlayerState?.() !== YT_PLAYING) return;
             const t = p.getCurrentTime?.() ?? 0;
             sendBroadcast('play', t);
-        }, 900);
+        }, 3000);
     };
 
     const startVimeoSyncTimer = () => {
@@ -119,7 +186,7 @@ export default function SyncedHostedEmbed({
             void p.getCurrentTime().then((t) => {
                 sendBroadcast('play', t);
             });
-        }, 900);
+        }, 3000);
     };
 
     // Presentatør: YouTube IFrame API for play/pause og tidsstempel.
@@ -146,7 +213,9 @@ export default function SyncedHostedEmbed({
                         if (st === YT_PLAYING) {
                             sendBroadcast('play', t);
                             startYoutubeSyncTimer();
-                        } else {
+                        } else if (st === YT_BUFFERING) {
+                            // Midlertidig tilstand — ikke send «pause» til publikum.
+                        } else if (st === YT_PAUSED || st === YT_ENDED) {
                             clearSyncTimer();
                             sendBroadcast('pause', t);
                         }
@@ -182,6 +251,8 @@ export default function SyncedHostedEmbed({
             const player = new window.Vimeo.Player(iframeRef.current);
             vimeoPlayerRef.current = player;
 
+            let vimeoBuffering = false;
+
             const emit = async (state: 'play' | 'pause') => {
                 const t = await player.getCurrentTime?.().catch(() => 0);
                 sendBroadcast(state, t);
@@ -194,17 +265,24 @@ export default function SyncedHostedEmbed({
             };
 
             const onPause = () => {
-                if (cancelled) return;
+                if (cancelled || vimeoBuffering) return;
                 clearSyncTimer();
                 void emit('pause');
             };
 
+            const onBufferStart = () => { vimeoBuffering = true; };
+            const onBufferEnd = () => { vimeoBuffering = false; };
+
             player.on?.('play', onPlay);
             player.on?.('pause', onPause);
+            player.on?.('bufferstart', onBufferStart);
+            player.on?.('bufferend', onBufferEnd);
 
             vimeoOff = () => {
                 player.off?.('play', onPlay);
                 player.off?.('pause', onPause);
+                player.off?.('bufferstart', onBufferStart);
+                player.off?.('bufferend', onBufferEnd);
             };
         };
 
@@ -219,7 +297,7 @@ export default function SyncedHostedEmbed({
         };
     }, [mode, provider, iframeLoaded, sendBroadcast]);
 
-    // Publikum: bruk siste `seq` for å ignorere duplikater og utdaterte meldinger.
+    // Publikum: apply playback commands only after playerReady; buffer them until then.
     useEffect(() => {
         if (mode !== 'audience') return;
         if (!embedPlayback) return;
@@ -227,12 +305,30 @@ export default function SyncedHostedEmbed({
         if (embedPlayback.embed_key !== embedKey) return;
         if (embedPlayback.seq <= lastAppliedSeqRef.current) return;
 
+        if (!playerReady) {
+            pendingPlaybackRef.current = embedPlayback;
+            return;
+        }
+
         const iframe = iframeRef.current;
         if (!iframe?.contentWindow) return;
 
         lastAppliedSeqRef.current = embedPlayback.seq;
-        applyHostedPlaybackToIframe(iframe, provider, embedPlayback.state, embedPlayback.time);
-    }, [embedPlayback, embedKey, mode, provider, slideIndex]);
+        applyHostedPlaybackToIframe(
+            iframe,
+            provider,
+            embedPlayback.state,
+            embedPlayback.time,
+            playbackCoalesceRef.current,
+        );
+    }, [embedPlayback, embedKey, mode, provider, slideIndex, playerReady]);
+
+    useEffect(() => {
+        if (mode !== 'audience' || !playerReady || audienceHostedVolume === undefined) return;
+        const iframe = iframeRef.current;
+        if (!iframe?.contentWindow) return;
+        applyHostedVolumeToIframe(iframe, provider, audienceHostedVolume);
+    }, [mode, playerReady, provider, audienceHostedVolume]);
 
     const pointerEvents = mode === 'audience' ? 'none' : 'auto';
 
