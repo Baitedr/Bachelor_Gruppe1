@@ -1629,6 +1629,7 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
+    //Oppdaterer gitte style egenskaper til alle selected text objkter i canvaset og render canvas
     const applySelectedTextStylesLive = (styles: Record<string, unknown>) => {
         if (!fabricCanvasRef.current) return;
 
@@ -1650,6 +1651,7 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
+    //Fjerner alle nåværende valgte objekter fra canvas og clearer selection
     const deleteSelected = () => {
         if (!fabricCanvasRef.current) return;
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1678,6 +1680,7 @@ useEffect(() => {
         applySelectedTextColorLive(color);
     };
 
+    //Reverterer canvas til den forrige state i undo stacken, og oppdaterer slide preview
     const handleUndo = async () => {
         if (undoStack.length <= 1) return;
 
@@ -1701,6 +1704,7 @@ useEffect(() => {
         }
     };
 
+    //Tar tilbake en undo handling ved å bruke redo stacken, og oppdaterer slide preview 
     const handleRedo = async () => {
         if (!redoStack.length) return;
 
@@ -1781,7 +1785,7 @@ useEffect(() => {
     }
 
     
-
+    //Markere presentasjonen som lagret, og oppdatere dirty state og siste lagret tidspunkt
     const savedAt = new Date();
     onSaveComplete?.(savedAt);
         setDirtyState(false);
@@ -1815,6 +1819,7 @@ useEffect(() => {
         });
     };
 
+    //Oppdaterer arrayet for spørsmål i den nåværende sliden, ved å bruke en updater funksjon. Markerer editor som dirty og oppdaterer slide state 
     const updateCurrentSlideQuestions = (updater: (currentQuestions: QuestionItem[]) => QuestionItem[]) => {
         setSlides((previousSlides) => {
             markDirty();
@@ -1883,16 +1888,19 @@ useEffect(() => {
         closePollCreator();
     };
 
+    //Fjerner polls fra den spesifikke indeksen fra den nåværende sliden
     const handleDeletePoll = (index: number) => {
         updateCurrentSlidePolls((currentPolls) => currentPolls.filter((_, pollIndex) => pollIndex !== index));
     };
 
+    // Lagrer eller oppdaterer et spørsmål på gjeldende lysbilde ved å bruke en hjelpefunksjon for normalisering og en updater-funksjon for stateoppdatering
     const handleSaveQuestion = (questionData: unknown) => {
         const normalizedQuestion = normalizeQuestion(
             questionData,
             editingQuestionIndex !== null ? editingQuestionIndex : 0
         );
 
+        //Legger til et nytt spørsmål eller oppdater den eksisterende spørsmålet i current slide 
         updateCurrentSlideQuestions((currentQuestions) => {
             if (editingQuestionIndex === null) {
                 return [...currentQuestions, normalizedQuestion];
@@ -1906,10 +1914,12 @@ useEffect(() => {
         closeQuestionCreator();
     };
 
+    //Fjerner et spørmsmål på den spesifiserte indeksen fra current slide
     const handleDeleteQuestion = (index: number) => {
         updateCurrentSlideQuestions((currentQuestions) => currentQuestions.filter((_, questionIndex) => questionIndex !== index));
     };
 
+    //Bekfrefter og sletter den selekterte poll eller spørsmål
     const confirmDeletePoll = () => {
         if (pollToDeleteIndex !== null) {
             handleDeletePoll(pollToDeleteIndex);
@@ -1929,6 +1939,7 @@ useEffect(() => {
         hasUnsavedChanges: () => hasUnsavedChangesRef.current,
     }));
 
+    //Reorder slidene ved å flytte en slide fra en indeks til en annen, og oppdaterer slide state
     const handleSlideReorder = (fromIndex: number, toIndex: number) => {
         const currentSlides = saveCurrentSlide();
         const reordered = [...currentSlides];
