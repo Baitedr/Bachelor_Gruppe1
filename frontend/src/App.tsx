@@ -211,12 +211,14 @@ function App() {
     setNavbarToast(null)
   }
 
+  //Clearer timeren for editor save flash effect
   const clearEditorSaveFlashTimer = () => {
     if (!editorSaveFlashTimerRef.current) return
     window.clearTimeout(editorSaveFlashTimerRef.current)
     editorSaveFlashTimerRef.current = null
   }
 
+  //Konverterer presentasjonsdata fra backend til et format som er mer egnet for frontend-bruk, inkludert håndtering av datoer og første lysbilde for forhåndsvisning
   const presentationToSummary = (presentation: Record<string, unknown>): PresentationSummary => {
     const slides = Array.isArray(presentation.slides) ? (presentation.slides as LiveSlidePayload[]) : []
     const firstSlide = slides[0]
@@ -297,6 +299,7 @@ function App() {
     }
   }, [isAutosaveEnabled, currentPage, isSavingPresentation, editorHasUnsavedChanges])
 
+  //Beholder current page of sessionStorage når det er en relevant state change. Med mindre bruker ikke er logget innn eller i gjestemodus
   useEffect(() => {
   if (!user && !guestMode) return
   savePageState({
@@ -309,6 +312,7 @@ function App() {
   })
 }, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, liveIsPresenter, guestMode, user])
 
+  //Håndterer OAuth callback: henter token fra url, og setter den som API auth, og rydder opp url
   useEffect(() => {
     const loc = window.location
     if (loc.pathname === '/oauth/callback' || loc.pathname.endsWith('/oauth/callback')) {
@@ -656,6 +660,7 @@ function App() {
     })
   }
 
+  //Permanent sletter objekter i søppelkasse 
   const confirmDeletePermanently = () => {
     if (!permanentDeleteDialog) return
 
@@ -675,6 +680,7 @@ function App() {
     setPermanentDeleteDialog(null)
   }
 
+  //Setter bruker som suksesfull login og navigerer til hjemmeside
   const handleLoginSuccess = (userData: UserRecord) => {
     setUser(userData)
     setCurrentPage('home')
