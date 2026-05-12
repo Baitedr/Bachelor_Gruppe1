@@ -1199,7 +1199,7 @@ function App() {
                               'flex flex-row items-center justify-center',
                               'transition-colors duration-200 ease-out',
                               'hover:z-10 focus-visible:z-10',
-                              'hover:border-emerald-500/45 hover:bg-emerald-500/22 hover:text-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-500/14',
+                              'hover:border-input hover:bg-accent hover:text-accent-foreground dark:text-emerald-300 dark:hover:text-accent-foreground',
                             )}
                             disabled={
                               deletingPresentationIds[presentation.id] ||
@@ -1238,7 +1238,7 @@ function App() {
                               'flex flex-row items-center justify-center',
                               'transition-colors duration-200 ease-out',
                               'hover:z-10 focus-visible:z-10',
-                              'hover:border-amber-500/50 hover:bg-amber-500/18 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-500/14 dark:hover:text-amber-200',
+                              'hover:border-input hover:bg-accent hover:text-accent-foreground dark:text-amber-300 dark:hover:text-accent-foreground',
                             )}
                             disabled={
                               deletingPresentationIds[presentation.id] ||
