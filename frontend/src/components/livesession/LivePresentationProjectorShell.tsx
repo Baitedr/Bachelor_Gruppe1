@@ -13,6 +13,29 @@ import { Button } from '../ui/button'
 import { PresenterSlideViewport, type PresenterSlideData } from './PresenterSlideViewport'
 import { usePresenterSlideDeck } from './usePresenterSlideDeck'
 
+/**
+ * Separat projektorvindu for presentatør (kun lysbildeflate + navigasjon).
+ * @author T3lluz
+ */
+const styles = {
+  errorRoot: 'flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground',
+  errorText: 'max-w-md text-sm text-muted-foreground',
+  loadingRoot: 'flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground',
+  root: 'relative h-screen w-full overflow-hidden bg-background text-foreground',
+  fullscreenButtonWrap: 'pointer-events-none absolute right-3 top-3 z-20',
+  fullscreenButtonBase:
+    'group pointer-events-auto gap-2 overflow-hidden border-border bg-card text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground dark:border-secondary dark:bg-secondary dark:text-secondary-foreground dark:shadow-none dark:hover:bg-secondary/85 dark:hover:text-secondary-foreground transition-[width,padding] duration-200',
+  fullscreenButtonCompact: 'h-9 w-9 px-0 hover:w-44 hover:px-3 focus-visible:w-44 focus-visible:px-3',
+  fullscreenButtonRegular: 'h-9 px-3',
+  fullscreenLabelBase: 'whitespace-nowrap text-xs',
+  fullscreenLabelCompact:
+    'max-w-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:max-w-40 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:max-w-40 group-focus-visible:translate-x-0 group-focus-visible:opacity-100',
+  fullscreenLabelRegular: 'max-w-40 opacity-100',
+  fullscreenIcon: 'h-4 w-4',
+  viewportMain: 'h-full w-full overflow-hidden',
+  viewportFill: 'h-full w-full',
+} as const
+
 type SlideRecord = Record<string, unknown> & {
   background?: Record<string, unknown>
 }
@@ -37,6 +60,7 @@ type NormalizedQuestionAggregate = {
  * Samme WebSocket som hovedvinduet — fungerer på tvers av nettlesere/OS.
  */
 export default function LivePresentationProjectorShell({ presentationId }: { presentationId: string }) {
+  // Projektorvindu bruker samme auth-token som hovedvinduet.
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null
   const [presentation, setPresentation] = useState<PresentationRecord | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,6 +82,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     broadcastEmbedPlayback,
   } = usePresentation(presentationId, token)
 
+  // Laster samme presentasjonsdata som deltakere bruker for konsistent rendering.
   useEffect(() => {
     if (!token) {
       setLoading(false)
@@ -78,6 +103,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     void load()
   }, [presentationId, token])
 
+  // Synkroniser lokal state med nettleserens fullskjermstatus.
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(Boolean(getFullscreenElement()))
     document.addEventListener('fullscreenchange', syncFullscreen)
@@ -88,12 +114,14 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     }
   }, [])
 
+  // Når økten avsluttes fra kanalen, lukker vi prosjektorvinduet automatisk.
   useEffect(() => {
     if (!sessionEnded) return
     window.close()
   }, [sessionEnded])
 
   const rawSlideData = presentation?.slides?.[currentSlide]
+  // Samme variabelfallback som i hoved-livevisningen for identisk output.
   const presentationVariables = normalizePresentationVariables(
     presentation?.variables ||
       ((rawSlideData?.variables as unknown[]) ||
@@ -104,6 +132,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   const mergedSlideData = rawSlideData?.background
     ? { ...rawSlideData, ...rawSlideData.background }
     : rawSlideData
+  // Ferdig normalisert slide-objekt som sendes rett til viewporten.
   const currentSlideData = (mergedSlideData
     ? {
         ...mergedSlideData,
@@ -113,6 +142,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
       }
     : mergedSlideData) as PresenterSlideData
 
+  // Normaliserer spørsmålstype for å unngå ukjente strengverdier i UI.
   const normalizedQuestionResults = useMemo<Record<string, NormalizedQuestionAggregate>>(() => {
     const entries = Object.entries(questionResults).map(([questionId, aggregate]) => {
       const rawType = aggregate?.question_type
@@ -132,6 +162,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   }, [questionResults])
 
   const embedLivePresenter = useMemo(
+    // Projektorvindu skal bare lytte/sende avspilling som "presenter"-rolle.
     () => ({
       role: 'presenter' as const,
       slideIndex: currentSlide,
@@ -150,6 +181,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     offerLiveboard,
     slideCount,
   } = usePresenterSlideDeck({
+    // Deler samme steglogikk som hovedpresentatør for identisk oppførsel.
     presentation,
     currentSlide,
     currentSlideData,
@@ -163,6 +195,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     activeQuestion,
   })
 
+  // Tastaturnavigasjon i projektorvindu (piltaster + mellomrom).
   useEffect(() => {
     if (!presentation) return
 
@@ -209,9 +242,11 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   ])
 
   const tryClose = useCallback(() => {
+    // Lukker popup-vinduet uten å påvirke hovedvinduet.
     window.close()
   }, [])
 
+  // Veksler dokument-fullskjerm for maksimal visningsflate.
   const toggleFullscreen = useCallback(async () => {
     try {
       if (getFullscreenElement()) {
@@ -225,9 +260,10 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   }, [])
 
   if (!token || loadError) {
+    // Viser tydelig fallback hvis vinduet ikke har gyldig tilgang.
     return (
-      <div className='flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground'>
-        <p className='max-w-md text-sm text-muted-foreground'>{loadError || 'Ingen tilgang.'}</p>
+      <div className={styles.errorRoot}>
+        <p className={styles.errorText}>{loadError || 'Ingen tilgang.'}</p>
         <Button type='button' variant='outline' onClick={tryClose}>
           Lukk vindu
         </Button>
@@ -236,42 +272,39 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
   }
 
   if (loading || !presentation) {
-    return (
-      <div className='flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground'>
-        Laster lysbildevindu…
-      </div>
-    )
+    // Laster-state før første payload er tilgjengelig.
+    return <div className={styles.loadingRoot}>Laster lysbildevindu…</div>
   }
 
   return (
-    <div className='relative h-screen w-full overflow-hidden bg-background text-foreground'>
-      <div className='pointer-events-none absolute right-3 top-3 z-20'>
+    <div className={styles.root}>
+      <div className={styles.fullscreenButtonWrap}>
         <Button
           type='button'
           variant='secondary'
           size='sm'
-          className={
-            'group pointer-events-auto gap-2 overflow-hidden border-border bg-card text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground dark:border-secondary dark:bg-secondary dark:text-secondary-foreground dark:shadow-none dark:hover:bg-secondary/85 dark:hover:text-secondary-foreground transition-[width,padding] duration-200 ' +
-            (isFullscreen ? 'h-9 w-9 px-0 hover:w-44 hover:px-3 focus-visible:w-44 focus-visible:px-3' : 'h-9 px-3')
-          }
+          className={`${styles.fullscreenButtonBase} ${
+            isFullscreen ? styles.fullscreenButtonCompact : styles.fullscreenButtonRegular
+          }`}
           onClick={() => void toggleFullscreen()}
           title={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
           aria-label={isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
         >
-          {isFullscreen ? <Minimize className='h-4 w-4' aria-hidden /> : <Maximize className='h-4 w-4' aria-hidden />}
+          {isFullscreen ? (
+            <Minimize className={styles.fullscreenIcon} aria-hidden />
+          ) : (
+            <Maximize className={styles.fullscreenIcon} aria-hidden />
+          )}
           <span
-            className={
-              'whitespace-nowrap text-xs ' +
-              (isFullscreen
-                ? 'max-w-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:max-w-40 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:max-w-40 group-focus-visible:translate-x-0 group-focus-visible:opacity-100'
-                : 'max-w-40 opacity-100')
-            }
+            className={`${styles.fullscreenLabelBase} ${
+              isFullscreen ? styles.fullscreenLabelCompact : styles.fullscreenLabelRegular
+            }`}
           >
             {isFullscreen ? 'Avslutt fullskjerm' : 'Fullskjerm'}
           </span>
         </Button>
       </div>
-      <main className='h-full w-full overflow-hidden'>
+      <main className={styles.viewportMain}>
         <PresenterSlideViewport
           currentSlideData={currentSlideData}
           inLiveboardPhase={inLiveboardPhase}
@@ -283,7 +316,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
           canPrev={navCanGoPrev}
           canNext={navCanGoNext}
           navControlsMode='hover'
-          className='h-full w-full'
+          className={styles.viewportFill}
           embedLive={embedLivePresenter}
         />
       </main>

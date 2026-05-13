@@ -7,10 +7,14 @@ import {
   type PresentationVariable,
 } from '../../lib/utils'
 import api from '../../services/api'
-import LivePresentationAudience from './ui/LivePresentationAudience'
-import LivePresentationPresenter from './ui/LivePresentationPresenter'
+import LivePresentationAudience from './ui/LivePresentationAudience.tsx'
+import LivePresentationPresenter from './ui/LivePresentationPresenter.tsx'
 import type { PresenterSlideData } from './PresenterSlideViewport'
 
+/**
+ * Hovedcontainer for live-presentasjon (presentatør + publikum).
+ * @author T3lluz
+ */
 type SlideRecord = Record<string, unknown> & {
   background?: Record<string, unknown>
 }
@@ -40,6 +44,13 @@ type NormalizedQuestionAggregate = {
   question_type?: LiveQuestionType
 }
 
+const styles = {
+  loadingText: 'text-sm text-muted-foreground',
+  missingText: 'text-sm text-muted-foreground',
+  audienceRoot: 'flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden',
+} as const
+
+// Typeguard som sikrer at payload faktisk ser ut som en aktiv poll.
 const isActivePoll = (value: unknown): value is ActivePoll => {
   if (!value || typeof value !== 'object') return false
   const poll = value as Record<string, unknown>
@@ -50,6 +61,7 @@ const isActivePoll = (value: unknown): value is ActivePoll => {
   )
 }
 
+// Typeguard for aktivt spørsmål fra kanalpayload.
 const isActiveQuestion = (value: unknown): value is ActiveQuestion => {
   if (!value || typeof value !== 'object') return false
   const question = value as Record<string, unknown>
@@ -78,9 +90,11 @@ const LivePresentation = ({
   /** Presentatør uten lobby: start_session på kanalen én gang når data er klart. */
   autoStartPresenterSession?: boolean
 }) => {
+  // Lokal presentasjonsmodell hentes via API før live-hooken får vist innhold.
   const [presentation, setPresentation] = useState<PresentationRecord | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Hooken håndterer all sanntidsstate for live-økten.
   const {
     currentSlide,
     activePoll,
@@ -106,16 +120,18 @@ const LivePresentation = ({
     stopInteractions,
     interactionAcceptingAnswers,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
+  // Midlertidig tekstsvar for åpne spørsmål (publikum).
   const [questionAnswer, setQuestionAnswer] = useState('')
   /** Hindrer dobbel `start_session` dersom samme render-effekt fyres flere ganger. */
   const autoPresenterStartedRef = useRef(false)
 
+  // Vedvarende nøkkel for publikumsvolum mellom økter.
   const AUDIENCE_EMBED_VOL_KEY = 'proslides-audience-embed-volume-v1'
   const [audienceVolLevel, setAudienceVolLevelState] = useState(90)
   const [audienceVolMuted, setAudienceVolMuted] = useState(false)
   const [audienceVolHydrated, setAudienceVolHydrated] = useState(false)
 
-  //Volum state for publiku når det blir vist en video 
+  // Volumtilstand for publikum ved avspilling av innebygde videoer.
   useEffect(() => {
     if (isPresenter) return
     try {
@@ -133,7 +149,7 @@ const LivePresentation = ({
     }
   }, [isPresenter])
 
-  //State som endrer seg når noen fra publikum endrer på volum under videoavspilling 
+  // Persistér volumvalg lokalt for neste live-økt.
   useEffect(() => {
     if (isPresenter || !audienceVolHydrated) return
     try {
@@ -146,14 +162,14 @@ const LivePresentation = ({
     }
   }, [isPresenter, audienceVolHydrated, audienceVolLevel, audienceVolMuted])
 
-  //Setter volum level, et stede mellom 0 - 100. Hvis volum er over 0 verdien settes mute state av
+  // Setter volum innenfor intervallet 0-100.
   const setAudienceVolLevel = useCallback((value: number) => {
     const next = Math.max(0, Math.min(100, Math.round(value)))
     setAudienceVolLevelState(next)
     if (next > 0) setAudienceVolMuted(false)
   }, [])
 
-  //Toggler publikums mute state
+  // Veksler mute uten å miste sist brukte volum.
   const toggleAudienceMute = useCallback(() => {
     setAudienceVolMuted((prevMuted) => {
       if (prevMuted) {
@@ -165,6 +181,7 @@ const LivePresentation = ({
   }, [])
 
   const audienceVolumeUi = useMemo(
+    // Pakker volum-API i ett objekt for enkel prop-passing til publikumskomponenten.
     () => ({
       level: audienceVolLevel,
       muted: audienceVolMuted,
@@ -175,14 +192,17 @@ const LivePresentation = ({
   )
 
   useEffect(() => {
+    // Sender callback videre når backend markerer økten som avsluttet.
     if (sessionEnded && onSessionEnd) onSessionEnd()
   }, [sessionEnded, onSessionEnd])
 
   useEffect(() => {
+    // Auto-start skal kun skje én gang per presentasjon/session-oppsett.
     autoPresenterStartedRef.current = false
   }, [presentationId, autoStartPresenterSession])
 
   useEffect(() => {
+    // Auto-start av presenter etter at initial data er klar og hook er tilkoblet.
     if (!autoStartPresenterSession || !isPresenter) return
     if (loading || !presentation) return
     if (sessionStarted) return
@@ -219,6 +239,7 @@ const LivePresentation = ({
 
   const rawSlideData = presentation?.slides?.[currentSlide]
   const presentationVariables = useMemo(() => {
+    // Variabler kan ligge globalt, på aktiv slide eller på første slide (legacy-fallback).
     const currentSlideVariables =
       (rawSlideData?.variables as unknown[]) ||
       (rawSlideData?.background as { variables?: unknown[] } | undefined)?.variables ||
@@ -249,6 +270,7 @@ const LivePresentation = ({
   const typedActiveQuestion = isActiveQuestion(activeQuestion) ? activeQuestion : null
 
   const normalizedQuestionResults = useMemo<Record<string, NormalizedQuestionAggregate>>(() => {
+    // Normaliserer backend-typer for trygg rendering i UI-komponentene.
     const entries = Object.entries(questionResults).map(([questionId, aggregate]) => {
       const rawType = aggregate?.question_type
       const normalizedType: LiveQuestionType | undefined =
@@ -266,31 +288,30 @@ const LivePresentation = ({
     return Object.fromEntries(entries)
   }, [questionResults])
 
+  // Rå resultater for aktiv poll, slått opp med stabil string-id.
   const activePollResult = typedActivePoll
     ? pollResults[String(typedActivePoll.id)]
     : null
   const totalVotes = activePollResult?.total || 0
-  const activePollId =
-    typedActivePoll
-      ? String(typedActivePoll.id)
-      : ''
+  const activePollId = typedActivePoll ? String(typedActivePoll.id) : ''
+  // Brukes for å bytte fra svarskjema til resultatskjema etter innsending.
   const hasAnsweredActivePoll = Boolean(typedActivePoll && submittedPollIds[activePollId])
+  // Tilsvarende oppslag for aktivt spørsmål.
   const activeQuestionResult = typedActiveQuestion
-      ? normalizedQuestionResults[String(typedActiveQuestion.id)]
-      : null
+    ? normalizedQuestionResults[String(typedActiveQuestion.id)]
+    : null
   const totalQuestionAnswers = activeQuestionResult?.total || 0
   const activeQuestionType: LiveQuestionType = activeQuestionResult?.question_type || 'open_text'
-  const activeQuestionId =
-    typedActiveQuestion
-      ? String(typedActiveQuestion.id)
-      : ''
+  const activeQuestionId = typedActiveQuestion ? String(typedActiveQuestion.id) : ''
   const hasAnsweredActiveQuestion = Boolean(typedActiveQuestion && submittedQuestionIds[activeQuestionId])
 
+  // Samleflagg som styrer om interaksjons-overlay skal vises for publikum.
   const hasActivePoll = Boolean(typedActivePoll)
   const hasActiveQuestion = Boolean(typedActiveQuestion)
   const hasActiveInteraction = hasActivePoll || hasActiveQuestion
 
   const audienceResults = useMemo(() => {
+    // Konverterer rå stemmetall til visningsklare rader med prosent.
     if (!typedActivePoll) return []
     const opts = typedActivePoll.options
     return opts.map((option) => {
@@ -301,6 +322,7 @@ const LivePresentation = ({
   }, [typedActivePoll, activePollResult, totalVotes])
 
   const activeQuestionChoiceResults = useMemo(() => {
+    // Samme transformasjon for flervalg-spørsmål.
     if (!typedActiveQuestion || activeQuestionType !== 'single_choice') return []
     return (typedActiveQuestion.options || []).map((option) => {
       const count = activeQuestionResult?.results?.[option.text] || 0
@@ -315,6 +337,7 @@ const LivePresentation = ({
   }, [typedActiveQuestion, activeQuestionResult, activeQuestionType, totalQuestionAnswers])
 
   const submitOpenQuestionAnswer = () => {
+    // Beskytter mot tomme svar og innsending når presentatør har stengt svar.
     if (!typedActiveQuestion) return
     if (!interactionAcceptingAnswers) return
 
@@ -326,6 +349,7 @@ const LivePresentation = ({
   }
 
   const embedLivePresenter = useMemo(
+    // Presenter sender styringshendelser for video/iframe-avspilling.
     () => ({
       role: 'presenter' as const,
       slideIndex: currentSlide,
@@ -336,6 +360,7 @@ const LivePresentation = ({
   )
 
   const embedLiveAudience = useMemo(
+    // Publikum mottar playback-state + lokalt volumgrensesnitt.
     () => ({
       role: 'audience' as const,
       slideIndex: currentSlide,
@@ -347,16 +372,19 @@ const LivePresentation = ({
   )
 
   if (loading) {
-    return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
+    // Tydelig fallback mens vi henter presentasjonens første payload.
+    return <div className={styles.loadingText}>Laster presentasjon...</div>
   }
 
   if (!presentation) {
-    return <div className='text-sm text-muted-foreground'>Presentasjon ikke funnet.</div>
+    // Guard mot ugyldig id / manglende tilgang.
+    return <div className={styles.missingText}>Presentasjon ikke funnet.</div>
   }
 
   if (!isPresenter) {
+    // Publikum får kun publikumsvisning med svarinnsending og overlays.
     return (
-      <div className='flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden'>
+      <div className={styles.audienceRoot}>
         <LivePresentationAudience
           presentation={presentation}
           currentSlide={currentSlide}
@@ -389,6 +417,7 @@ const LivePresentation = ({
     )
   }
 
+  // Presentatør får full kontrollvisning med navigasjon, verktøy og notater.
   return (
     <LivePresentationPresenter
       presentation={presentation}
@@ -408,7 +437,7 @@ const LivePresentation = ({
       stopInteractions={stopInteractions}
       interactionAcceptingAnswers={interactionAcceptingAnswers}
       pollResults={pollResults}
-      questionResults={questionResults}
+      questionResults={normalizedQuestionResults}
       sessionEnded={sessionEnded}
       embedLive={embedLivePresenter}
     />

@@ -4,6 +4,27 @@ import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 
+/**
+ * Lobby før live-økt starter; viser kode, deltakerantall og startknapp.
+ * @author T3lluz
+ */
+const styles = {
+  rootCard: 'mx-auto w-full max-w-2xl',
+  header: 'text-center',
+  content: 'space-y-6 text-center',
+  codeWrap: 'mx-auto w-full max-w-md space-y-3',
+  codePanel: 'rounded-xl border border-border bg-muted/40 px-6 py-4',
+  codeText: 'font-mono text-3xl font-bold tracking-[0.2em] sm:text-4xl',
+  participantsPanel:
+    'mx-auto w-full max-w-sm rounded-xl border-2 border-border bg-muted/50 px-4 py-4 shadow-sm dark:border-border dark:bg-muted/30 dark:shadow-none',
+  participantsLabel: 'text-sm font-medium text-foreground',
+  participantsCount: 'mt-1 text-3xl font-bold tabular-nums text-foreground',
+  waitingText: 'text-sm text-muted-foreground',
+  qrSection: 'pt-4',
+  qrHint: 'mb-2 text-sm text-muted-foreground',
+  qrImage: 'mx-auto rounded-md border border-border bg-white p-2',
+} as const
+
 const SessionLobby = ({
   presentationId,
   joinCode,
@@ -17,33 +38,39 @@ const SessionLobby = ({
   onSessionStarted: () => void
   onSessionEnd?: () => void
 }) => {
+  // Bruker live-hooken for å lese lobby-status i sanntid.
   const { participantCount, sessionStarted, startSession, sessionEnded } = usePresentation(
     presentationId,
     localStorage.getItem('auth_token'),
   )
 
+  // Lager delbar URL som deltakere kan åpne direkte.
   const joinUrl = useMemo(() => {
     if (!joinCode) return ''
     if (typeof window === 'undefined') return ''
     return `${window.location.origin}/live/join/${joinCode}`
   }, [joinCode])
 
+  // Genererer QR-lenke fra join-url for rask mobil innmelding.
   const qrCodeUrl = useMemo(() => {
     if (!joinUrl) return ''
     return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`
   }, [joinUrl])
 
+  // Varsler parent når økten er startet i kanalen.
   useEffect(() => {
     if (sessionStarted) onSessionStarted()
   }, [sessionStarted, onSessionStarted])
 
+  // Varsler parent når økten er avsluttet av presentatør/system.
   useEffect(() => {
     if (sessionEnded && onSessionEnd) onSessionEnd()
   }, [sessionEnded, onSessionEnd])
 
   return (
-    <Card className='mx-auto w-full max-w-2xl'>
-      <CardHeader className='text-center'>
+    // Samme kort brukes for både presentatør og publikum; innhold styres av `isPresenter`.
+    <Card className={styles.rootCard}>
+      <CardHeader className={styles.header}>
         <CardTitle>Øktlobby</CardTitle>
         <CardDescription>
           {isPresenter
@@ -52,19 +79,19 @@ const SessionLobby = ({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className='space-y-6 text-center'>
+      <CardContent className={styles.content}>
         {isPresenter && joinCode && (
-          <div className='mx-auto w-full max-w-md space-y-3'>
+          <div className={styles.codeWrap}>
             <Badge variant='secondary'>Del denne live-koden</Badge>
-            <div className='rounded-xl border border-border bg-muted/40 px-6 py-4'>
-              <p className='font-mono text-3xl font-bold tracking-[0.2em] sm:text-4xl'>{joinCode}</p>
+            <div className={styles.codePanel}>
+              <p className={styles.codeText}>{joinCode}</p>
             </div>
           </div>
         )}
 
-        <div className='mx-auto w-full max-w-sm rounded-xl border-2 border-border bg-muted/50 px-4 py-4 shadow-sm dark:border-border dark:bg-muted/30 dark:shadow-none'>
-          <p className='text-sm font-medium text-foreground'>Deltakere i lobbyen</p>
-          <p className='mt-1 text-3xl font-bold tabular-nums text-foreground'>{participantCount}</p>
+        <div className={styles.participantsPanel}>
+          <p className={styles.participantsLabel}>Deltakere i lobbyen</p>
+          <p className={styles.participantsCount}>{participantCount}</p>
         </div>
 
         {isPresenter ? (
@@ -72,18 +99,18 @@ const SessionLobby = ({
             Start presentasjon
           </Button>
         ) : (
-          <p className='text-sm text-muted-foreground'>Venter på at presentatør skal starte...</p>
+          <p className={styles.waitingText}>Venter på at presentatør skal starte...</p>
         )}
 
         {isPresenter && qrCodeUrl && (
-          <div className='pt-4'>
-            <p className='mb-2 text-sm text-muted-foreground'>Skann QR-koden for å bli med</p>
+          <div className={styles.qrSection}>
+            <p className={styles.qrHint}>Skann QR-koden for å bli med</p>
             <img
               src={qrCodeUrl}
               alt='QR-kode for å bli med i live presentasjon'
               width={180}
               height={180}
-              className='mx-auto rounded-md border border-border bg-white p-2'
+              className={styles.qrImage}
             />
           </div>
         )}
