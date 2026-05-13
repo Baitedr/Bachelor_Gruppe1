@@ -8,6 +8,7 @@ import { ModeToggle } from '../../ui/mode-toggle'
 import { Textarea } from '../../ui/textarea'
 import LivePresentationCanvas from '../LivePresentationCanvas'
 import LiveResultsBoard from './LiveResultsBoard'
+import type { SlideEmbedLiveContext } from '../../SlideEmbedOverlays'
 import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
 type PollOption = { id: string | number; text: string }
@@ -62,6 +63,7 @@ const LivePresentationAudience = ({
   setQuestionAnswer,
   submitOpenQuestionAnswer,
   onLeaveSession,
+  embedLive,
 }: {
   presentation: PresentationShape
   currentSlide: number
@@ -90,6 +92,7 @@ const LivePresentationAudience = ({
   setQuestionAnswer: (v: string) => void
   submitOpenQuestionAnswer: () => void
   onLeaveSession?: () => void
+  embedLive: SlideEmbedLiveContext
 }) => {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -150,7 +153,7 @@ const LivePresentationAudience = ({
     if (currentSlideData.fabricData) {
       return (
         <div className='flex min-h-0 h-full min-w-0 w-full flex-1 flex-col overflow-visible'>
-          <LivePresentationCanvas slideData={currentSlideData} presenterToolbar={null} />
+          <LivePresentationCanvas slideData={currentSlideData} embedLive={embedLive} presenterToolbar={null} />
         </div>
       )
     }
@@ -176,7 +179,7 @@ const LivePresentationAudience = ({
         </div>
       </div>
     )
-  }, [currentSlideData])
+  }, [currentSlideData, embedLive])
 
   const typedActivePoll = activePoll as ActivePoll | null
   const typedActiveQuestion = activeQuestion as ActiveQuestion | null

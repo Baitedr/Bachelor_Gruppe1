@@ -1,11 +1,12 @@
 import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText, classRegistry } from 'fabric';
+import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText } from 'fabric';
 import {
     BarChart3,
     Circle as CircleIcon,
     ArrowRight,
     ChevronDown,
     Image as ImageIcon,
+    Link2,
     List,
     Minus,
     PanelLeftClose,
@@ -20,8 +21,14 @@ import {
     Type,
     Type as TypeIcon,
     Undo2,
+    Video,
     X,
-    BadgeRussianRubleIcon,
+    Play,
+    MonitorPlay,
+    Loader2,
+    Pipette,
+    Ban,
+    Check,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './polls/PollCreator';
@@ -39,10 +46,15 @@ import {
     resolveFabricDataWithVariables,
     type PresentationVariable,
 } from '../lib/utils';
+import { parseYoutubeId, parseVimeoId } from '../lib/embedUrls';
+import { FabricEmbed, FabricVideo, createVideoElement } from '../lib/fabricSlideObjects';
+import SlideEmbedOverlays from './SlideEmbedOverlays';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
+/** Ekstra luft rundt den skalerte sliden i viewporter (ikke samme som lerrets-padding for objekter). */
+const CANVAS_VIEWPORT_OUTSET = 8;
 const FONT_FAMILIES = [
     { value: 'Arial, sans-serif', label: 'Arial' },
     { value: 'Times New Roman, serif', label: 'Times New Roman' },
@@ -51,15 +63,66 @@ const FONT_FAMILIES = [
     { value: 'Verdana, sans-serif', label: 'Verdana' }
 ];
 
+/** 16 forhåndsvalg: hvit/svart i venstre kolonne + regnbuegradient i to rader. */
+const TOOLBAR_COLOR_PRESETS: readonly string[] = [
+    '#FFFFFF',
+    '#FF2D2D', '#FF6A00', '#FFAA00', '#FFD400', '#E8FF1A', '#78D200', '#00B87A',
+    '#000000',
+    '#00C2CC', '#009BFF', '#1F6BFF', '#4B42FF', '#7D3CFF', '#B139FF', '#FF2FA8',
+];
+
+const PRESET_SWATCH_CLASS =
+    'relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-input transition-transform hover:scale-105 hover:ring-2 hover:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const SELECTED_PRESET_SWATCH_CLASS =
+    'ring-2 ring-blue-500 ring-offset-1 ring-offset-background shadow-[0_0_0_1px_rgba(59,130,246,0.55)]';
+
+/** Gjør farge om til #rrggbb for native fargevelger. */
+function toHexColorForInput(cssColor: string, fallback = '#000000'): string {
+    if (typeof cssColor !== 'string') return fallback;
+    const t = cssColor.trim();
+    if (/^#[0-9A-Fa-f]{6}$/i.test(t)) return t.slice(0, 7);
+    if (/^#[0-9A-Fa-f]{3}$/i.test(t) && t.length === 4) {
+        const r = t[1]!;
+        const g = t[2]!;
+        const b = t[3]!;
+        return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    const rgb = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgb) {
+        const clamp = (x: string) => Math.min(255, Math.max(0, parseInt(x, 10)));
+        const h = (n: number) => n.toString(16).padStart(2, '0');
+        return `#${h(clamp(rgb[1]!))}${h(clamp(rgb[2]!))}${h(clamp(rgb[3]!))}`;
+    }
+    return fallback;
+}
+
+function isPresetSelected(selectedColor: string | undefined, presetHex: string, fallback = '#000000'): boolean {
+    return toHexColorForInput(selectedColor ?? fallback, fallback).toLowerCase() === presetHex.toLowerCase();
+}
+
+// Velger kontrastfarge på haken for god synlighet mot både lyse og mørke preset-farger.
+function getPresetCheckmarkClass(hex: string): string {
+    const normalized = toHexColorForInput(hex, '#000000');
+    const r = parseInt(normalized.slice(1, 3), 16);
+    const g = parseInt(normalized.slice(3, 5), 16);
+    const b = parseInt(normalized.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.62
+        ? 'text-black drop-shadow-[0_1px_1px_rgba(255,255,255,0.7)]'
+        : 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]';
+}
+
+/** Sjakkmønster for «ingen fyll» / gjennomsiktig forhåndsvisning (Tailwind for lys/mørk modus). */
+const CHECKERBOARD_SWATCH_CLASS =
+    'bg-zinc-100 bg-[length:8px_8px] bg-[repeating-conic-gradient(rgb(212_212_216)_0%_25%,rgb(250_250_250)_0%_50%)] dark:bg-zinc-900 dark:bg-[repeating-conic-gradient(rgb(63_63_70)_0%_25%,rgb(24_24_27)_0%_50%)]';
+
+const COLOR_MENU_MORE_BUTTON_CLASS =
+    'mt-2 h-9 w-full gap-2 border border-primary/40 bg-primary/10 text-sm font-semibold text-primary shadow-sm hover:bg-primary/18 hover:text-primary dark:border-primary/45 dark:bg-primary/15 dark:hover:bg-primary/25';
+
 // Når vinduet er smalere enn dette, kollapser sidepanelene automatisk.
 const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
 
 type MediaKind = 'image' | 'video';
-
-type SerializedVideoProps = {
-    mediaType?: 'video';
-    src?: string;
-};
 
 type GuideLine = {
     orientation: 'horizontal' | 'vertical';
@@ -72,69 +135,6 @@ type AlignmentPoint = {
 };
 
 const ALIGNMENT_TOLERANCE = 6;
-
-const createVideoElement = (src: string) =>
-    new Promise<HTMLVideoElement>((resolve, reject) => {
-        const video = document.createElement('video');
-        let settled = false;
-
-        const cleanup = () => {
-            video.removeEventListener('loadeddata', handleLoadedData);
-            video.removeEventListener('error', handleError);
-        };
-
-        const finish = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            resolve(video);
-        };
-
-        const fail = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            reject(new Error('Kunne ikke laste video'));
-        };
-
-        const handleLoadedData = () => finish();
-        const handleError = () => fail();
-
-        video.preload = 'auto';
-        video.loop = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.crossOrigin = 'anonymous';
-        video.addEventListener('loadeddata', handleLoadedData, { once: true });
-        video.addEventListener('error', handleError, { once: true });
-        video.src = src;
-        video.load();
-    });
-
-// Utvid Fabric.Object for å inkludere mediaType
-class FabricVideo extends FabricImage {
-    static type = 'video';
-
-    constructor(element: HTMLVideoElement, options: Record<string, unknown> = {}) {
-        // Video skal rendres direkte fra elementet i stedet for et stillbilde-cache.
-        super(element, {
-            ...options,
-            objectCaching: false,
-        });
-    }
-
-    static async fromObject(
-        { src, mediaType, ...object }: SerializedVideoProps & Record<string, any>,
-    ) {
-        const videoElement = await createVideoElement(src || '');
-        return new this(videoElement, {
-            ...object,
-            src,
-        });
-    }
-}
-
-classRegistry.setClass(FabricVideo, 'video');
 
 type CanvasSnapshot = {
     backgroundColor: string;
@@ -251,10 +251,13 @@ type PresentationEditorProps = {
    isSaving: boolean
    onSaveComplete?: (savedAt: Date) => void
    onDirtyChange?: (isDirty: boolean) => void
+   onStartLive?: () => void
+   onStartLocalPresentation?: () => void
+   isStartingLive?: boolean
 };
 
 const PresentationEditor = (
-{ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange }: PresentationEditorProps,
+{ presentation, onSavePresentation, isSaving, onSaveComplete, onDirtyChange, onStartLive, onStartLocalPresentation, isStartingLive }: PresentationEditorProps,
 ref: ForwardedRef<PresentationEditorHandle>
 ) => {
     // Referanser og grunnstate for editoren.
@@ -277,7 +280,8 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
     const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
     const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
-    const [shapeColor, setShapeColor] = useState<string>('#667eea');
+    const [shapeFillColor, setShapeFillColor] = useState<string>('#667eea');
+    const [shapeStrokeColor, setShapeStrokeColor] = useState<string>('#667eea');
     const [shapeHasFill, setShapeHasFill] = useState(true);
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
@@ -294,6 +298,12 @@ ref: ForwardedRef<PresentationEditorHandle>
     const listMenuRef = useRef<HTMLDivElement | null>(null);
     const shapeMenuRef = useRef<HTMLDivElement | null>(null);
     const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
+    const backgroundColorMenuRef = useRef<HTMLDivElement | null>(null);
+    const textColorMenuRef = useRef<HTMLDivElement | null>(null);
+    const backgroundColorNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const textColorNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const shapeFillNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const shapeStrokeNativeInputRef = useRef<HTMLInputElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
     const skipHistoryResetRef = useRef(false);
@@ -307,7 +317,18 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
+    const [isBackgroundColorMenuOpen, setIsBackgroundColorMenuOpen] = useState(false);
+    const [isTextColorMenuOpen, setIsTextColorMenuOpen] = useState(false);
+    const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
+    // Meny for "Presenter"-knappen (live-lobby og "presenter nå"-valg).
+    const [isPresentMenuOpen, setIsPresentMenuOpen] = useState(false);
+    const [embedDialogKind, setEmbedDialogKind] = useState<'youtube' | 'vimeo' | null>(null);
+    const [embedUrlInput, setEmbedUrlInput] = useState('');
+    const [embedUrlError, setEmbedUrlError] = useState<string | null>(null);
+    const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
+    const mediaMenuRef = useRef<HTMLDivElement | null>(null);
+    const presentMenuRef = useRef<HTMLDivElement | null>(null);
 
     //Sjekker dirtystate for å aktivere autosave
     const setDirtyState = (next: boolean) => {
@@ -323,13 +344,13 @@ ref: ForwardedRef<PresentationEditorHandle>
         const container = canvasViewportRef.current;
         if (!container) return;
 
-        const availableWidth = Math.max(container.clientWidth - CANVAS_PADDING * 2, 0);
-        const availableHeight = Math.max(container.clientHeight - CANVAS_PADDING * 2, 0);
-        const nextScale = Math.min(
-            1,
-            availableWidth / CANVAS_WIDTH,
-            availableHeight / CANVAS_HEIGHT
-        );
+        const style = window.getComputedStyle(container);
+        const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+        const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+        const outset = CANVAS_VIEWPORT_OUTSET * 2;
+        const availableWidth = Math.max(container.clientWidth - padX - outset, 0);
+        const availableHeight = Math.max(container.clientHeight - padY - outset, 0);
+        const nextScale = Math.min(availableWidth / CANVAS_WIDTH, availableHeight / CANVAS_HEIGHT);
 
         setCanvasScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
     }, []);
@@ -371,11 +392,17 @@ ref: ForwardedRef<PresentationEditorHandle>
         setHasSelectedText(Boolean(selectedText));
 
         if (selectedShape) {
-            const hasFill = selectedShape.fill !== null && selectedShape.fill !== undefined && selectedShape.fill !== 'transparent';
+            const hasFill =
+                selectedShape.fill !== null &&
+                selectedShape.fill !== undefined &&
+                selectedShape.fill !== 'transparent';
             setShapeHasFill(hasFill);
 
             if (typeof selectedShape.fill === 'string' && selectedShape.fill !== 'transparent') {
-                setShapeColor(selectedShape.fill);
+                setShapeFillColor(selectedShape.fill);
+            }
+            if (typeof selectedShape.stroke === 'string') {
+                setShapeStrokeColor(selectedShape.stroke);
             }
         }
 
@@ -536,9 +563,9 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 
     // Lagrer bakgrunnsfargen til lysbildet etter at live-forhåndsvisningen er ferdig.
-    const commitBackgroundColorChange = (color: string) => {
-
+    const commitBackgroundColorChange = () => {
         commitCanvasColorChange();
+        saveCurrentSlide(true);
     };
 
     //Resetter undo/redo historie stacks til et singelt snapshot, eller tømmer dem hvis snapshot er null
@@ -719,6 +746,7 @@ ref: ForwardedRef<PresentationEditorHandle>
                     fabricCanvasRef.current.renderAll();
                     syncCanvasVideos();
                     isApplyingCanvasStateRef.current = false;
+                    setEmbedLayoutRevision((x) => x + 1);
 
                     if (!shouldSkipHistoryReset) {
                         resetHistoryWithSnapshot(createCanvasSnapshot());
@@ -730,6 +758,7 @@ ref: ForwardedRef<PresentationEditorHandle>
                 fabricCanvasRef.current.renderAll();
                 stopVideoRenderLoop();
                 isApplyingCanvasStateRef.current = false;
+                setEmbedLayoutRevision((x) => x + 1);
 
                 if (!shouldSkipHistoryReset) {
                     resetHistoryWithSnapshot(createCanvasSnapshot());
@@ -1390,7 +1419,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 }, [isListMenuOpen]);
 
-//Lukker tekstmenyen når brukeren klikker utenfor eller trykker esc
+// Lukker de nye farge-menyene ved klikk utenfor eller Escape, slik at de oppfører seg likt som øvrige verktøymenyer.
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1415,7 +1444,44 @@ useEffect(() => {
     };
 }, [isTextMenuOpen]);
 
-// Holder menyene lukket når brukeren klikker utenfor eller avbryter med esc.
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+
+        if (
+            isBackgroundColorMenuOpen &&
+            backgroundColorMenuRef.current &&
+            target &&
+            !backgroundColorMenuRef.current.contains(target)
+        ) {
+            setIsBackgroundColorMenuOpen(false);
+        }
+
+        if (isTextColorMenuOpen && textColorMenuRef.current && target && !textColorMenuRef.current.contains(target)) {
+            setIsTextColorMenuOpen(false);
+        }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key !== 'Escape') return;
+        if (isBackgroundColorMenuOpen) {
+            setIsBackgroundColorMenuOpen(false);
+        }
+        if (isTextColorMenuOpen) {
+            setIsTextColorMenuOpen(false);
+        }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isBackgroundColorMenuOpen, isTextColorMenuOpen]);
+
+// Holder menyene lukket når brukeren klikker utenfor eller avbryter med Escape.
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1457,6 +1523,68 @@ useEffect(() => {
     };
 }, [isShapeMenuOpen, isShapeColorPickerOpen]);
 
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+
+        if (isMediaMenuOpen && mediaMenuRef.current && target && !mediaMenuRef.current.contains(target)) {
+            setIsMediaMenuOpen(false);
+        }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setIsMediaMenuOpen(false);
+        }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isMediaMenuOpen]);
+
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+        if (isPresentMenuOpen && presentMenuRef.current && target && !presentMenuRef.current.contains(target)) {
+            setIsPresentMenuOpen(false);
+        }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') setIsPresentMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isPresentMenuOpen]);
+
+useEffect(() => {
+    if (!embedDialogKind) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setEmbedDialogKind(null);
+            setEmbedUrlInput('');
+            setEmbedUrlError(null);
+        }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+}, [embedDialogKind]);
+
+    const runPresentMenuAction = (action?: () => void) => {
+        setIsPresentMenuOpen(false);
+        action?.();
+    };
+
     //Legger til et nytt bilde til canvas i en sikker posisjon, og setter det som et aktivt objekt
     const addImageObject = async (source: string) => {
         if (!fabricCanvasRef.current) return;
@@ -1490,6 +1618,33 @@ useEffect(() => {
         syncCanvasVideos();
     };
 
+    const addEmbedObject = (provider: 'youtube' | 'vimeo', id: string) => {
+        if (!fabricCanvasRef.current) return;
+
+        const width = 480;
+        const height = 270;
+        const pos = getSafePosition(80, 150, width, height);
+        const embed = new FabricEmbed({
+            left: pos.left,
+            top: pos.top,
+            width,
+            height,
+            embedProvider: provider,
+            embedId: id,
+            fill: 'rgba(15, 23, 42, 0.22)',
+            stroke: '#64748b',
+            strokeWidth: 2,
+            rx: 6,
+            ry: 6,
+        });
+
+        fabricCanvasRef.current.add(embed);
+        fabricCanvasRef.current.setActiveObject(embed);
+        fabricCanvasRef.current.renderAll();
+        markDirty();
+        setEmbedLayoutRevision((x) => x + 1);
+    };
+
     const handleMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !fabricCanvasRef.current) return;
@@ -1517,9 +1672,36 @@ useEffect(() => {
         event.target.value = '';
     };
 
-    const addImage = () => {
+    const openLocalMediaFilePicker = () => {
+        setIsMediaMenuOpen(false);
         mediaUploadInputRef.current?.click();
     };
+
+    const closeEmbedDialog = () => {
+        setEmbedDialogKind(null);
+        setEmbedUrlInput('');
+        setEmbedUrlError(null);
+    };
+
+    const commitEmbedFromDialog = () => {
+        if (!embedDialogKind) return;
+
+        const id =
+            embedDialogKind === 'youtube' ? parseYoutubeId(embedUrlInput) : parseVimeoId(embedUrlInput);
+
+        if (!id) {
+            setEmbedUrlError(
+                embedDialogKind === 'youtube'
+                    ? 'Fant ingen gyldig YouTube-video-ID. Lim inn lenke eller 11-tegns ID.'
+                    : 'Fant ingen gyldig Vimeo-video-ID. Lim inn lenke eller numerisk ID.',
+            );
+            return;
+        }
+
+        addEmbedObject(embedDialogKind, id);
+        closeEmbedDialog();
+    };
+
     // Legger til en valgt form, rektangel eller sirkel
     const addShape = (shapeType: 'rectangle' | 'circle') => {
         if (!fabricCanvasRef.current) return;
@@ -1533,8 +1715,8 @@ useEffect(() => {
                     top: pos.top,
                     width: 200,
                     height: 150,
-                    fill: shapeHasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 break;
@@ -1543,8 +1725,8 @@ useEffect(() => {
                     left: pos.left,
                     top: pos.top,
                     radius: 75,
-                    fill: shapeHasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 break;
@@ -1558,8 +1740,8 @@ useEffect(() => {
         }
     };
 
-    // Oppdaterer valgte figurer direkte på canvas mens brukeren drar i fargevelgeren.
-    const applySelectedShapeFillLive = (hasFill: boolean) => {
+    // Oppdaterer fyllfarge i sanntid uten å skrive historikk før brukeren bekrefter valg.
+    const applySelectedShapeFillColorLive = (fillHex: string) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1570,8 +1752,8 @@ useEffect(() => {
         activeObjects.forEach((obj: any) => {
             if (obj.type === 'rect' || obj.type === 'circle') {
                 obj.set({
-                    fill: hasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: fillHex,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 changed = true;
@@ -1583,8 +1765,8 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
-    // Oppdaterer valgte figurer direkte pÃ¥ canvas mens brukeren drar i fargevelgeren.
-    const applySelectedShapeColorLive = (color: string) => {
+    // Holder konturfargen separat fra fyll, slik at begge kan justeres uavhengig.
+    const applySelectedShapeStrokeColorLive = (strokeHex: string) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1595,8 +1777,33 @@ useEffect(() => {
         activeObjects.forEach((obj: any) => {
             if (obj.type === 'rect' || obj.type === 'circle') {
                 obj.set({
-                    fill: shapeHasFill ? color : null,
-                    stroke: color,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: strokeHex,
+                    strokeWidth: 2,
+                });
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.requestRenderAll();
+    };
+
+    // Setter valgt figur til transparent fyll, men beholder synlig kontur.
+    const applySelectedShapeNoFillLive = () => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (obj.type === 'rect' || obj.type === 'circle') {
+                obj.set({
+                    fill: null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 changed = true;
@@ -1671,10 +1878,7 @@ useEffect(() => {
 
     const changeBackgroundColor = (color: string) => {
         applyBackgroundColorLive(color);
-        commitBackgroundColorChange(color);
-    };
-    const changeSelectedShapeColor = (color: string) => {
-        applySelectedShapeColorLive(color);
+        commitBackgroundColorChange();
     };
     const changeSelectedTextColor = (color: string) => {
         applySelectedTextColorLive(color);
@@ -1968,6 +2172,60 @@ useEffect(() => {
                 onChange={handleMediaFileChange}
             />
 
+            {embedDialogKind && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="embed-dialog-title"
+                    onClick={() => closeEmbedDialog()}
+                >
+                    <div
+                        className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <h2 id="embed-dialog-title" className="text-base font-semibold text-foreground">
+                                {embedDialogKind === 'youtube' ? 'YouTube' : 'Vimeo'}
+                            </h2>
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => closeEmbedDialog()} aria-label="Lukk">
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <p className="mb-2 text-sm text-muted-foreground">
+                            {embedDialogKind === 'youtube'
+                                ? 'Lim inn YouTube-lenke'
+                                : 'Lim inn Vimeo-lenke'}
+                        </p>
+                        <Input
+                            autoFocus
+                            value={embedUrlInput}
+                            onChange={(e) => {
+                                setEmbedUrlInput(e.target.value);
+                                setEmbedUrlError(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    commitEmbedFromDialog();
+                                }
+                            }}
+                            placeholder={embedDialogKind === 'youtube' ? 'https://www.youtube.com/watch?v=…' : 'https://vimeo.com/…'}
+                            className="mb-2"
+                        />
+                        {embedUrlError && <p className="mb-3 text-sm text-destructive">{embedUrlError}</p>}
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" onClick={() => closeEmbedDialog()}>
+                                Avbryt
+                            </Button>
+                            <Button type="button" onClick={() => commitEmbedFromDialog()}>
+                                Legg til
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className={`${isLeftSidebarCollapsed ? 'w-14' : 'w-72.5'} flex h-full shrink-0 grow-0 basis-auto flex-col rounded-xl border border-border bg-card shadow-[2px_0_14px_rgba(0,0,0,0.05)] ring-1 ring-border/30 transition-all duration-200`}>
                 <div className="flex items-center justify-between border-b border-border p-3">
                     {!isLeftSidebarCollapsed && <h3 className="text-lg text-foreground">Lysbilder</h3>}
@@ -2038,8 +2296,8 @@ useEffect(() => {
                 )}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-3 overflow-hidden bg-muted/22 p-2 sm:gap-4 sm:p-4 md:gap-6 dark:bg-transparent">
-                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-2 overflow-hidden bg-muted/22 px-2 py-1 sm:gap-3 sm:px-3 sm:py-2 md:gap-4 dark:bg-transparent">
+                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col items-stretch gap-2 rounded-[10px] border border-border bg-card px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:gap-2.5 sm:px-6 sm:py-3">
                     {/* Øverste rad: tittel + lysbilde-teller (lagre ligger i navbar) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
@@ -2057,6 +2315,48 @@ useEffect(() => {
                                 Lysbilde {currentSlideIndex + 1} av {slides.length}
                             </span>
                             {isAutoCollapsed && <Badge variant="secondary">Auto-kollaps aktiv</Badge>}
+                            <div ref={presentMenuRef} className="relative">
+                                <Button
+                                    onClick={() => setIsPresentMenuOpen((prev) => !prev)}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isStartingLive}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isPresentMenuOpen}
+                                    className="h-8 shrink-0 gap-2 border-emerald-500/30 bg-emerald-500/15 px-3 text-emerald-600 hover:border-input hover:bg-accent hover:text-accent-foreground"
+                                >
+                                    {isStartingLive ? (
+                                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                                    ) : (
+                                        <Play className="h-4 w-4 shrink-0" />
+                                    )}
+                                    Presenter
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isPresentMenuOpen && (
+                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-56 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                        <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Presenter</p>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                            disabled={isStartingLive}
+                                            onClick={() => runPresentMenuAction(onStartLive)}
+                                        >
+                                            <MonitorPlay className="h-4 w-4 shrink-0 text-emerald-500" />
+                                            <span>Start live (med lobby)</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                            disabled={isStartingLive}
+                                            onClick={() => runPresentMenuAction(onStartLocalPresentation)}
+                                        >
+                                            <Play className="h-4 w-4 shrink-0 text-emerald-500" />
+                                            <span>Start nå (uten lobby)</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
@@ -2173,7 +2473,61 @@ useEffect(() => {
                             )}
                         </div>
                         <div className="order-8 basis-full" />
-                        <Button onClick={addImage} variant="outline" size="sm" className="order-9 flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Media</Button>
+                        <div ref={mediaMenuRef} className="relative order-9">
+                            <Button
+                                type="button"
+                                onClick={() => setIsMediaMenuOpen((prev) => !prev)}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-1.5"
+                                aria-haspopup="menu"
+                                aria-expanded={isMediaMenuOpen}
+                            >
+                                <ImageIcon className="h-3.5 w-3.5" />
+                                Media
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            {isMediaMenuOpen && (
+                                <div className="absolute left-0 top-full z-20 mt-2 min-w-52 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setIsMediaMenuOpen(false);
+                                            setEmbedUrlInput('');
+                                            setEmbedUrlError(null);
+                                            setEmbedDialogKind('youtube');
+                                        }}
+                                    >
+                                        <Video className="h-4 w-4 shrink-0" />
+                                        <span>YouTube</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            setIsMediaMenuOpen(false);
+                                            setEmbedUrlInput('');
+                                            setEmbedUrlError(null);
+                                            setEmbedDialogKind('vimeo');
+                                        }}
+                                    >
+                                        <Link2 className="h-4 w-4 shrink-0" />
+                                        <span>Vimeo</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                        onClick={() => {
+                                            openLocalMediaFilePicker();
+                                        }}
+                                    >
+                                        <ImageIcon className="h-4 w-4 shrink-0" />
+                                        <span>Fra datamaskin</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         <div ref={shapeMenuRef} className="relative order-10">
                             <Button
@@ -2216,101 +2570,268 @@ useEffect(() => {
                         </div>
                         <Button onClick={deleteSelected} variant="destructive" size="sm" className="order-14 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <div className="contents">
-                            <div className="relative order-11">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="relative flex items-center gap-1.5"
-                                >
-                                    <Palette className="h-3.5 w-3.5" /> Bakgrunnsfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: slides[currentSlideIndex]?.backgroundColor || '#ffffff' }}
-                                    />
-                                </Button>
+                            <div ref={backgroundColorMenuRef} className="relative order-11">
                                 <input
+                                    ref={backgroundColorNativeInputRef}
                                     type="color"
-                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                    value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(slides[currentSlideIndex]?.backgroundColor || '#ffffff', '#ffffff')}
                                     onInput={(e) => {
                                         applyBackgroundColorLive((e.target as HTMLInputElement).value);
                                     }}
                                     onChange={(e) => {
                                         const color = e.target.value;
                                         applyBackgroundColorLive(color);
-                                        commitBackgroundColorChange(color);
+                                        commitBackgroundColorChange();
                                     }}
                                 />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1.5"
+                                    aria-haspopup="menu"
+                                    aria-expanded={isBackgroundColorMenuOpen}
+                                    onClick={() => {
+                                        setIsTextColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen(false);
+                                        setIsBackgroundColorMenuOpen((prev) => !prev);
+                                    }}
+                                >
+                                    <Palette className="h-3.5 w-3.5" /> Bakgrunnsfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: slides[currentSlideIndex]?.backgroundColor || '#ffffff' }}
+                                    />
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isBackgroundColorMenuOpen && (
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-md border border-border bg-background p-2 shadow-lg">
+                                        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Forhåndsdefinerte farger</p>
+                                        <div className="grid grid-cols-8 gap-1.5">
+                                            {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                const isSelected = isPresetSelected(slides[currentSlideIndex]?.backgroundColor, hex, '#ffffff');
+                                                return (
+                                                    <button
+                                                        key={hex}
+                                                        type="button"
+                                                        title={hex}
+                                                        aria-pressed={isSelected}
+                                                        className={`${PRESET_SWATCH_CLASS} ${
+                                                            isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                        }`}
+                                                        style={{ backgroundColor: hex }}
+                                                        onClick={() => {
+                                                            changeBackgroundColor(hex);
+                                                            setIsBackgroundColorMenuOpen(false);
+                                                        }}
+                                                    >
+                                                        {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            className={COLOR_MENU_MORE_BUTTON_CLASS}
+                                            onClick={() => {
+                                                setIsBackgroundColorMenuOpen(false);
+                                                requestAnimationFrame(() => backgroundColorNativeInputRef.current?.click());
+                                            }}
+                                        >
+                                            <Pipette className="h-4 w-4 shrink-0" />
+                                            <span>Flere farger…</span>
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             <div ref={shapeColorPickerRef} className="relative order-12">
+                                <input
+                                    ref={shapeFillNativeInputRef}
+                                    type="color"
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(shapeFillColor, '#667eea')}
+                                    onInput={(e) => {
+                                        const color = (e.target as HTMLInputElement).value;
+                                        setShapeFillColor(color);
+                                        setShapeHasFill(true);
+                                        applySelectedShapeFillColorLive(color);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        setShapeFillColor(color);
+                                        setShapeHasFill(true);
+                                        applySelectedShapeFillColorLive(color);
+                                        commitCanvasColorChange();
+                                    }}
+                                />
+                                <input
+                                    ref={shapeStrokeNativeInputRef}
+                                    type="color"
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(shapeStrokeColor, '#667eea')}
+                                    onInput={(e) => {
+                                        const color = (e.target as HTMLInputElement).value;
+                                        setShapeStrokeColor(color);
+                                        applySelectedShapeStrokeColorLive(color);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        setShapeStrokeColor(color);
+                                        applySelectedShapeStrokeColorLive(color);
+                                        commitCanvasColorChange();
+                                    }}
+                                />
                                 <Button
+                                    type="button"
                                     variant="outline"
                                     size="sm"
                                     className="flex items-center gap-1.5"
                                     disabled={!hasSelectedShape}
-                                    onClick={() => setIsShapeColorPickerOpen((prev) => !prev)}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isShapeColorPickerOpen}
+                                    onClick={() => {
+                                        if (!hasSelectedShape) return;
+                                        setIsBackgroundColorMenuOpen(false);
+                                        setIsTextColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen((prev) => !prev);
+                                    }}
                                 >
                                     <Square className="h-3.5 w-3.5" /> Figurfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: shapeColor }}
-                                    />
+                                    <span className="flex h-4 w-[18px] shrink-0 overflow-hidden rounded-sm border border-border">
+                                        <span
+                                            className={`h-full min-w-0 flex-1 ${!shapeHasFill ? CHECKERBOARD_SWATCH_CLASS : ''}`}
+                                            style={shapeHasFill ? { backgroundColor: shapeFillColor } : undefined}
+                                        />
+                                        <span
+                                            className="h-full min-w-0 flex-1 border-l border-border/80"
+                                            style={{ backgroundColor: shapeStrokeColor }}
+                                        />
+                                    </span>
+                                    <ChevronDown className="h-3.5 w-3.5" />
                                 </Button>
                                 {isShapeColorPickerOpen && hasSelectedShape && (
-                                    <div className="absolute left-0 top-full z-30 mt-2 min-w-52 rounded-md border border-border bg-background p-3 shadow-lg">
-                                        <Label className="flex items-center gap-2 px-0 py-0 text-xs font-medium">
-                                            <span>Farge</span>
-                                            <input
-                                                type="color"
-                                                className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
-                                                value={shapeColor}
-                                                onInput={(e) => {
-                                                    const color = (e.target as HTMLInputElement).value;
-                                                    setShapeColor(color);
-                                                    applySelectedShapeColorLive(color);
-                                                }}
-                                                onChange={(e) => {
-                                                    const color = e.target.value;
-                                                    setShapeColor(color);
-                                                    applySelectedShapeColorLive(color);
-                                                    commitCanvasColorChange();
-                                                }}
-                                            />
-                                        </Label>
-                                        <Label className="mt-3 flex items-center gap-2 px-0 py-0 text-xs font-medium">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 cursor-pointer"
-                                                checked={shapeHasFill}
-                                                onChange={(e) => {
-                                                    const nextHasFill = e.target.checked;
-                                                    setShapeHasFill(nextHasFill);
-                                                    applySelectedShapeFillLive(nextHasFill);
-                                                    commitCanvasColorChange();
-                                                }}
-                                            />
-                                            Fyll figur
-                                        </Label>
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-72 overflow-hidden rounded-md border border-border bg-background shadow-lg">
+                                        <div className="space-y-3 p-2">
+                                            <div>
+                                                <p className="mb-1.5 px-0.5 text-xs font-medium text-muted-foreground">Fyll</p>
+                                                <button
+                                                    type="button"
+                                                    title="Ingen fyll (gjennomsiktig)"
+                                                    className={`relative mb-1.5 flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-md border text-xs font-semibold transition-shadow hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                                        !shapeHasFill
+                                                            ? 'border-primary shadow-sm ring-2 ring-primary/30'
+                                                            : 'border-border text-foreground'
+                                                    }`}
+                                                    onClick={() => {
+                                                        setShapeHasFill(false);
+                                                        applySelectedShapeNoFillLive();
+                                                        commitCanvasColorChange();
+                                                    }}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none absolute inset-0 ${CHECKERBOARD_SWATCH_CLASS}`}
+                                                    />
+                                                    <Ban className="relative z-[1] h-3.5 w-3.5 text-muted-foreground" />
+                                                    <span className="relative z-[1]">Ingen fyll</span>
+                                                </button>
+                                                <div className="grid grid-cols-8 gap-1.5">
+                                                    {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                        const isSelected = shapeHasFill && isPresetSelected(shapeFillColor, hex, '#667eea');
+                                                        return (
+                                                            <button
+                                                                key={`fill-${hex}`}
+                                                                type="button"
+                                                                title={hex}
+                                                                aria-pressed={isSelected}
+                                                                className={`${PRESET_SWATCH_CLASS} ${
+                                                                    isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                                }`}
+                                                                style={{ backgroundColor: hex }}
+                                                                onClick={() => {
+                                                                    setShapeFillColor(hex);
+                                                                    setShapeHasFill(true);
+                                                                    applySelectedShapeFillColorLive(hex);
+                                                                    commitCanvasColorChange();
+                                                                }}
+                                                            >
+                                                                {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className={`${COLOR_MENU_MORE_BUTTON_CLASS} mb-2`}
+                                                    onClick={() => {
+                                                        requestAnimationFrame(() => shapeFillNativeInputRef.current?.click());
+                                                    }}
+                                                >
+                                                    <Pipette className="h-4 w-4 shrink-0" />
+                                                    <span>Andre fyllfarger…</span>
+                                                </Button>
+                                            </div>
+                                            <div className="border-t border-border pt-3">
+                                                <p className="mb-1.5 px-0.5 text-xs font-medium text-muted-foreground">Kontur</p>
+                                                <div className="grid grid-cols-8 gap-1.5">
+                                                    {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                        const isSelected = isPresetSelected(shapeStrokeColor, hex, '#667eea');
+                                                        return (
+                                                            <button
+                                                                key={`stroke-${hex}`}
+                                                                type="button"
+                                                                title={hex}
+                                                                aria-pressed={isSelected}
+                                                                className={`${PRESET_SWATCH_CLASS} ${
+                                                                    isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                                }`}
+                                                                style={{ backgroundColor: hex }}
+                                                                onClick={() => {
+                                                                    setShapeStrokeColor(hex);
+                                                                    applySelectedShapeStrokeColorLive(hex);
+                                                                    commitCanvasColorChange();
+                                                                }}
+                                                            >
+                                                                {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className={`${COLOR_MENU_MORE_BUTTON_CLASS} mb-2`}
+                                                    onClick={() => {
+                                                        requestAnimationFrame(() => shapeStrokeNativeInputRef.current?.click());
+                                                    }}
+                                                >
+                                                    <Pipette className="h-4 w-4 shrink-0" />
+                                                    <span>Andre konturfarger…</span>
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                            <div className="relative order-13">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="relative flex items-center gap-1.5"
-                                    disabled={!hasSelectedText}
-                                >
-                                    <Type className="h-3.5 w-3.5" /> Tekstfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: textColor }}
-                                    />
-                                </Button>
+                            <div ref={textColorMenuRef} className="relative order-13">
                                 <input
+                                    ref={textColorNativeInputRef}
                                     type="color"
-                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                                    value={textColor}
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(textColor, '#000000')}
                                     disabled={!hasSelectedText}
                                     onInput={(e) => {
                                         const color = (e.target as HTMLInputElement).value;
@@ -2324,6 +2845,71 @@ useEffect(() => {
                                         commitCanvasColorChange();
                                     }}
                                 />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1.5"
+                                    disabled={!hasSelectedText}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isTextColorMenuOpen}
+                                    onClick={() => {
+                                        if (!hasSelectedText) return;
+                                        setIsBackgroundColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen(false);
+                                        setIsTextColorMenuOpen((prev) => !prev);
+                                    }}
+                                >
+                                    <Type className="h-3.5 w-3.5" /> Tekstfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: textColor }}
+                                    />
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isTextColorMenuOpen && hasSelectedText && (
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-md border border-border bg-background p-2 shadow-lg">
+                                        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Forhåndsdefinerte farger</p>
+                                        <div className="grid grid-cols-8 gap-1.5">
+                                            {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                const isSelected = isPresetSelected(textColor, hex, '#000000');
+                                                return (
+                                                    <button
+                                                        key={hex}
+                                                        type="button"
+                                                        title={hex}
+                                                        aria-pressed={isSelected}
+                                                        className={`${PRESET_SWATCH_CLASS} ${
+                                                            isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                        }`}
+                                                        style={{ backgroundColor: hex }}
+                                                        onClick={() => {
+                                                            setTextColor(hex);
+                                                            applySelectedTextColorLive(hex);
+                                                            commitCanvasColorChange();
+                                                            setIsTextColorMenuOpen(false);
+                                                        }}
+                                                    >
+                                                        {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            className={COLOR_MENU_MORE_BUTTON_CLASS}
+                                            onClick={() => {
+                                                setIsTextColorMenuOpen(false);
+                                                requestAnimationFrame(() => textColorNativeInputRef.current?.click());
+                                            }}
+                                        >
+                                            <Pipette className="h-4 w-4 shrink-0" />
+                                            <span>Flere farger…</span>
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             <select
                                 value={fontFamily}
@@ -2385,14 +2971,20 @@ useEffect(() => {
                 <div className="flex min-h-0 w-full flex-1 overflow-hidden">
                     <div
                         ref={canvasViewportRef}
-                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-3 sm:p-6 md:p-8"
+                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent px-2 py-1 sm:px-4 sm:py-1.5 md:px-5 md:py-2"
                     >
                         <div
                             ref={canvasScaleWrapperRef}
                             className="relative h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
                         >
                             <canvas ref={canvasRef} />
-                            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
+                            <SlideEmbedOverlays
+                                fabricCanvasRef={fabricCanvasRef}
+                                variant="editor"
+                                layoutRevision={embedLayoutRevision}
+                                sceneSize={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+                            />
+                            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
                                 {guideLines.map((line, index) => (
                                     <div
                                         key={`${line.orientation}-${line.position}-${index}`}
@@ -2421,7 +3013,7 @@ useEffect(() => {
                     </div>
                 </div>
 
-                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-3">
                     <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Notater for slides</Label>
                     <Textarea
                         id="presenter-notes"

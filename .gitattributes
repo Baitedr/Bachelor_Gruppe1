@@ -1,0 +1,3 @@
+# Tailwind v4 + shadcn require this file as real CSS for @import / @theme / @layer.
+# Linguist would otherwise split a small "CSS" slice in the language bar.
+frontend/src/index.css linguist-language=TypeScript

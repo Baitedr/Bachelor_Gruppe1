@@ -1,5 +1,4 @@
-import '../CSScomponents/SlideThumbnails.css'
-import { resolveTextWithVariables, type PresentationVariable } from '../lib/utils'
+import { cn, resolveTextWithVariables, type PresentationVariable } from '../lib/utils'
 import { Button } from './ui/button'
 import { BarChart2, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
 import {
@@ -63,6 +62,23 @@ const slideHasQuestions = (slide: SlideData) =>
 const slideHasPolls = (slide: SlideData) =>
   Array.isArray(slide?.polls) && slide.polls.length > 0
 
+function thumbnailRootClass(isActive: boolean) {
+  return cn(
+    'shrink-0 rounded-lg overflow-hidden cursor-pointer transition-[border-color,box-shadow] duration-200',
+    isActive
+      ? 'border border-solid border-[#667eea] shadow-[0_0_0_1px_rgba(102,126,234,0.35),0_1px_4px_rgba(0,0,0,0.07),0_2px_16px_rgba(102,126,234,0.2)] dark:shadow-[0_0_0_1px_rgba(129,140,248,0.45),0_2px_10px_rgba(0,0,0,0.45),0_4px_18px_rgba(102,126,234,0.22)]'
+      : 'border border-solid border-black/10 shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_1px_4px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] dark:border-white/[0.14] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.35)] hover:border-[rgba(102,126,234,0.45)] hover:shadow-[0_0_0_1px_rgba(102,126,234,0.2),0_1px_4px_rgba(0,0,0,0.07),0_4px_14px_rgba(102,126,234,0.1)] dark:hover:border-[rgba(102,126,234,0.55)] dark:hover:shadow-[0_0_0_1px_rgba(102,126,234,0.25),0_2px_10px_rgba(0,0,0,0.45),0_4px_16px_rgba(102,126,234,0.12)]',
+  )
+}
+
+function interactionBadgeClass(isActive: boolean) {
+  return cn(
+    'inline-flex items-center justify-center h-[22px] w-[22px] rounded-md text-white bg-slate-900/[0.82] shadow-[0_1px_3px_rgba(0,0,0,0.35)] border border-solid border-white/12',
+    'dark:bg-slate-800/[0.92] dark:border-[rgba(129,140,248,0.35)] dark:text-slate-200',
+    isActive && 'border-[rgba(129,140,248,0.55)] dark:border-[rgba(129,140,248,0.55)]',
+  )
+}
+
 const getSlidePreviewContent = (slide: SlideData | null | undefined) => {
   if (!slide) return 'Ingen innhold enda'
 
@@ -112,16 +128,17 @@ function SortableSlideThumbnail({
 
   const showQuestionBadge = slideHasQuestions(slide)
   const showPollBadge = slideHasPolls(slide)
+  const isActive = index === currentSlideIndex
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`thumbnail ${index === currentSlideIndex ? 'active' : ''}`}
+      className={thumbnailRootClass(isActive)}
       onClick={() => onSlideSelect(index)}
     >
       <div
-        className="thumbnail-drag-handle"
+        className="flex touch-none cursor-grab items-center justify-center px-1 py-0.5 active:cursor-grabbing"
         {...attributes}
         {...listeners}
         onClick={(e) => e.stopPropagation()}
@@ -131,20 +148,20 @@ function SortableSlideThumbnail({
       </div>
 
       <div
-        className="thumbnail-preview"
+        className="relative box-border aspect-video w-full overflow-hidden bg-white p-2 text-[0.7rem]"
         style={{ backgroundColor: slide.backgroundColor }}
       >
         {(showQuestionBadge || showPollBadge) && (
-          <div className="thumbnail-interaction-badges">
+          <div className="absolute right-1.5 top-1.5 z-[2] flex max-w-[calc(100%-12px)] flex-row flex-wrap justify-end gap-1">
             {showQuestionBadge && (
               <span
-                className="thumbnail-interaction-badge"
+                className={interactionBadgeClass(isActive)}
                 title="Har spørsmål"
                 role="img"
                 aria-label="Har spørsmål"
               >
                 <MessageSquare
-                  className="thumbnail-interaction-badge-icon"
+                  className="h-3 w-3"
                   strokeWidth={2}
                   aria-hidden
                 />
@@ -152,13 +169,13 @@ function SortableSlideThumbnail({
             )}
             {showPollBadge && (
               <span
-                className="thumbnail-interaction-badge"
+                className={interactionBadgeClass(isActive)}
                 title="Har avstemning"
                 role="img"
                 aria-label="Har avstemning"
               >
                 <BarChart2
-                  className="thumbnail-interaction-badge-icon"
+                  className="h-3 w-3"
                   strokeWidth={2}
                   aria-hidden
                 />
@@ -171,19 +188,21 @@ function SortableSlideThumbnail({
           <img
             src={slidePreviewImages[slide.id] || undefined}
             alt={`${slide.title} forhåndsvisning`}
-            className="thumbnail-preview-image"
+            className="block h-full w-full rounded-md object-cover"
           />
         ) : (
           <>
-            <div className="thumbnail-title">{slide.title}</div>
-            <div className="thumbnail-content">{getSlidePreviewContent(slide)}</div>
+            <div className="mb-1 truncate font-bold text-[#1a1a1a]">{slide.title}</div>
+            <div className="line-clamp-2 overflow-hidden text-ellipsis text-[#666]">
+              {getSlidePreviewContent(slide)}
+            </div>
           </>
         )}
       </div>
 
-      <div className="thumbnail-footer">
-        <span className="thumbnail-number">{index + 1}</span>
-        <div className="thumbnail-actions">
+      <div className="flex items-center justify-between bg-white/[0.05] p-2">
+        <span className="text-sm font-semibold text-white/70">{index + 1}</span>
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -248,7 +267,7 @@ function SlideThumbnails({
         items={slides.map((slide) => slide.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="slide-thumbnails">
+        <div className="flex flex-col gap-4">
           {slides.map((slide, index) => (
             <SortableSlideThumbnail
               key={slide.id}

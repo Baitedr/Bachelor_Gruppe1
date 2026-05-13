@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createConsumer } from '@rails/actioncable'
 import api from '../services/api'
+import type { EmbedPlaybackPayload } from '../lib/embedLiveShared'
 
 /** Kanal/JSON kan gi indeks som tall eller streng; må matche strengt mellom liveboard og currentSlide. */
 const normalizeSlideIndex = (value: unknown): number | null => {
@@ -32,6 +33,10 @@ type CableReceived = {
   question_id?: string
   recent_answers?: string[]
   question_type?: string
+  embed_key?: string
+  state?: string
+  time?: unknown
+  seq?: unknown
 }
 
 export const usePresentation = (presentationId: string | number | null, token: string | null) => {
@@ -57,6 +62,9 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const [submittedQuestionIds, setSubmittedQuestionIds] = useState<Record<string, boolean>>({})
   /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
   const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState<number | null>(null)
+
+  /** Synkronisert YouTube/Vimeo-avspilling (presentatør → alle klienter). */
+  const [embedPlayback, setEmbedPlayback] = useState<EmbedPlaybackPayload | null>(null)
 
   const cableRef = useRef<ReturnType<typeof createConsumer> | null>(null)
   const subscriptionRef = useRef<{ perform: (action: string, data: object) => void; unsubscribe: () => void } | null>(
@@ -87,6 +95,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
               if (idx !== null) setCurrentSlide(idx)
               setActivePoll(null)
               setActiveQuestion(null)
+              setEmbedPlayback(null)
               const resume = data.resume_liveboard === true || data.resume_liveboard === 'true'
               if (resume && idx !== null) {
                 setLiveboardForSlideIndex(idx)
@@ -158,6 +167,21 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 },
               }))
               break
+            case 'embed_playback': {
+              // Publikum: oppdater innebygd video via postMessage (kun nyeste `seq`).
+              const slideIdx = normalizeSlideIndex(data.slide_index)
+              const key = (data.embed_key || '').toString()
+              if (slideIdx === null || !key) break
+              const st = data.state === 'play' ? 'play' : 'pause'
+              setEmbedPlayback({
+                slide_index: slideIdx,
+                embed_key: key,
+                state: st,
+                time: Number(data.time) || 0,
+                seq: Number(data.seq) || 0,
+              })
+              break
+            }
             default:
               break
           }
@@ -236,6 +260,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
     }
   }
 
+  /** Presentatør/projektor: send avspillingsposisjon til alle via `sync_embed_playback`. */
+  const broadcastEmbedPlayback = useCallback((payload: EmbedPlaybackPayload) => {
+    if (!subscriptionRef.current) return
+    subscriptionRef.current.perform('sync_embed_playback', payload as unknown as object)
+  }, [])
+
   const activatePoll = (pollId: string | number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_poll', { poll_id: pollId })
@@ -299,5 +329,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     activateQuestion,
     submitQuestionAnswer,
     submittedQuestionIds,
+    embedPlayback,
+    broadcastEmbedPlayback,
   }
 }

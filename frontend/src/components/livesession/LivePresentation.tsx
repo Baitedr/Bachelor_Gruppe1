@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePresentation } from '../../hooks/usePresentation'
 import {
   normalizePresentationVariables,
@@ -59,10 +59,7 @@ const isActiveQuestion = (value: unknown): value is ActiveQuestion => {
   )
 }
 
-/**
- * Inngang for live-økt: laster presentasjon, kobler til kanal via `usePresentation` (ActionCable),
- * og rendrer enten presentatør- eller publikumsvisning. App.tsx bruker denne én komponent for begge roller.
- */
+/** Live-visning: laster presentasjon, kanal via usePresentation, presentatør eller publikum. */
 const LivePresentation = ({
   presentationId,
   isPresenter,
@@ -70,6 +67,7 @@ const LivePresentation = ({
   onEndLiveSession,
   onSessionEnd,
   onLeaveSession,
+  autoStartPresenterSession = false,
 }: {
   presentationId: string | number
   isPresenter: boolean
@@ -77,6 +75,8 @@ const LivePresentation = ({
   onEndLiveSession?: () => void
   onSessionEnd?: () => void
   onLeaveSession?: () => void
+  /** Presentatør uten lobby: start_session på kanalen én gang når data er klart. */
+  autoStartPresenterSession?: boolean
 }) => {
   const [presentation, setPresentation] = useState<PresentationRecord | null>(null)
   const [loading, setLoading] = useState(true)
@@ -93,20 +93,110 @@ const LivePresentation = ({
     activatePoll,
     submitPollAnswer,
     sessionEnded,
+    sessionStarted,
+    startSession,
     submittedPollIds,
     activeQuestion,
     questionResults,
     activateQuestion,
     submitQuestionAnswer,
     submittedQuestionIds,
+    embedPlayback,
+    broadcastEmbedPlayback,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
   const [questionAnswer, setQuestionAnswer] = useState('')
+  /** Hindrer dobbel `start_session` dersom samme render-effekt fyres flere ganger. */
+  const autoPresenterStartedRef = useRef(false)
+
+  const AUDIENCE_EMBED_VOL_KEY = 'proslides-audience-embed-volume-v1'
+  const [audienceVolLevel, setAudienceVolLevelState] = useState(90)
+  const [audienceVolMuted, setAudienceVolMuted] = useState(false)
+  const [audienceVolHydrated, setAudienceVolHydrated] = useState(false)
+
+  useEffect(() => {
+    if (isPresenter) return
+    try {
+      const raw = localStorage.getItem(AUDIENCE_EMBED_VOL_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { level?: unknown; muted?: unknown }
+        const n = typeof parsed.level === 'number' ? parsed.level : Number(parsed.level)
+        if (Number.isFinite(n)) setAudienceVolLevelState(Math.max(0, Math.min(100, Math.round(n))))
+        if (parsed.muted === true) setAudienceVolMuted(true)
+      }
+    } catch {
+      // ignorer korrupt lagring
+    } finally {
+      setAudienceVolHydrated(true)
+    }
+  }, [isPresenter])
+
+  useEffect(() => {
+    if (isPresenter || !audienceVolHydrated) return
+    try {
+      localStorage.setItem(
+        AUDIENCE_EMBED_VOL_KEY,
+        JSON.stringify({ level: audienceVolLevel, muted: audienceVolMuted }),
+      )
+    } catch {
+      // private mode / full disk
+    }
+  }, [isPresenter, audienceVolHydrated, audienceVolLevel, audienceVolMuted])
+
+  const setAudienceVolLevel = useCallback((value: number) => {
+    const next = Math.max(0, Math.min(100, Math.round(value)))
+    setAudienceVolLevelState(next)
+    if (next > 0) setAudienceVolMuted(false)
+  }, [])
+
+  const toggleAudienceMute = useCallback(() => {
+    setAudienceVolMuted((prevMuted) => {
+      if (prevMuted) {
+        setAudienceVolLevelState((lev) => (lev === 0 ? 85 : lev))
+        return false
+      }
+      return true
+    })
+  }, [])
+
+  const audienceVolumeUi = useMemo(
+    () => ({
+      level: audienceVolLevel,
+      muted: audienceVolMuted,
+      setLevel: setAudienceVolLevel,
+      toggleMute: toggleAudienceMute,
+    }),
+    [audienceVolLevel, audienceVolMuted, setAudienceVolLevel, toggleAudienceMute],
+  )
 
   useEffect(() => {
     if (sessionEnded && onSessionEnd) onSessionEnd()
   }, [sessionEnded, onSessionEnd])
 
   useEffect(() => {
+    autoPresenterStartedRef.current = false
+  }, [presentationId, autoStartPresenterSession])
+
+  useEffect(() => {
+    if (!autoStartPresenterSession || !isPresenter) return
+    if (loading || !presentation) return
+    if (sessionStarted) return
+    if (autoPresenterStartedRef.current) return
+    const timer = window.setTimeout(() => {
+      startSession()
+      autoPresenterStartedRef.current = true
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [
+    autoStartPresenterSession,
+    isPresenter,
+    loading,
+    presentation,
+    sessionStarted,
+    startSession,
+  ])
+
+  useEffect(() => {
+    // Last inn presentasjonen via samme endpoint som vanlige deltakere bruker.
     const loadPresentation = async () => {
       try {
         const response = await api.joinPresentation(presentationId)
@@ -228,6 +318,27 @@ const LivePresentation = ({
     setQuestionAnswer('')
   }
 
+  const embedLivePresenter = useMemo(
+    () => ({
+      role: 'presenter' as const,
+      slideIndex: currentSlide,
+      embedPlayback,
+      broadcastEmbedPlayback,
+    }),
+    [currentSlide, embedPlayback, broadcastEmbedPlayback],
+  )
+
+  const embedLiveAudience = useMemo(
+    () => ({
+      role: 'audience' as const,
+      slideIndex: currentSlide,
+      embedPlayback,
+      audienceHostedVolume: audienceVolMuted ? 0 : audienceVolLevel,
+      audienceVolumeUi,
+    }),
+    [currentSlide, embedPlayback, audienceVolLevel, audienceVolMuted, audienceVolumeUi],
+  )
+
   if (loading) {
     return <div className='text-sm text-muted-foreground'>Laster presentasjon...</div>
   }
@@ -264,6 +375,7 @@ const LivePresentation = ({
           setQuestionAnswer={setQuestionAnswer}
           submitOpenQuestionAnswer={submitOpenQuestionAnswer}
           onLeaveSession={onLeaveSession}
+          embedLive={embedLiveAudience}
         />
       </div>
     )
@@ -288,6 +400,7 @@ const LivePresentation = ({
       pollResults={pollResults}
       questionResults={questionResults}
       sessionEnded={sessionEnded}
+      embedLive={embedLivePresenter}
     />
   )
 }

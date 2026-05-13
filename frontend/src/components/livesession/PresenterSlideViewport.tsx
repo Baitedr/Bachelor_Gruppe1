@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
 import LivePresentationCanvas from './LivePresentationCanvas'
 import LiveResultsBoard from './ui/LiveResultsBoard'
+import type { SlideEmbedLiveContext } from '../SlideEmbedOverlays'
 
 type PollAggregate = {
   results?: Record<string, number>
@@ -160,6 +161,8 @@ export type PresenterSlideViewportProps = {
   navControlsMode?: 'always' | 'hover'
   /** Ekstra klasser på rot (f.eks. fullskjerm-bakgrunn). */
   className?: string
+  /** Synkronisering av innebygde videoer (kun når Fabric-slide vises). */
+  embedLive?: SlideEmbedLiveContext | null
 }
 
 /**
@@ -177,6 +180,7 @@ export function PresenterSlideViewport({
   canNext,
   navControlsMode = 'always',
   className = '',
+  embedLive = null,
 }: PresenterSlideViewportProps) {
   const hoverOnlyNavControls = navControlsMode === 'hover'
   const inner = (
@@ -200,6 +204,7 @@ export function PresenterSlideViewport({
           <div className='flex min-h-0 h-full min-w-0 flex-1 flex-col overflow-visible'>
             <LivePresentationCanvas
               slideData={currentSlideData}
+              embedLive={embedLive}
               presenterToolbar={
                 <PresenterSlideNavToolbar
                   onPrev={onPrev}

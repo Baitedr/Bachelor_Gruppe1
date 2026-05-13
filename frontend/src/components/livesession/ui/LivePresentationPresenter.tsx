@@ -10,6 +10,7 @@ import { Badge } from '../../ui/badge'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import { PresenterSlideViewport, type PresenterSlideData } from '../PresenterSlideViewport'
+import type { SlideEmbedLiveContext } from '../../SlideEmbedOverlays'
 import { usePresenterSlideDeck } from '../usePresenterSlideDeck'
 
 const NOTES_ZOOM_MIN = 75
@@ -52,6 +53,7 @@ const LivePresentationPresenter = ({
   pollResults,
   questionResults,
   sessionEnded,
+  embedLive,
 }: {
   presentation: PresentationRecord
   joinCode: string | null
@@ -70,6 +72,7 @@ const LivePresentationPresenter = ({
   pollResults: Record<string, PollAggregate>
   questionResults: Record<string, QuestionAggregate>
   sessionEnded: boolean
+  embedLive: SlideEmbedLiveContext
 }) => {
   const [notesZoomPercent, setNotesZoomPercent] = useState(100)
   const [screenChoices, setScreenChoices] = useState<PresenterScreenChoice[]>([])
@@ -134,6 +137,7 @@ const LivePresentationPresenter = ({
       onNext: handleNextSlide,
       canPrev: navCanGoPrev,
       canNext: navCanGoNext,
+      embedLive,
     }),
     [
       currentSlideData,
@@ -145,6 +149,7 @@ const LivePresentationPresenter = ({
       handleNextSlide,
       navCanGoPrev,
       navCanGoNext,
+      embedLive,
     ],
   )
 
