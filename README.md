@@ -1,6 +1,6 @@
 # ProSlides (bachelorprosjekt)
 
-ProSlides er en webapp for a lage og holde presentasjoner. Losningen har redigering av slides i nettleseren (Fabric.js), live-presentasjon med deltakere via Action Cable, samt publikumsinteraksjon fra mobil.
+ProSlides er en webapp for a lage og holde presentasjoner. Løsningen har redigering av slides i nettleseren (Fabric.js), live-presentasjon med deltakere via Action Cable, samt publikumsinteraksjon fra mobil.
 
 Repoet er et monorepo:
 
@@ -14,8 +14,8 @@ Repoet er et monorepo:
 - Lage, redigere og lagre presentasjoner
 - Starte live-sesjoner med join-kode
 - Publikum kan koble seg til fra mobil/nettleser
-- Polls/sporsmal i live-visning
-- OAuth-stotte for Google/GitHub (valgfritt)
+- Polls/spørsmal i live-visning
+- OAuth-støtte for Google/GitHub (valgfritt)
 
 ---
 
@@ -27,7 +27,7 @@ Repoet er et monorepo:
 - Node.js (LTS) + npm
 - PostgreSQL (lokalt eller hostet), tilgjengelig via `DATABASE_URL`
 
-Merk: Redis er ikke nodvendig lokalt. `backend/config/cable.yml` bruker `async` i development.
+Merk: Redis er ikke nødvendig lokalt. `backend/config/cable.yml` bruker `async` i development.
 
 ### 1) Start backend
 
@@ -38,11 +38,11 @@ cp .env.example .env
 
 Oppdater `backend/.env`:
 
-- `DATABASE_URL` ma peke til PostgreSQL
-- `SECRET_KEY_BASE` ma settes (kan vaere en tilfeldig streng lokalt)
+- `DATABASE_URL` må peke til PostgreSQL
+- `SECRET_KEY_BASE` må settes (kan være en tilfeldig streng lokalt)
 - OAuth/CORS-variabler er valgfritt og dokumentert i `.env.example`
 
-Kjor deretter:
+Kjør deretter:
 
 ```bash
 bundle install
@@ -50,7 +50,7 @@ bin/setup
 bin/rails server
 ```
 
-Backend kjores som standard pa `http://localhost:3000`.
+Backend kjøres som standard på `http://localhost:3000`.
 
 ### 2) Start frontend
 
@@ -62,7 +62,7 @@ npm install
 npm run dev
 ```
 
-Frontend kjores pa `http://localhost:5173`.
+Frontend kjøres på `http://localhost:5173`.
 
 Vite-proxy sender:
 
@@ -77,12 +77,12 @@ VITE_DEV_BACKEND_ORIGIN=http://localhost:3002
 
 ### Nyttige kommandoer
 
-| Hvor | Kommando | Hva den gjor |
+| Hvor | Kommando | Hva den gjør |
 |-------|---------|---------|
-| `frontend/` | `npm run lint` | Kjorer ESLint |
+| `frontend/` | `npm run lint` | Kjører ESLint |
 | `frontend/` | `npm run build` | Lager produksjonsbuild |
 | `frontend/` | `npm run test:e2e` | Kjorer Playwright E2E-tester |
-| `frontend/` | `npm run test:e2e:ui` | Apner Playwright UI-modus |
+| `frontend/` | `npm run test:e2e:ui` | Åpner Playwright UI-modus |
 
 ---
 
@@ -90,4 +90,4 @@ VITE_DEV_BACKEND_ORIGIN=http://localhost:3002
 
 - `frontend/src/`: UI, editor, live session, lobby, polls og autentisering
 - `backend/app/`: controllere, modeller og channels
-- `backend/config/`: routes, database, cable og miljo-konfig
+- `backend/config/`: routes, database, cable og miljø-konfig
