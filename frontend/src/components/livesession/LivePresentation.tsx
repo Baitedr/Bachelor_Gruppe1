@@ -113,6 +113,7 @@ const LivePresentation = ({
   const [audienceVolMuted, setAudienceVolMuted] = useState(false)
   const [audienceVolHydrated, setAudienceVolHydrated] = useState(false)
 
+  //Volum state for publiku når det blir vist en video 
   useEffect(() => {
     if (isPresenter) return
     try {
@@ -130,6 +131,7 @@ const LivePresentation = ({
     }
   }, [isPresenter])
 
+  //State som endrer seg når noen fra publikum endrer på volum under videoavspilling 
   useEffect(() => {
     if (isPresenter || !audienceVolHydrated) return
     try {
@@ -142,12 +144,14 @@ const LivePresentation = ({
     }
   }, [isPresenter, audienceVolHydrated, audienceVolLevel, audienceVolMuted])
 
+  //Setter volum level, et stede mellom 0 - 100. Hvis volum er over 0 verdien settes mute state av
   const setAudienceVolLevel = useCallback((value: number) => {
     const next = Math.max(0, Math.min(100, Math.round(value)))
     setAudienceVolLevelState(next)
     if (next > 0) setAudienceVolMuted(false)
   }, [])
 
+  //Toggler publikums mute state
   const toggleAudienceMute = useCallback(() => {
     setAudienceVolMuted((prevMuted) => {
       if (prevMuted) {
