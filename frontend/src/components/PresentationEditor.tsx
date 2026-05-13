@@ -50,6 +50,8 @@ import SlideEmbedOverlays from './SlideEmbedOverlays';
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
+/** Ekstra luft rundt den skalerte sliden i viewporter (ikke samme som lerrets-padding for objekter). */
+const CANVAS_VIEWPORT_OUTSET = 8;
 const FONT_FAMILIES = [
     { value: 'Arial, sans-serif', label: 'Arial' },
     { value: 'Times New Roman, serif', label: 'Times New Roman' },
@@ -274,13 +276,13 @@ ref: ForwardedRef<PresentationEditorHandle>
         const container = canvasViewportRef.current;
         if (!container) return;
 
-        const availableWidth = Math.max(container.clientWidth - CANVAS_PADDING * 2, 0);
-        const availableHeight = Math.max(container.clientHeight - CANVAS_PADDING * 2, 0);
-        const nextScale = Math.min(
-            1,
-            availableWidth / CANVAS_WIDTH,
-            availableHeight / CANVAS_HEIGHT
-        );
+        const style = window.getComputedStyle(container);
+        const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+        const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+        const outset = CANVAS_VIEWPORT_OUTSET * 2;
+        const availableWidth = Math.max(container.clientWidth - padX - outset, 0);
+        const availableHeight = Math.max(container.clientHeight - padY - outset, 0);
+        const nextScale = Math.min(availableWidth / CANVAS_WIDTH, availableHeight / CANVAS_HEIGHT);
 
         setCanvasScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
     }, []);
@@ -2134,8 +2136,8 @@ useEffect(() => {
                 )}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-3 overflow-hidden bg-muted/22 p-2 sm:gap-4 sm:p-4 md:gap-6 dark:bg-transparent">
-                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col items-stretch gap-3 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-start gap-2 overflow-hidden bg-muted/22 px-2 py-1 sm:gap-3 sm:px-3 sm:py-2 md:gap-4 dark:bg-transparent">
+                <div className="mx-auto flex w-full max-w-225 shrink-0 flex-col items-stretch gap-2 rounded-[10px] border border-border bg-card px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:gap-2.5 sm:px-6 sm:py-3">
                     {/* Øverste rad: tittel + lysbilde-teller (lagre ligger i navbar) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-4">
                         <Input
@@ -2577,7 +2579,7 @@ useEffect(() => {
                 <div className="flex min-h-0 w-full flex-1 overflow-hidden">
                     <div
                         ref={canvasViewportRef}
-                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent p-3 sm:p-6 md:p-8"
+                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent px-2 py-1 sm:px-4 sm:py-1.5 md:px-5 md:py-2"
                     >
                         <div
                             ref={canvasScaleWrapperRef}
@@ -2619,7 +2621,7 @@ useEffect(() => {
                     </div>
                 </div>
 
-                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-4">
+                <div className="mx-auto w-full max-w-225 shrink-0 rounded-[10px] border border-border bg-card px-4 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.03)] sm:px-6 sm:py-3">
                     <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Notater for slides</Label>
                     <Textarea
                         id="presenter-notes"
