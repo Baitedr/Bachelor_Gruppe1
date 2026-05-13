@@ -74,6 +74,8 @@ const LivePresentationPresenter = ({
   activeQuestion,
   activatePoll,
   activateQuestion,
+  stopInteractions,
+  interactionAcceptingAnswers,
   pollResults,
   questionResults,
   sessionEnded,
@@ -93,6 +95,8 @@ const LivePresentationPresenter = ({
   activeQuestion: unknown
   activatePoll: (pollId: string | number) => void
   activateQuestion: (questionId: string | number) => void
+  stopInteractions: () => void
+  interactionAcceptingAnswers: boolean
   pollResults: Record<string, PollAggregate>
   questionResults: Record<string, QuestionAggregate>
   sessionEnded: boolean
@@ -291,25 +295,27 @@ const LivePresentationPresenter = ({
                 <CardHeader className='flex-shrink-0 space-y-0 border-b border-border px-3 pb-2 pt-2.5 sm:px-3.5 sm:pb-2.5 sm:pt-3'>
                   <div className='flex items-center justify-between gap-2'>
                     <CardTitle className='text-sm font-semibold leading-tight'>Spørsmål og verktøy</CardTitle>
-                    <Badge
-                      variant={anyAudienceInteractionLive ? 'default' : 'secondary'}
-                      className={cn(
-                        'gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                        anyAudienceInteractionLive && 'shadow-sm shadow-primary/20',
-                      )}
-                    >
-                      {anyAudienceInteractionLive ? (
-                        <>
-                          <span className='relative flex h-1.5 w-1.5' aria-hidden>
-                            <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground/55' />
-                            <span className='relative inline-flex h-1.5 w-1.5 rounded-full bg-primary-foreground' />
-                          </span>
-                          Live
-                        </>
-                      ) : (
-                        'Live'
-                      )}
-                    </Badge>
+                    <div className='flex items-center gap-2'>
+                      <Badge
+                        variant={anyAudienceInteractionLive ? 'default' : 'secondary'}
+                        className={cn(
+                          'gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                          anyAudienceInteractionLive && 'shadow-sm shadow-primary/20',
+                        )}
+                      >
+                        {anyAudienceInteractionLive ? (
+                          <>
+                            <span className='relative flex h-1.5 w-1.5' aria-hidden>
+                              <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground/55' />
+                              <span className='relative inline-flex h-1.5 w-1.5 rounded-full bg-primary-foreground' />
+                            </span>
+                            Live
+                          </>
+                        ) : (
+                          'Live'
+                        )}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className='space-y-2.5 p-3 pt-2.5 sm:p-3.5 sm:pt-3'>
@@ -336,8 +342,18 @@ const LivePresentationPresenter = ({
                             </span>
                             <Radio className='h-3.5 w-3.5 shrink-0 text-primary' aria-hidden />
                             <p className='min-w-0 flex-1 text-xs font-medium leading-snug text-primary'>
-                              Avstemningen er aktiv hos deltakere
+                              {interactionAcceptingAnswers ? 'Avstemningen er aktiv hos deltakere' : 'Avstemningen er stengt for svar'}
                             </p>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              className={logoutStyleDestructiveButtonClassName}
+                              onClick={stopInteractions}
+                              disabled={!interactionAcceptingAnswers}
+                            >
+                              {interactionAcceptingAnswers ? 'Stopp' : 'Stoppet'}
+                            </Button>
                           </div>
                         ) : null}
                         <CardContent className='space-y-2.5 px-3 pb-3 pt-2 sm:px-3.5 sm:pb-3.5'>
@@ -396,8 +412,18 @@ const LivePresentationPresenter = ({
                             </span>
                             <Radio className='h-3.5 w-3.5 shrink-0 text-primary' aria-hidden />
                             <p className='min-w-0 flex-1 text-xs font-medium leading-snug text-primary'>
-                              Spørsmålet er aktiv hos deltakere
+                              {interactionAcceptingAnswers ? 'Spørsmålet er aktiv hos deltakere' : 'Spørsmålet er stengt for svar'}
                             </p>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              className={logoutStyleDestructiveButtonClassName}
+                              onClick={stopInteractions}
+                              disabled={!interactionAcceptingAnswers}
+                            >
+                              {interactionAcceptingAnswers ? 'Stopp' : 'Stoppet'}
+                            </Button>
                           </div>
                         ) : null}
                         <CardContent className='space-y-2.5 px-3 pb-3 pt-2 sm:px-3.5 sm:pb-3.5'>

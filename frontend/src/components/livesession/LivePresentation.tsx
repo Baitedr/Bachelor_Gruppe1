@@ -103,6 +103,8 @@ const LivePresentation = ({
     submittedQuestionIds,
     embedPlayback,
     broadcastEmbedPlayback,
+    stopInteractions,
+    interactionAcceptingAnswers,
   } = usePresentation(presentationId, localStorage.getItem('auth_token'))
   const [questionAnswer, setQuestionAnswer] = useState('')
   /** Hindrer dobbel `start_session` dersom samme render-effekt fyres flere ganger. */
@@ -314,6 +316,7 @@ const LivePresentation = ({
 
   const submitOpenQuestionAnswer = () => {
     if (!typedActiveQuestion) return
+    if (!interactionAcceptingAnswers) return
 
     const trimmedAnswer = questionAnswer.trim()
     if (!trimmedAnswer) return
@@ -373,6 +376,7 @@ const LivePresentation = ({
           activeQuestionType={activeQuestionType}
           hasAnsweredActivePoll={hasAnsweredActivePoll}
           hasAnsweredActiveQuestion={hasAnsweredActiveQuestion}
+          interactionAcceptingAnswers={interactionAcceptingAnswers}
           totalVotes={totalVotes}
           totalQuestionAnswers={totalQuestionAnswers}
           questionAnswer={questionAnswer}
@@ -401,6 +405,8 @@ const LivePresentation = ({
       activeQuestion={activeQuestion}
       activatePoll={activatePoll}
       activateQuestion={activateQuestion}
+      stopInteractions={stopInteractions}
+      interactionAcceptingAnswers={interactionAcceptingAnswers}
       pollResults={pollResults}
       questionResults={questionResults}
       sessionEnded={sessionEnded}

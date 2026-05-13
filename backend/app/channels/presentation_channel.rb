@@ -1,8 +1,10 @@
 class PresentationChannel < ApplicationCable::Channel
   ACTIVE_SESSION_CACHE_VERSION = 'v1'.freeze
   QUESTIONS_LOOKUP_CACHE_VERSION = 'v1'.freeze
+  ACTIVE_INTERACTION_CACHE_VERSION = 'v1'.freeze
   ACTIVE_SESSION_CACHE_TTL = 30.seconds
   QUESTIONS_LOOKUP_CACHE_TTL = 10.minutes
+  ACTIVE_INTERACTION_CACHE_TTL = 12.hours
 
   def self.active_session_cache_key(presentation_id)
     "active_session_id:#{ACTIVE_SESSION_CACHE_VERSION}:#{presentation_id}"
@@ -10,6 +12,10 @@ class PresentationChannel < ApplicationCable::Channel
 
   def self.questions_lookup_cache_key(presentation_id)
     "presentation_questions_map:#{QUESTIONS_LOOKUP_CACHE_VERSION}:#{presentation_id}"
+  end
+
+  def self.active_interaction_cache_key(presentation_id, session_id)
+    "active_interaction:#{ACTIVE_INTERACTION_CACHE_VERSION}:#{presentation_id}:#{session_id}"
   end
 
   def self.invalidate_active_session_cache(presentation_id)
@@ -67,6 +73,7 @@ class PresentationChannel < ApplicationCable::Channel
     return unless active_session
 
     active_session.update!(started: true)
+    clear_active_interaction_for_session(presentation, active_session)
     participant_count = active_session.session_participants.count
 
     PresentationChannel.broadcast_to(
@@ -125,6 +132,8 @@ class PresentationChannel < ApplicationCable::Channel
 
     # Slik at gjenåpning av lysbilde ikke beholder gammel aktiv poll i DB.
     Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    active_session = active_session_for_presentation(presentation)
+    clear_active_interaction_for_session(presentation, active_session) if active_session
 
     resume_raw = data['resume_liveboard']
     resume_raw = data[:resume_liveboard] if resume_raw.nil?
@@ -142,10 +151,42 @@ class PresentationChannel < ApplicationCable::Channel
     return unless presentation.owner_id == current_user.id
 
     Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    active_session = active_session_for_presentation(presentation)
+    clear_active_interaction_for_session(presentation, active_session) if active_session
 
     PresentationChannel.broadcast_to(
       presentation,
       { type: 'interactions_cleared' }
+    )
+  end
+
+  # Låser nåværende interaksjon slik at publikum fortsatt ser den, men ikke kan sende nye svar.
+  def stop_interactions(_data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    active_session = active_session_for_presentation(presentation)
+    return unless active_session
+
+    interaction = active_interaction_for_session(presentation, active_session)
+    return unless interaction.is_a?(Hash)
+    return unless interaction['type'].present? && interaction['id'].present?
+
+    set_active_interaction_for_session(
+      presentation,
+      active_session,
+      interaction['type'],
+      interaction['id'],
+      accepting_answers: false
+    )
+
+    PresentationChannel.broadcast_to(
+      presentation,
+      {
+        type: 'interactions_stopped',
+        interaction_type: interaction['type'],
+        interaction_id: interaction['id']
+      }
     )
   end
 
@@ -162,6 +203,8 @@ class PresentationChannel < ApplicationCable::Channel
     return if slide_index.negative?
 
     Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    active_session = active_session_for_presentation(presentation)
+    clear_active_interaction_for_session(presentation, active_session) if active_session
 
     # Én melding: unngår at klienter prosesserer to WS-events i feil rekkefølge.
     PresentationChannel.broadcast_to(
@@ -193,13 +236,17 @@ class PresentationChannel < ApplicationCable::Channel
     question = find_question_in_presentation(presentation, data['question_id'])
     return unless question
 
+    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    active_session = active_session_for_presentation(presentation)
+    return unless active_session
+    set_active_interaction_for_session(presentation, active_session, 'question', question[:id], accepting_answers: true)
+
     PresentationChannel.broadcast_to(
       presentation,
       { type: 'question_activated', question_id: question[:id], question: serialize_question(question) }
     )
 
-    active_session = active_session_for_presentation(presentation)
-    broadcast_question_results(presentation, active_session, question) if active_session
+    broadcast_question_results(presentation, active_session, question)
   end
 
   # Deltaker sender svar på et spørsmål, som lagres og oppdateres i sanntid for alle deltakere.
@@ -210,6 +257,7 @@ class PresentationChannel < ApplicationCable::Channel
 
     question = find_question_in_presentation(presentation, data['question_id'])
     return unless question
+    return unless interaction_active_for_submission?(presentation, active_session, 'question', question[:id])
 
     answer = data['answer'].to_s.strip
     return if answer.blank?
@@ -327,6 +375,8 @@ class PresentationChannel < ApplicationCable::Channel
     poll.update!(is_active: true)
 
     active_session = active_session_for_presentation(presentation)
+    return unless active_session
+    set_active_interaction_for_session(presentation, active_session, 'poll', poll.id, accepting_answers: true)
 
     PresentationChannel.broadcast_to(
       presentation,
@@ -348,6 +398,8 @@ class PresentationChannel < ApplicationCable::Channel
 
     active_session = active_session_for_presentation(presentation)
     return unless active_session
+    return unless poll.is_active?
+    return unless interaction_active_for_submission?(presentation, active_session, 'poll', poll.id)
 
     option = poll.poll_options.find_by(text: data['answer'])
     return unless option
@@ -370,6 +422,35 @@ class PresentationChannel < ApplicationCable::Channel
   end
 
   private
+
+  def set_active_interaction_for_session(presentation, active_session, interaction_type, interaction_id, accepting_answers: true)
+    Rails.cache.write(
+      self.class.active_interaction_cache_key(presentation.id, active_session.id),
+      {
+        'type' => interaction_type.to_s,
+        'id' => interaction_id.to_s,
+        'accepting_answers' => accepting_answers == true
+      },
+      expires_in: ACTIVE_INTERACTION_CACHE_TTL
+    )
+  end
+
+  def clear_active_interaction_for_session(presentation, active_session)
+    Rails.cache.delete(self.class.active_interaction_cache_key(presentation.id, active_session.id))
+  end
+
+  def active_interaction_for_session(presentation, active_session)
+    Rails.cache.read(self.class.active_interaction_cache_key(presentation.id, active_session.id))
+  end
+
+  def interaction_active_for_submission?(presentation, active_session, interaction_type, interaction_id)
+    interaction = active_interaction_for_session(presentation, active_session)
+    return false unless interaction.is_a?(Hash)
+
+    interaction['type'].to_s == interaction_type.to_s &&
+      interaction['id'].to_s == interaction_id.to_s &&
+      interaction['accepting_answers'] == true
+  end
 
   # Cacher id-en til den aktive økten i 30 sekunder slik at hver eneste WS-interaksjon
   # ikke treffer DB for et oppslag mot presentation_sessions. Cachen blir ugyldiggjort

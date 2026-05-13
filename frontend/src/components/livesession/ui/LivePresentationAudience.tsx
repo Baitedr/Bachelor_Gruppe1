@@ -57,6 +57,7 @@ const LivePresentationAudience = ({
   activeQuestionType,
   hasAnsweredActivePoll,
   hasAnsweredActiveQuestion,
+  interactionAcceptingAnswers,
   totalVotes,
   totalQuestionAnswers,
   questionAnswer,
@@ -86,6 +87,7 @@ const LivePresentationAudience = ({
   activeQuestionType: 'single_choice' | 'open_text'
   hasAnsweredActivePoll: boolean
   hasAnsweredActiveQuestion: boolean
+  interactionAcceptingAnswers: boolean
   totalVotes: number
   totalQuestionAnswers: number
   questionAnswer: string
@@ -190,7 +192,7 @@ const LivePresentationAudience = ({
         <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Avstemning</p>
         <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{typedActivePoll.question}</h3>
       </div>
-      {!hasAnsweredActivePoll ? (
+      {!hasAnsweredActivePoll && interactionAcceptingAnswers ? (
         <div className='grid gap-2 sm:gap-3'>
           {typedActivePoll.options.map((option) => (
             <Button
@@ -205,7 +207,11 @@ const LivePresentationAudience = ({
         </div>
       ) : (
         <div className='space-y-3'>
-          <p className='text-sm text-muted-foreground'>Stemmen din er registrert. Resultater oppdateres fortløpende.</p>
+          {!interactionAcceptingAnswers && !hasAnsweredActivePoll ? (
+            <p className='text-sm text-muted-foreground'>Svar er stengt av presentatøren. Du kan ikke stemme lenger.</p>
+          ) : (
+            <p className='text-sm text-muted-foreground'>Stemmen din er registrert. Resultater oppdateres fortløpende.</p>
+          )}
           {audienceResults.map((option) => (
             <div key={option.id} className='space-y-1'>
               <div className='flex justify-between text-sm'>
@@ -231,7 +237,7 @@ const LivePresentationAudience = ({
         <p className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Spørsmål</p>
         <h3 className='mt-1 text-lg font-semibold leading-snug sm:text-xl'>{typedActiveQuestion.prompt}</h3>
       </div>
-      {!hasAnsweredActiveQuestion ? (
+      {!hasAnsweredActiveQuestion && interactionAcceptingAnswers ? (
         activeQuestionType === 'single_choice' ? (
           <div className='grid gap-2 sm:gap-3'>
             {(typedActiveQuestion.options || []).map((option) => (
@@ -260,7 +266,11 @@ const LivePresentationAudience = ({
         )
       ) : (
         <div className='space-y-3'>
-          <p className='text-sm text-muted-foreground'>Svaret ditt er registrert. Resultater oppdateres fortløpende.</p>
+          {!interactionAcceptingAnswers && !hasAnsweredActiveQuestion ? (
+            <p className='text-sm text-muted-foreground'>Svar er stengt av presentatøren. Du kan ikke svare lenger.</p>
+          ) : (
+            <p className='text-sm text-muted-foreground'>Svaret ditt er registrert. Resultater oppdateres fortløpende.</p>
+          )}
           {activeQuestionType === 'single_choice' ? (
             <>
               {activeQuestionChoiceResults.map((option) => (

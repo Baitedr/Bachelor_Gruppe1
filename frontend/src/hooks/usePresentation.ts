@@ -33,6 +33,8 @@ type CableReceived = {
   question_id?: string
   recent_answers?: string[]
   question_type?: string
+  interaction_type?: string
+  interaction_id?: string | number
   embed_key?: string
   state?: string
   time?: unknown
@@ -65,6 +67,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
 
   /** Synkronisert YouTube/Vimeo-avspilling (presentatør → alle klienter). */
   const [embedPlayback, setEmbedPlayback] = useState<EmbedPlaybackPayload | null>(null)
+  const [interactionAcceptingAnswers, setInteractionAcceptingAnswers] = useState(true)
 
   const cableRef = useRef<ReturnType<typeof createConsumer> | null>(null)
   const subscriptionRef = useRef<{ perform: (action: string, data: object) => void; unsubscribe: () => void } | null>(
@@ -95,6 +98,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
               if (idx !== null) setCurrentSlide(idx)
               setActivePoll(null)
               setActiveQuestion(null)
+              setInteractionAcceptingAnswers(true)
               setEmbedPlayback(null)
               const resume = data.resume_liveboard === true || data.resume_liveboard === 'true'
               if (resume && idx !== null) {
@@ -108,6 +112,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
               if (data.clear_interactions !== false) {
                 setActivePoll(null)
                 setActiveQuestion(null)
+                setInteractionAcceptingAnswers(true)
               }
               const lbIdx = normalizeSlideIndex(data.slide_index)
               if (lbIdx !== null) setLiveboardForSlideIndex(lbIdx)
@@ -119,9 +124,15 @@ export const usePresentation = (presentationId: string | number | null, token: s
             case 'interactions_cleared':
               setActivePoll(null)
               setActiveQuestion(null)
+              setInteractionAcceptingAnswers(true)
+              break
+            case 'interactions_stopped':
+              setInteractionAcceptingAnswers(false)
               break
             case 'poll_activated':
               setActivePoll(data.poll)
+              setActiveQuestion(null)
+              setInteractionAcceptingAnswers(true)
               break
             case 'poll_results':
               setPollResults((prev) => ({
@@ -154,7 +165,9 @@ export const usePresentation = (presentationId: string | number | null, token: s
               lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'question_activated':
+              setActivePoll(null)
               setActiveQuestion(data.question || null)
+              setInteractionAcceptingAnswers(true)
               break
             case 'question_results':
               setQuestionResults((prev) => ({
@@ -291,6 +304,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
     }
   }
 
+  const stopInteractions = () => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('stop_interactions', {})
+    }
+  }
+
   const activateQuestion = (questionId: string | number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_question', { question_id: questionId })
@@ -331,5 +350,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     submittedQuestionIds,
     embedPlayback,
     broadcastEmbedPlayback,
+    stopInteractions,
+    interactionAcceptingAnswers,
   }
 }
