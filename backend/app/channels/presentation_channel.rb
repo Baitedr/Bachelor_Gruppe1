@@ -1,10 +1,12 @@
 class PresentationChannel < ApplicationCable::Channel
   ACTIVE_SESSION_CACHE_VERSION = 'v1'.freeze
   QUESTIONS_LOOKUP_CACHE_VERSION = 'v1'.freeze
-  ACTIVE_INTERACTION_CACHE_VERSION = 'v1'.freeze
+  ACTIVE_INTERACTION_CACHE_VERSION = 'v2'.freeze
+  LIVE_STATE_CACHE_VERSION = 'v1'.freeze
   ACTIVE_SESSION_CACHE_TTL = 30.seconds
   QUESTIONS_LOOKUP_CACHE_TTL = 10.minutes
   ACTIVE_INTERACTION_CACHE_TTL = 12.hours
+  LIVE_STATE_CACHE_TTL = 12.hours
 
   def self.active_session_cache_key(presentation_id)
     "active_session_id:#{ACTIVE_SESSION_CACHE_VERSION}:#{presentation_id}"
@@ -16,6 +18,12 @@ class PresentationChannel < ApplicationCable::Channel
 
   def self.active_interaction_cache_key(presentation_id, session_id)
     "active_interaction:#{ACTIVE_INTERACTION_CACHE_VERSION}:#{presentation_id}:#{session_id}"
+  end
+
+  # Cache-nøkkel for siste kjente lysbilde + liveboard pr. økt. Brukes ved reconnect så
+  # publikum kan synke tilbake til riktig state uten å vente på neste presenter-handling.
+  def self.live_state_cache_key(presentation_id, session_id)
+    "live_state:#{LIVE_STATE_CACHE_VERSION}:#{presentation_id}:#{session_id}"
   end
 
   def self.invalidate_active_session_cache(presentation_id)
@@ -59,6 +67,11 @@ class PresentationChannel < ApplicationCable::Channel
         session_ended: active_session.ended_at.present?
       }
     )
+
+    # Resync: send hele live-staten kun til den nye klienten, så reconnects ikke
+    # ender opp med utdatert eller halv state. Dette er kuren mot "audience ser
+    # gammel slide / poll viser ikke selv om presentatør har aktivert".
+    transmit_live_state_snapshot(presentation, active_session)
   end
 
   def unsubscribed
@@ -74,6 +87,7 @@ class PresentationChannel < ApplicationCable::Channel
 
     active_session.update!(started: true)
     clear_active_interaction_for_session(presentation, active_session)
+    clear_live_state_for_session(presentation, active_session)
     participant_count = active_session.session_participants.count
 
     PresentationChannel.broadcast_to(
@@ -96,6 +110,9 @@ class PresentationChannel < ApplicationCable::Channel
   end
 
   # Synkroniser YouTube/Vimeo-avspilling fra presentatør til publikum (posisjon + play/pause).
+  # `sent_at_ms` (presenter wall-clock i ms) sendes uendret videre så publikum kan
+  # ekstrapolere presentatørens nåværende avspillingsposisjon og kompensere for
+  # nettverkslatens i stedet for å seeke til en utdatert posisjon.
   def sync_embed_playback(data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
@@ -107,17 +124,20 @@ class PresentationChannel < ApplicationCable::Channel
     state = (data['state'] || data[:state]).to_s
     return unless %w[play pause].include?(state)
 
-    PresentationChannel.broadcast_to(
-      presentation,
-      {
-        type: 'embed_playback',
-        slide_index: slide_index,
-        embed_key: embed_key,
-        state: state,
-        time: (data['time'] || data[:time]).to_f,
-        seq: Integer(data['seq'] || data[:seq] || 0)
-      }
-    )
+    raw_sent_at = data['sent_at_ms'] || data[:sent_at_ms]
+    sent_at_ms = raw_sent_at.nil? ? nil : raw_sent_at.to_f
+
+    payload = {
+      type: 'embed_playback',
+      slide_index: slide_index,
+      embed_key: embed_key,
+      state: state,
+      time: (data['time'] || data[:time]).to_f,
+      seq: Integer(data['seq'] || data[:seq] || 0)
+    }
+    payload[:sent_at_ms] = sent_at_ms if sent_at_ms
+
+    PresentationChannel.broadcast_to(presentation, payload)
   end
 
   # Presentatør navigerer til et spesifikt lysbilde, og nullstiller aktive polls for å sikre korrekt visning.
@@ -131,13 +151,23 @@ class PresentationChannel < ApplicationCable::Channel
     return if slide_index.negative?
 
     # Slik at gjenåpning av lysbilde ikke beholder gammel aktiv poll i DB.
-    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    # Vi nullstiller polls på tvers av hele presentasjonen — ikke bare gjeldende slide —
+    # for å unngå at stale `is_active=true` blir liggende på en annen slide etter slidebytte.
+    deactivate_all_polls(presentation)
     active_session = active_session_for_presentation(presentation)
     clear_active_interaction_for_session(presentation, active_session) if active_session
 
     resume_raw = data['resume_liveboard']
     resume_raw = data[:resume_liveboard] if resume_raw.nil?
     resume_liveboard = resume_raw == true || resume_raw.to_s == 'true'
+
+    if active_session
+      update_live_state_for_session(presentation, active_session) do |state|
+        state['current_slide'] = slide_index
+        # Slide-bytte resetter liveboard med mindre presentatør eksplisitt vil gjenoppta det.
+        state['liveboard_slide_index'] = resume_liveboard ? slide_index : nil
+      end
+    end
 
     payload = { type: 'slide_change', slide_index: slide_index }
     payload[:resume_liveboard] = true if resume_liveboard
@@ -150,7 +180,7 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
-    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    deactivate_all_polls(presentation)
     active_session = active_session_for_presentation(presentation)
     clear_active_interaction_for_session(presentation, active_session) if active_session
 
@@ -161,33 +191,42 @@ class PresentationChannel < ApplicationCable::Channel
   end
 
   # Låser nåværende interaksjon slik at publikum fortsatt ser den, men ikke kan sende nye svar.
+  #
+  # Idempotent og ufeilbarlig: broadcaster ALLTID `interactions_stopped` til publikum, selv om
+  # cachen er tom eller den aktive interaksjonen ikke kan slås opp (f.eks. fordi en annen
+  # Puma-arbeider håndterte aktiveringen og vår lokale cache er fersk). Tidligere ble denne
+  # tidlig-returnert hvis cache-staten manglet, og det er den direkte årsaken til at "Stopp"-
+  # knappen ikke fungerte på deploy.
   def stop_interactions(_data)
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
     active_session = active_session_for_presentation(presentation)
-    return unless active_session
 
-    interaction = active_interaction_for_session(presentation, active_session)
-    return unless interaction.is_a?(Hash)
-    return unless interaction['type'].present? && interaction['id'].present?
+    interaction_type = nil
+    interaction_id = nil
 
-    set_active_interaction_for_session(
-      presentation,
-      active_session,
-      interaction['type'],
-      interaction['id'],
-      accepting_answers: false
-    )
+    if active_session
+      interaction = active_interaction_for_session(presentation, active_session)
+      if interaction.is_a?(Hash) && interaction['type'].present? && interaction['id'].present?
+        interaction_type = interaction['type']
+        interaction_id = interaction['id']
+        # Oppdater cachen så framtidige innsendinger blir avvist av `interaction_active_for_submission?`.
+        set_active_interaction_for_session(
+          presentation,
+          active_session,
+          interaction_type,
+          interaction_id,
+          accepting_answers: false
+        )
+      end
+    end
 
-    PresentationChannel.broadcast_to(
-      presentation,
-      {
-        type: 'interactions_stopped',
-        interaction_type: interaction['type'],
-        interaction_id: interaction['id']
-      }
-    )
+    payload = { type: 'interactions_stopped' }
+    payload[:interaction_type] = interaction_type if interaction_type
+    payload[:interaction_id] = interaction_id if interaction_id
+
+    PresentationChannel.broadcast_to(presentation, payload)
   end
 
   # Menti-lignende steg 2: alle ser liveboard-resultater for gjeldende lysbilde (slide_index fra klient).
@@ -202,9 +241,16 @@ class PresentationChannel < ApplicationCable::Channel
     slide_index = Integer(raw)
     return if slide_index.negative?
 
-    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    deactivate_all_polls(presentation)
     active_session = active_session_for_presentation(presentation)
     clear_active_interaction_for_session(presentation, active_session) if active_session
+
+    if active_session
+      update_live_state_for_session(presentation, active_session) do |state|
+        state['liveboard_slide_index'] = slide_index
+        state['current_slide'] ||= slide_index
+      end
+    end
 
     # Én melding: unngår at klienter prosesserer to WS-events i feil rekkefølge.
     PresentationChannel.broadcast_to(
@@ -222,6 +268,13 @@ class PresentationChannel < ApplicationCable::Channel
     presentation = Presentation.find(params[:presentation_id])
     return unless presentation.owner_id == current_user.id
 
+    active_session = active_session_for_presentation(presentation)
+    if active_session
+      update_live_state_for_session(presentation, active_session) do |state|
+        state['liveboard_slide_index'] = nil
+      end
+    end
+
     PresentationChannel.broadcast_to(
       presentation,
       { type: 'liveboard_dismissed' }
@@ -236,10 +289,14 @@ class PresentationChannel < ApplicationCable::Channel
     question = find_question_in_presentation(presentation, data['question_id'])
     return unless question
 
-    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+    deactivate_all_polls(presentation)
     active_session = active_session_for_presentation(presentation)
     return unless active_session
     set_active_interaction_for_session(presentation, active_session, 'question', question[:id], accepting_answers: true)
+    # Liveboard skal lukkes når en ny aktiv interaksjon starter.
+    update_live_state_for_session(presentation, active_session) do |state|
+      state['liveboard_slide_index'] = nil
+    end
 
     PresentationChannel.broadcast_to(
       presentation,
@@ -371,12 +428,17 @@ class PresentationChannel < ApplicationCable::Channel
     return unless presentation.owner_id == current_user.id
 
     poll = Poll.includes(:poll_options, :slide).find(data['poll_id'])
-    poll.slide.polls.update_all(is_active: false)
+    # Sikrer at kun ÉN poll i hele presentasjonen er aktiv. Tidligere ble bare polls på
+    # samme slide deaktivert, så stale `is_active=true` kunne ligge på tidligere slides.
+    deactivate_all_polls(presentation)
     poll.update!(is_active: true)
 
     active_session = active_session_for_presentation(presentation)
     return unless active_session
     set_active_interaction_for_session(presentation, active_session, 'poll', poll.id, accepting_answers: true)
+    update_live_state_for_session(presentation, active_session) do |state|
+      state['liveboard_slide_index'] = nil
+    end
 
     PresentationChannel.broadcast_to(
       presentation,
@@ -423,6 +485,11 @@ class PresentationChannel < ApplicationCable::Channel
 
   private
 
+  # Nullstiller alle polls i hele presentasjonen. Bryter ikke historikken (PollResponse beholdes).
+  def deactivate_all_polls(presentation)
+    Poll.joins(:slide).where(slides: { presentation_id: presentation.id }).update_all(is_active: false)
+  end
+
   def set_active_interaction_for_session(presentation, active_session, interaction_type, interaction_id, accepting_answers: true)
     Rails.cache.write(
       self.class.active_interaction_cache_key(presentation.id, active_session.id),
@@ -445,11 +512,95 @@ class PresentationChannel < ApplicationCable::Channel
 
   def interaction_active_for_submission?(presentation, active_session, interaction_type, interaction_id)
     interaction = active_interaction_for_session(presentation, active_session)
-    return false unless interaction.is_a?(Hash)
 
-    interaction['type'].to_s == interaction_type.to_s &&
-      interaction['id'].to_s == interaction_id.to_s &&
-      interaction['accepting_answers'] == true
+    if interaction.is_a?(Hash)
+      return interaction['type'].to_s == interaction_type.to_s &&
+             interaction['id'].to_s == interaction_id.to_s &&
+             interaction['accepting_answers'] == true
+    end
+
+    # Cache mangler (f.eks. en annen Puma-arbeider håndterte aktiveringen, eller TTL gikk ut).
+    # I stedet for å avvise svar — som ville være tilbakefallet til den gamle implementasjonen
+    # som "fungerte sjeldent" — godtar vi svaret hvis kilden i DB bekrefter at interaksjonen
+    # er aktiv. Presentatør kan fortsatt eksplisitt stenge via `stop_interactions`.
+    case interaction_type.to_s
+    when 'poll'
+      Poll.where(id: interaction_id, is_active: true).exists?
+    when 'question'
+      find_question_in_presentation(presentation, interaction_id).present?
+    else
+      false
+    end
+  end
+
+  def live_state_for_session(presentation, active_session)
+    Rails.cache.read(self.class.live_state_cache_key(presentation.id, active_session.id)) || {}
+  end
+
+  # Oppdaterer cachet live-state (gjeldende slide + liveboard) atomisk i forhold til kalleren.
+  def update_live_state_for_session(presentation, active_session)
+    key = self.class.live_state_cache_key(presentation.id, active_session.id)
+    state = Rails.cache.read(key) || {}
+    yield state
+    Rails.cache.write(key, state, expires_in: LIVE_STATE_CACHE_TTL)
+  end
+
+  def clear_live_state_for_session(presentation, active_session)
+    Rails.cache.delete(self.class.live_state_cache_key(presentation.id, active_session.id))
+  end
+
+  # Send full snapshot kun til den nye klienten (transmit, ikke broadcast). Inkluderer
+  # gjeldende lysbilde, liveboard-status og aktiv interaksjon med ferdig serialisert
+  # payload + siste resultater. Klienten kan da rendre korrekt med en gang og slipper
+  # å vente på neste presenter-handling.
+  def transmit_live_state_snapshot(presentation, active_session)
+    state = live_state_for_session(presentation, active_session)
+    current_slide = state['current_slide']
+    liveboard_slide_index = state['liveboard_slide_index']
+
+    interaction = active_interaction_for_session(presentation, active_session)
+    interaction_payload = nil
+
+    if interaction.is_a?(Hash) && interaction['type'].present? && interaction['id'].present?
+      case interaction['type'].to_s
+      when 'poll'
+        poll = Poll.includes(:poll_options).find_by(id: interaction['id'])
+        if poll
+          poll_results = poll_results_for_session(poll, active_session)
+          interaction_payload = {
+            type: 'poll',
+            accepting_answers: interaction['accepting_answers'] == true,
+            poll: serialize_poll(poll, active_session),
+            poll_results: poll_results
+          }
+        end
+      when 'question'
+        question = find_question_in_presentation(presentation, interaction['id'])
+        if question
+          store = question_store_for_session(active_session.id, question[:id])
+          interaction_payload = {
+            type: 'question',
+            accepting_answers: interaction['accepting_answers'] == true,
+            question: serialize_question(question),
+            question_results: {
+              question_type: question[:type],
+              results: store['results'] || {},
+              total: store['total'] || 0,
+              recent_answers: store['recent_answers'] || []
+            }
+          }
+        end
+      end
+    end
+
+    transmit(
+      {
+        type: 'live_state_snapshot',
+        current_slide: current_slide,
+        liveboard_slide_index: liveboard_slide_index,
+        active_interaction: interaction_payload
+      }
+    )
   end
 
   # Cacher id-en til den aktive økten i 30 sekunder slik at hver eneste WS-interaksjon
@@ -478,23 +629,26 @@ class PresentationChannel < ApplicationCable::Channel
     session
   end
 
-  # Hjelpemetode for å sende oppdaterte resultater for en poll til alle deltakere i sanntid, basert på svarene som er lagret i databasen for den aktive økten.
-  def broadcast_poll_results(poll, active_session)
-    return unless active_session
-
+  def poll_results_for_session(poll, active_session)
     results = poll.poll_responses
                   .where(presentation_session_id: active_session.id)
                   .group(:answer)
                   .count
-    total = results.values.sum
+    { results: results, total: results.values.sum }
+  end
 
+  # Hjelpemetode for å sende oppdaterte resultater for en poll til alle deltakere i sanntid, basert på svarene som er lagret i databasen for den aktive økten.
+  def broadcast_poll_results(poll, active_session)
+    return unless active_session
+
+    payload = poll_results_for_session(poll, active_session)
     PresentationChannel.broadcast_to(
       poll.slide.presentation,
       {
         type: 'poll_results',
         poll_id: poll.id,
-        results: results,
-        total: total
+        results: payload[:results],
+        total: payload[:total]
       }
     )
   end

@@ -26,4 +26,21 @@ Rails.application.configure do
 
   # Trust X-Forwarded-Proto from the edge proxy so OAuth callback URLs use https.
   config.assume_ssl = ActiveModel::Type::Boolean.new.cast(ENV.fetch("RAILS_ASSUME_SSL", "true"))
+
+  # Live-økt-state (aktiv interaksjon, gjeldende lysbilde, liveboard, spørsmål-svar)
+  # ligger i Rails.cache. Uten en delt cache faller alle Puma-arbeidere tilbake til
+  # :memory_store pr. prosess — det er årsaken til at "Stopp"-knappen og spørsmål-
+  # innsendinger feilet på deploy: kanalen som mottok presentatørens "stop"-melding
+  # hadde tom cache fordi aktiveringen ble håndtert av en annen arbeider/container.
+  # Vi gjenbruker REDIS_URL som ActionCable allerede er konfigurert med, men holder
+  # cache i et eget navnerom så Cable-meldinger og cache-nøkler aldri kolliderer.
+  config.cache_store = :redis_cache_store, {
+    url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" },
+    namespace: "proslides_cache",
+    expires_in: 12.hours,
+    reconnect_attempts: 2,
+    error_handler: ->(method:, returning:, exception:) do
+      Rails.logger.warn("[cache] #{method} failed: #{exception.class}: #{exception.message}")
+    end,
+  }
 end

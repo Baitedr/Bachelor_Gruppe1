@@ -69,6 +69,13 @@ export type EmbedIframeOptions = {
     minimalChrome?: boolean;
     /** Autoplay: lar spilleren laste og starte umiddelbart (reduserer buffering for publikum). */
     autoplay?: boolean;
+    /**
+     * Tving spiller til å starte muted. Påkrevd for publikum slik at autoplay-policy
+     * i Chrome/Firefox/Safari aldri blokkerer `playVideo`-kommandoen.
+     * Selve volumet styres deretter via Player-APIet (setVolume/unMute) når brukeren
+     * eksplisitt skrur på lyden.
+     */
+    forceMuted?: boolean;
 };
 
 /** Bygger embed-URL med riktige query-parametre for YouTube nocookie / Vimeo player. */
@@ -85,6 +92,10 @@ export function getEmbedIframeSrc(provider: EmbedProvider, id: string, options: 
         }
         if (hideControls) params.set('controls', '0');
         if (options.autoplay) params.set('autoplay', '1');
+        // Browsers blokkerer autoplay med lyd uten brukerinteraksjon.
+        // Vi starter spilleren muted slik at `playVideo()` aldri stilner ut;
+        // publikum kan deretter skru på lyd via volumkontrollen (setVolume + unMute).
+        if (options.forceMuted) params.set('mute', '1');
         const minimal = Boolean(options.minimalChrome);
         if (minimal) {
             params.set('modestbranding', '1');
@@ -100,6 +111,7 @@ export function getEmbedIframeSrc(provider: EmbedProvider, id: string, options: 
     if (enableApi) vParams.set('api', '1');
     if (hideControls) vParams.set('controls', '0');
     if (options.autoplay) vParams.set('autoplay', '1');
+    if (options.forceMuted) vParams.set('muted', '1');
     vParams.set('playsinline', '1');
     if (hideControls && options.minimalChrome) {
         vParams.set('title', '0');

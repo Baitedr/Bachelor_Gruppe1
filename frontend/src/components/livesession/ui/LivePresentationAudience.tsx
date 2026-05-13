@@ -425,6 +425,17 @@ const LivePresentationAudience = ({
     </section>
   )
 
+  // Defensive: kun ÉN aktiv interaksjonsseksjon kan vises om gangen. Hooken garanterer
+  // allerede at activePoll/activeQuestion er gjensidig utelukkende (via felles intern
+  // ActiveInteractionState), men ved å håndheve det også i renderingen får vi belt-and-
+  // suspenders mot fremtidige regresjoner. Poll prioriteres hvis begge skulle ende
+  // truthy i state (skal ikke kunne skje).
+  const activeInteractionSection = activePoll
+    ? pollSection
+    : activeQuestion
+      ? questionSection
+      : null
+
   const mobileInteractionView = (
     // Mobil får egen, lineær layout for bedre lesbarhet og touch-flyt.
     <div className={styles.mobileWrap}>
@@ -432,11 +443,8 @@ const LivePresentationAudience = ({
         <span className={styles.mobileTitle}>{presentation.title}</span>
         <span className={styles.mobileSlideMeta}>Lysbilde {currentSlide + 1} av {slideCount}</span>
       </div>
-      {hasActiveInteraction ? (
-        <>
-          {pollSection}
-          {questionSection}
-        </>
+      {hasActiveInteraction && activeInteractionSection ? (
+        activeInteractionSection
       ) : inLiveboardResults ? (
         renderLiveboardCards()
       ) : (
@@ -561,8 +569,9 @@ const LivePresentationAudience = ({
                 </div>
               )}
 
-              {!inLiveboardResults && hasActiveInteraction && (
-                // Overlay for aktiv poll/spørsmål mens svar samles inn.
+              {!inLiveboardResults && hasActiveInteraction && activeInteractionSection && (
+                // Overlay for aktiv poll/spørsmål mens svar samles inn. Rendrer kun
+                // ÉN seksjon — se kommentar om `activeInteractionSection` over.
                 <div
                   className={styles.overlayRoot}
                   role='dialog'
@@ -570,8 +579,7 @@ const LivePresentationAudience = ({
                 >
                   <div className={styles.overlayScrollInteraction}>
                     <div className={styles.overlayInteractionCenter}>
-                      {pollSection}
-                      {questionSection}
+                      {activeInteractionSection}
                     </div>
                   </div>
                 </div>

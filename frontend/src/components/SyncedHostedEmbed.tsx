@@ -3,11 +3,11 @@ import type { EmbedProvider } from '../lib/embedUrls';
 import { getEmbedIframeSrc } from '../lib/embedUrls';
 import type { EmbedPlaybackPayload } from '../lib/embedLiveShared';
 import {
-    applyHostedPlaybackToIframe,
-    applyHostedVolumeToIframe,
+    createAudiencePlaybackController,
     ensureVimeoPlayerScript,
     ensureYoutubeIframeApi,
-    type EmbedPlaybackCoalesceState,
+    type AudiencePlayerController,
+    type PresenterIntent,
 } from '../lib/hostedPlayerControl';
 
 type LayoutPct = {
@@ -21,12 +21,6 @@ const YT_ENDED = 0;
 const YT_PLAYING = 1;
 const YT_PAUSED = 2;
 const YT_BUFFERING = 3;
-
-/**
- * Delay after iframe `onLoad` before we consider the embedded player ready for postMessage.
- * YouTube's internal JS needs to boot after the HTML loads — commands sent before that are silently lost.
- */
-const PLAYER_READY_DELAY_MS = 1200;
 
 /** Stabil nøkkel som matcher WebSocket-payload (`provider:id:indeks`). */
 function buildEmbedKey(provider: EmbedProvider, embedId: string, embedIndex: number) {
@@ -47,8 +41,13 @@ type VimeoPlayerLike = {
 };
 
 /**
- * Innebygd YouTube/Vimeo i live-modus: presentatør sender avspilling via ActionCable,
- * publikum får chromeless iframe og kan ikke styre spilleren (pointer-events + controls=0).
+ * Innebygd YouTube/Vimeo i live-modus.
+ *
+ * Presenteren bruker spiller-APIet til å detektere state-bytter og broadcaster
+ * `embed_playback`-meldinger via ActionCable. Publikum bruker en dedikert
+ * publikumkontroller som leser **faktisk** avspillingsposisjon og korrigerer drift
+ * ved å justere `playbackRate` i stedet for å seeke. Det forhindrer den "pause +
+ * skip-back" løkken som oppstod på deploy når presentatør eller publikum bufret.
  */
 export default function SyncedHostedEmbed({
     layout,
@@ -76,74 +75,25 @@ export default function SyncedHostedEmbed({
     const iframeDomId = `hosted-embed-${slideIndex}-${embedIndex}-${reactId}`;
     const embedKey = buildEmbedKey(provider, embedId, embedIndex);
     const seqRef = useRef(0);
-    const lastAppliedSeqRef = useRef(-1);
-    const playbackCoalesceRef = useRef<EmbedPlaybackCoalesceState>({
-        lastAppliedState: null,
-        lastAppliedTime: 0,
-        lastAppliedAt: 0,
-    });
     const ytPlayerRef = useRef<YtPlayerLike | null>(null);
     const vimeoPlayerRef = useRef<VimeoPlayerLike | null>(null);
     const syncTimerRef = useRef<number | null>(null);
     const [iframeLoaded, setIframeLoaded] = useState(false);
 
-    // Audience: true once iframe loaded AND player-ready delay elapsed.
-    const [playerReady, setPlayerReady] = useState(false);
-    const playerReadyTimerRef = useRef<number | null>(null);
-
-    // Audience: buffer the latest pending playback payload so we can replay it once the player is ready.
-    const pendingPlaybackRef = useRef<EmbedPlaybackPayload | null>(null);
-
-    // Ny kilde eller lysbilde: nullstill sekvens slik at første synk-melding ikke droppes.
-    useEffect(() => {
-        lastAppliedSeqRef.current = -1;
-        playbackCoalesceRef.current = { lastAppliedState: null, lastAppliedTime: 0, lastAppliedAt: 0 };
-        pendingPlaybackRef.current = null;
-        setIframeLoaded(false);
-        setPlayerReady(false);
-        if (playerReadyTimerRef.current !== null) {
-            window.clearTimeout(playerReadyTimerRef.current);
-            playerReadyTimerRef.current = null;
-        }
-    }, [slideIndex, embedId, provider]);
-
-    // When iframeLoaded turns true, start the player-ready delay.
-    useEffect(() => {
-        if (!iframeLoaded || mode !== 'audience') {
-            setPlayerReady(false);
-            return;
-        }
-        playerReadyTimerRef.current = window.setTimeout(() => {
-            setPlayerReady(true);
-            playerReadyTimerRef.current = null;
-        }, PLAYER_READY_DELAY_MS);
-        return () => {
-            if (playerReadyTimerRef.current !== null) {
-                window.clearTimeout(playerReadyTimerRef.current);
-                playerReadyTimerRef.current = null;
-            }
-        };
-    }, [iframeLoaded, mode]);
-
-    // When playerReady becomes true, flush the pending playback command.
-    useEffect(() => {
-        if (!playerReady || mode !== 'audience') return;
-        const pending = pendingPlaybackRef.current;
-        if (!pending) return;
-        const iframe = iframeRef.current;
-        if (!iframe?.contentWindow) return;
-
-        playbackCoalesceRef.current = { lastAppliedState: null, lastAppliedTime: 0, lastAppliedAt: 0 };
-        lastAppliedSeqRef.current = pending.seq;
-        applyHostedPlaybackToIframe(iframe, provider, pending.state, pending.time, playbackCoalesceRef.current);
-        pendingPlaybackRef.current = null;
-    }, [playerReady, mode, provider]);
+    // Publikum: kontroller som eier YT.Player/Vimeo.Player og kjører reconcile-loopen.
+    const audienceControllerRef = useRef<AudiencePlayerController | null>(null);
+    // Siste embedPlayback vi forsøkte å levere — brukes når kontrolleren ikke er klar enda.
+    const pendingIntentRef = useRef<PresenterIntent | null>(null);
 
     const hideControls = mode === 'audience';
     const src = getEmbedIframeSrc(provider, embedId, {
         hideControls,
         enableApi: true,
         minimalChrome: hideControls,
+        // Publikum starter alltid muted i URLen slik at autoplay-policyer aldri
+        // blokkerer den initielle play-kommandoen. Lyd skrus på via API når brukeren
+        // selv vil ha lyd (audienceHostedVolume > 0 og ikke mutet).
+        forceMuted: mode === 'audience',
     });
 
     const sendBroadcast = useCallback(
@@ -156,6 +106,7 @@ export default function SyncedHostedEmbed({
                 state,
                 time,
                 seq,
+                sent_at_ms: Date.now(),
             });
         },
         [broadcastEmbedPlayback, embedKey, slideIndex],
@@ -188,6 +139,13 @@ export default function SyncedHostedEmbed({
             });
         }, 3000);
     };
+
+    // Reset alle ref-er når kilde/lysbilde endres (ny iframe kommer).
+    useEffect(() => {
+        pendingIntentRef.current = null;
+        seqRef.current = 0;
+        setIframeLoaded(false);
+    }, [slideIndex, embedId, provider, mode]);
 
     // Presentatør: YouTube IFrame API for play/pause og tidsstempel.
     useEffect(() => {
@@ -297,38 +255,78 @@ export default function SyncedHostedEmbed({
         };
     }, [mode, provider, iframeLoaded, sendBroadcast]);
 
-    // Publikum: apply playback commands only after playerReady; buffer them until then.
+    // Publikum: initialiser den dedikerte playback-kontrolleren når iframe er lastet.
+    useEffect(() => {
+        if (mode !== 'audience' || !iframeLoaded) return;
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+
+        audienceControllerRef.current?.destroy();
+        const controller = createAudiencePlaybackController(provider, iframe, iframeDomId);
+        audienceControllerRef.current = controller;
+
+        // Spol ut buffret pakke (sendt før spilleren var klar).
+        void controller.ready
+            .then(() => {
+                if (audienceControllerRef.current !== controller) return;
+                if (audienceHostedVolume !== undefined) {
+                    controller.setVolume(audienceHostedVolume, audienceHostedVolume === 0);
+                }
+                const pending = pendingIntentRef.current;
+                if (pending) {
+                    controller.setPresenterIntent(pending);
+                    pendingIntentRef.current = null;
+                }
+            })
+            .catch(() => {
+                // Spilleren feilet — vi har ingen retry-mekanisme nå, men ny iframe-mount
+                // (slide-bytte, ny URL) vil prøve på nytt.
+            });
+
+        return () => {
+            controller.destroy();
+            if (audienceControllerRef.current === controller) {
+                audienceControllerRef.current = null;
+            }
+        };
+        // audienceHostedVolume settes uavhengig via egen effekt.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mode, provider, iframeLoaded, iframeDomId]);
+
+    // Publikum: lever ny embedPlayback til kontrolleren (eller buffer til ready).
     useEffect(() => {
         if (mode !== 'audience') return;
         if (!embedPlayback) return;
         if (embedPlayback.slide_index !== slideIndex) return;
         if (embedPlayback.embed_key !== embedKey) return;
-        if (embedPlayback.seq <= lastAppliedSeqRef.current) return;
 
-        if (!playerReady) {
-            pendingPlaybackRef.current = embedPlayback;
-            return;
+        const intent: PresenterIntent = {
+            state: embedPlayback.state,
+            time: Math.max(0, Number(embedPlayback.time) || 0),
+            receivedAtMs: Date.now(),
+            sentAtMs:
+                typeof embedPlayback.sent_at_ms === 'number' && Number.isFinite(embedPlayback.sent_at_ms)
+                    ? embedPlayback.sent_at_ms
+                    : undefined,
+            seq: Number(embedPlayback.seq) || 0,
+        };
+
+        const controller = audienceControllerRef.current;
+        if (controller) {
+            controller.setPresenterIntent(intent);
+        } else {
+            pendingIntentRef.current = intent;
         }
+    }, [embedPlayback, embedKey, mode, slideIndex]);
 
-        const iframe = iframeRef.current;
-        if (!iframe?.contentWindow) return;
-
-        lastAppliedSeqRef.current = embedPlayback.seq;
-        applyHostedPlaybackToIframe(
-            iframe,
-            provider,
-            embedPlayback.state,
-            embedPlayback.time,
-            playbackCoalesceRef.current,
-        );
-    }, [embedPlayback, embedKey, mode, provider, slideIndex, playerReady]);
-
+    // Publikum: oppdater volum via kontrolleren når brukeren justerer slider/mute.
     useEffect(() => {
-        if (mode !== 'audience' || !playerReady || audienceHostedVolume === undefined) return;
-        const iframe = iframeRef.current;
-        if (!iframe?.contentWindow) return;
-        applyHostedVolumeToIframe(iframe, provider, audienceHostedVolume);
-    }, [mode, playerReady, provider, audienceHostedVolume]);
+        if (mode !== 'audience') return;
+        if (audienceHostedVolume === undefined) return;
+        const controller = audienceControllerRef.current;
+        if (!controller) return;
+        controller.setVolume(audienceHostedVolume, audienceHostedVolume === 0);
+    }, [mode, audienceHostedVolume]);
 
     const pointerEvents = mode === 'audience' ? 'none' : 'auto';
 
