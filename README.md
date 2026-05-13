@@ -1,48 +1,60 @@
-# ProSlides (bachelor project)
+# ProSlides (bachelorprosjekt)
 
-ProSlides is a web app for creating and presenting slide decks, with a canvas-based editor (Fabric.js), live presentation sessions over Action Cable, audience interaction from phones, and optional polls. This repository is a **monorepo**:
+ProSlides er en webapp for a lage og holde presentasjoner. Losningen har redigering av slides i nettleseren (Fabric.js), live-presentasjon med deltakere via Action Cable, samt publikumsinteraksjon fra mobil.
 
-| Path | Role |
+Repoet er et monorepo:
+
+| Mappe | Innhold |
 |------|------|
-| **`frontend/`** | Vite + React + TypeScript SPA (Tailwind, shadcn-style UI) |
-| **`backend/`** | Rails 8 JSON API, PostgreSQL, OmniAuth (Google/GitHub), Action Cable |
+| `frontend/` | Vite + React + TypeScript (SPA) |
+| `backend/` | Rails 8 API, PostgreSQL, OmniAuth og Action Cable |
 
-The dev server proxies **`/api`** and **`/cable`** to the Rails app so the browser can talk to one origin (`http://localhost:5173`).
+## Funksjoner
+
+- Lage, redigere og lagre presentasjoner
+- Starte live-sesjoner med join-kode
+- Publikum kan koble seg til fra mobil/nettleser
+- Polls/sporsmal i live-visning
+- OAuth-stotte for Google/GitHub (valgfritt)
 
 ---
 
-## Local development
+## Lokal utvikling
 
-### Prerequisites
+### Krav
 
-- **Ruby** `~> 3.4.8` and Bundler (see `backend/Gemfile`)
-- **Node.js** (current LTS is fine) and npm
-- **PostgreSQL** reachable via a connection URL (local Postgres or a hosted URL such as Neon)
+- Ruby `~> 3.4.8` + Bundler (se `backend/Gemfile`)
+- Node.js (LTS) + npm
+- PostgreSQL (lokalt eller hostet), tilgjengelig via `DATABASE_URL`
 
-Redis is **not** required for local Action Cable: `backend/config/cable.yml` uses the `async` adapter in development.
+Merk: Redis er ikke nodvendig lokalt. `backend/config/cable.yml` bruker `async` i development.
 
-### 1. Backend
+### 1) Start backend
 
 ```bash
 cd backend
 cp .env.example .env
 ```
 
-Edit **`.env`**: set at least **`DATABASE_URL`** (PostgreSQL) and **`SECRET_KEY_BASE`** (any long random string is enough for local use). Optional variables (OAuth, CORS, `FRONTEND_URL`, etc.) are documented in `.env.example`.
+Oppdater `backend/.env`:
 
-Then:
+- `DATABASE_URL` ma peke til PostgreSQL
+- `SECRET_KEY_BASE` ma settes (kan vaere en tilfeldig streng lokalt)
+- OAuth/CORS-variabler er valgfritt og dokumentert i `.env.example`
+
+Kjor deretter:
 
 ```bash
 bundle install
-bin/setup    # installs gems, runs db:prepare, clears logs/tmp
+bin/setup
 bin/rails server
 ```
 
-Rails listens on **`http://localhost:3000`** by default.
+Backend kjores som standard pa `http://localhost:3000`.
 
-### 2. Frontend
+### 2) Start frontend
 
-In another terminal:
+I et nytt terminalvindu:
 
 ```bash
 cd frontend
@@ -50,22 +62,32 @@ npm install
 npm run dev
 ```
 
-Open **`http://localhost:5173`**. The Vite dev server proxies API and WebSocket traffic to the backend (default **`http://localhost:3000`**).
+Frontend kjores pa `http://localhost:5173`.
 
-Optional: copy **`frontend/.env.example`** to **`frontend/.env`** if you need to point the proxy at another backend (e.g. `VITE_DEV_BACKEND_ORIGIN=http://localhost:3002`) or override `VITE_API_BASE_URL` / `VITE_WS_URL`.
+Vite-proxy sender:
 
-### 3. Useful commands
+- `/api` -> backend
+- `/cable` -> backend (WebSocket)
 
-| Where | Command | Purpose |
+Hvis du trenger annen backend-origin i dev, kopier `frontend/.env.example` til `frontend/.env` og sett for eksempel:
+
+```bash
+VITE_DEV_BACKEND_ORIGIN=http://localhost:3002
+```
+
+### Nyttige kommandoer
+
+| Hvor | Kommando | Hva den gjor |
 |-------|---------|---------|
-| `frontend/` | `npm run build` | Production build |
-| `frontend/` | `npm run lint` | ESLint |
-| `frontend/` | `npm run test:e2e` | Playwright end-to-end tests |
+| `frontend/` | `npm run lint` | Kjorer ESLint |
+| `frontend/` | `npm run build` | Lager produksjonsbuild |
+| `frontend/` | `npm run test:e2e` | Kjorer Playwright E2E-tester |
+| `frontend/` | `npm run test:e2e:ui` | Apner Playwright UI-modus |
 
 ---
 
-## Project layout (high level)
+## Struktur (kort)
 
-- **`frontend/src/`** — routes/UI: editor, live session, lobby, polls, login
-- **`backend/app/`** — controllers, models, channels, jobs
-- **`backend/config/`** — database, cable, routes, environment config
+- `frontend/src/`: UI, editor, live session, lobby, polls og autentisering
+- `backend/app/`: controllere, modeller og channels
+- `backend/config/`: routes, database, cable og miljo-konfig
