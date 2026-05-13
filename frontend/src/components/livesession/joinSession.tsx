@@ -44,6 +44,7 @@ const PhoneInteraction: React.FC<{ onJoined?: (payload: JoinResult) => void }> =
         message: '',
     });
 
+    //Resetter join status til sin initielle status når komponenten mounter
     useEffect(() => {
         setJoinStatus({ type: null, title: '', message: '' });
     }, []);
@@ -55,6 +56,11 @@ const PhoneInteraction: React.FC<{ onJoined?: (payload: JoinResult) => void }> =
         return 'Noe gikk galt. Prøv igjen.';
     };
 
+    /*Håndterer form submission for å bli med i en live session med kode.
+    * Validerer bli med koden (må være 4 tegn).
+    * Prøver å bli med som en vanlig bruker først, hvis den feiler prøves gjest istedet.
+    * 
+    */
     const handleJoinInteraction = async (event: React.FormEvent) => {
         event.preventDefault();
 
