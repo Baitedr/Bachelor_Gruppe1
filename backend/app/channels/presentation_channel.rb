@@ -88,6 +88,31 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
+  # Synkroniser YouTube/Vimeo-avspilling fra presentatør til publikum (posisjon + play/pause).
+  def sync_embed_playback(data)
+    presentation = Presentation.find(params[:presentation_id])
+    return unless presentation.owner_id == current_user.id
+
+    slide_index = Integer(data['slide_index'] || data[:slide_index] || 0)
+    embed_key = (data['embed_key'] || data[:embed_key]).to_s
+    return if embed_key.blank?
+
+    state = (data['state'] || data[:state]).to_s
+    return unless %w[play pause].include?(state)
+
+    PresentationChannel.broadcast_to(
+      presentation,
+      {
+        type: 'embed_playback',
+        slide_index: slide_index,
+        embed_key: embed_key,
+        state: state,
+        time: (data['time'] || data[:time]).to_f,
+        seq: Integer(data['seq'] || data[:seq] || 0)
+      }
+    )
+  end
+
   # Presentatør navigerer til et spesifikt lysbilde, og nullstiller aktive polls for å sikre korrekt visning.
   def navigate_slide(data)
     presentation = Presentation.find(params[:presentation_id])

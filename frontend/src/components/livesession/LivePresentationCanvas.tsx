@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StaticCanvas } from 'fabric'
-import type { ReactNode } from 'react'
+import { hideFabricEmbedPlaceholdersForLiveOverlay } from '../../lib/fabricSlideObjects'
+import SlideEmbedOverlays, { type SlideEmbedLiveContext } from '../SlideEmbedOverlays'
 
 /** Standard lysbildestørrelse når JSON mangler eksplisitte mål (16:9). */
 const BASE_WIDTH = 960
@@ -18,19 +19,32 @@ export type LiveSlideCanvasData = {
 /**
  * Statisk Fabric-visning av ett lysbilde under live (presentatør eller publikum).
  * Skalerer proporsjonalt til foreldrens bredde/høyde via ResizeObserver.
+ * Innebygde videoer: HTML-lag over canvas; Fabric-placeholdere skjules for å unngå synlig «blødning».
  */
 const LivePresentationCanvas = ({
   slideData,
   presenterToolbar = null,
+  embedLive = null,
 }: {
   slideData: LiveSlideCanvasData | null | undefined
   presenterToolbar?: ReactNode
+  embedLive?: SlideEmbedLiveContext | null
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fabricRef = useRef<InstanceType<typeof StaticCanvas> | null>(null)
+  const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const baseSizeRef = useRef({ width: BASE_WIDTH, height: BASE_HEIGHT })
+
+  const sceneSize = useMemo(() => {
+    const rawWidth = Number(slideData?.fabricData?.width)
+    const rawHeight = Number(slideData?.fabricData?.height)
+    return {
+      width: Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : BASE_WIDTH,
+      height: Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : BASE_HEIGHT,
+    }
+  }, [slideData])
 
   const resolveBaseSize = () => {
     const rawWidth = Number(slideData?.fabricData?.width)
@@ -93,7 +107,10 @@ const LivePresentationCanvas = ({
       fabricRef.current!.setViewportTransform([1, 0, 0, 1, 0, 0])
       fabricRef.current!.backgroundColor = slideData?.backgroundColor || '#ffffff'
       fabricRef.current!.renderAll()
+      // Skjul grå «ramme»-rektangler under iframe (unngår synlig kant ved skalering).
+      hideFabricEmbedPlaceholdersForLiveOverlay(fabricRef.current!)
       fitToContainer()
+      setEmbedLayoutRevision((x) => x + 1)
     }
 
     void renderData()
@@ -116,6 +133,13 @@ const LivePresentationCanvas = ({
         className='relative overflow-hidden rounded-lg shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'
       >
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+        <SlideEmbedOverlays
+          fabricCanvasRef={fabricRef}
+          variant='live'
+          layoutRevision={embedLayoutRevision}
+          sceneSize={sceneSize}
+          embedLive={embedLive}
+        />
         {presenterToolbar}
       </div>
     </div>

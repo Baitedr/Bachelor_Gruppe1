@@ -54,6 +54,8 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
     sessionEnded,
     activePoll,
     activeQuestion,
+    embedPlayback,
+    broadcastEmbedPlayback,
   } = usePresentation(presentationId, token)
 
   useEffect(() => {
@@ -128,6 +130,16 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
 
     return Object.fromEntries(entries)
   }, [questionResults])
+
+  const embedLivePresenter = useMemo(
+    () => ({
+      role: 'presenter' as const,
+      slideIndex: currentSlide,
+      embedPlayback,
+      broadcastEmbedPlayback,
+    }),
+    [currentSlide, embedPlayback, broadcastEmbedPlayback],
+  )
 
   const {
     handleNextSlide,
@@ -272,6 +284,7 @@ export default function LivePresentationProjectorShell({ presentationId }: { pre
           canNext={navCanGoNext}
           navControlsMode='hover'
           className='h-full w-full'
+          embedLive={embedLivePresenter}
         />
       </main>
     </div>
