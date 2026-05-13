@@ -123,6 +123,7 @@ export default function SlideEmbedOverlays({
 }: SlideEmbedOverlaysProps) {
     const [layouts, setLayouts] = useState<LayoutItem[]>([]);
     const sigRef = useRef('');
+    const refreshFrameRef = useRef<number | null>(null);
 
     const refresh = useCallback(() => {
         const canvas = fabricCanvasRef.current;
@@ -138,44 +139,89 @@ export default function SlideEmbedOverlays({
         setLayouts(computeLayouts(canvas, sceneSize.width, sceneSize.height));
     }, [fabricCanvasRef, sceneSize.width, sceneSize.height]);
 
+    const scheduleRefresh = useCallback(() => {
+        if (refreshFrameRef.current !== null) return;
+        refreshFrameRef.current = window.requestAnimationFrame(() => {
+            refreshFrameRef.current = null;
+            refresh();
+        });
+    }, [refresh]);
+
     useLayoutEffect(() => {
         refresh();
     }, [refresh, layoutRevision]);
 
     useEffect(() => {
-        const canvas = fabricCanvasRef.current;
-        if (!canvas) return;
+        let detached = false;
+        let setupFrame: number | null = null;
+        let activeCanvas: Canvas | StaticCanvas | null = null;
 
         const schedule = () => {
-            refresh();
+            scheduleRefresh();
         };
 
-        canvas.on('object:added', schedule);
-        canvas.on('object:removed', schedule);
-        canvas.on('object:modified', schedule);
-        canvas.on('object:moving', schedule);
-        canvas.on('object:scaling', schedule);
-        canvas.on('object:rotating', schedule);
-        canvas.on('object:skewing', schedule);
-        canvas.on('mouse:up', schedule);
-        canvas.on('selection:created', schedule);
-        canvas.on('selection:updated', schedule);
-        canvas.on('selection:cleared', schedule);
+        const detachListeners = () => {
+            if (!activeCanvas) return;
+            activeCanvas.off('object:added', schedule);
+            activeCanvas.off('object:removed', schedule);
+            activeCanvas.off('object:modified', schedule);
+            activeCanvas.off('object:moving', schedule);
+            activeCanvas.off('object:scaling', schedule);
+            activeCanvas.off('object:rotating', schedule);
+            activeCanvas.off('object:skewing', schedule);
+            activeCanvas.off('mouse:up', schedule);
+            activeCanvas.off('selection:created', schedule);
+            activeCanvas.off('selection:updated', schedule);
+            activeCanvas.off('selection:cleared', schedule);
+            activeCanvas.off('after:render', schedule);
+            activeCanvas = null;
+        };
+
+        const attachListeners = () => {
+            if (detached) return;
+            const canvas = fabricCanvasRef.current;
+            if (!canvas) {
+                setupFrame = window.requestAnimationFrame(attachListeners);
+                return;
+            }
+            if (activeCanvas === canvas) return;
+
+            detachListeners();
+            activeCanvas = canvas;
+            activeCanvas.on('object:added', schedule);
+            activeCanvas.on('object:removed', schedule);
+            activeCanvas.on('object:modified', schedule);
+            activeCanvas.on('object:moving', schedule);
+            activeCanvas.on('object:scaling', schedule);
+            activeCanvas.on('object:rotating', schedule);
+            activeCanvas.on('object:skewing', schedule);
+            activeCanvas.on('mouse:up', schedule);
+            activeCanvas.on('selection:created', schedule);
+            activeCanvas.on('selection:updated', schedule);
+            activeCanvas.on('selection:cleared', schedule);
+            activeCanvas.on('after:render', schedule);
+            scheduleRefresh();
+        };
+
+        attachListeners();
 
         return () => {
-            canvas.off('object:added', schedule);
-            canvas.off('object:removed', schedule);
-            canvas.off('object:modified', schedule);
-            canvas.off('object:moving', schedule);
-            canvas.off('object:scaling', schedule);
-            canvas.off('object:rotating', schedule);
-            canvas.off('object:skewing', schedule);
-            canvas.off('mouse:up', schedule);
-            canvas.off('selection:created', schedule);
-            canvas.off('selection:updated', schedule);
-            canvas.off('selection:cleared', schedule);
+            detached = true;
+            if (setupFrame !== null) {
+                window.cancelAnimationFrame(setupFrame);
+            }
+            detachListeners();
         };
-    }, [fabricCanvasRef, refresh]);
+    }, [fabricCanvasRef, scheduleRefresh, layoutRevision]);
+
+    useEffect(() => {
+        return () => {
+            if (refreshFrameRef.current !== null) {
+                window.cancelAnimationFrame(refreshFrameRef.current);
+                refreshFrameRef.current = null;
+            }
+        };
+    }, []);
 
     const iframePointerEvents = variant === 'live' ? 'auto' : 'none';
 
