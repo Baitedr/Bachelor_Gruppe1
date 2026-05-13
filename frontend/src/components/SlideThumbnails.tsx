@@ -1,6 +1,6 @@
 import { cn, resolveTextWithVariables, type PresentationVariable } from '../lib/utils'
 import { Button } from './ui/button'
-import { BarChart2, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
+import { BarChart2, Clapperboard, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -62,9 +62,18 @@ const slideHasQuestions = (slide: SlideData) =>
 const slideHasPolls = (slide: SlideData) =>
   Array.isArray(slide?.polls) && slide.polls.length > 0
 
+const slideHasHostedMediaEmbed = (slide: SlideData) => {
+  const objects = slide.fabricData?.objects
+  if (!Array.isArray(objects)) return false
+  return objects.some((o) => {
+    if (!o || typeof o !== 'object') return false
+    return (o as { type?: string }).type === 'embed'
+  })
+}
+
 function thumbnailRootClass(isActive: boolean) {
   return cn(
-    'shrink-0 rounded-lg overflow-hidden cursor-pointer transition-[border-color,box-shadow] duration-200',
+    'shrink-0 cursor-pointer overflow-hidden rounded-lg bg-card transition-[border-color,box-shadow] duration-200',
     isActive
       ? 'border border-solid border-[#667eea] shadow-[0_0_0_1px_rgba(102,126,234,0.35),0_1px_4px_rgba(0,0,0,0.07),0_2px_16px_rgba(102,126,234,0.2)] dark:shadow-[0_0_0_1px_rgba(129,140,248,0.45),0_2px_10px_rgba(0,0,0,0.45),0_4px_18px_rgba(102,126,234,0.22)]'
       : 'border border-solid border-black/10 shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_1px_4px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] dark:border-white/[0.14] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_2px_8px_rgba(0,0,0,0.35)] hover:border-[rgba(102,126,234,0.45)] hover:shadow-[0_0_0_1px_rgba(102,126,234,0.2),0_1px_4px_rgba(0,0,0,0.07),0_4px_14px_rgba(102,126,234,0.1)] dark:hover:border-[rgba(102,126,234,0.55)] dark:hover:shadow-[0_0_0_1px_rgba(102,126,234,0.25),0_2px_10px_rgba(0,0,0,0.45),0_4px_16px_rgba(102,126,234,0.12)]',
@@ -73,9 +82,9 @@ function thumbnailRootClass(isActive: boolean) {
 
 function interactionBadgeClass(isActive: boolean) {
   return cn(
-    'inline-flex items-center justify-center h-[22px] w-[22px] rounded-md text-white bg-slate-900/[0.82] shadow-[0_1px_3px_rgba(0,0,0,0.35)] border border-solid border-white/12',
-    'dark:bg-slate-800/[0.92] dark:border-[rgba(129,140,248,0.35)] dark:text-slate-200',
-    isActive && 'border-[rgba(129,140,248,0.55)] dark:border-[rgba(129,140,248,0.55)]',
+    'inline-flex items-center justify-center h-[22px] w-[22px] rounded-md border border-border bg-background/95 text-foreground shadow-sm backdrop-blur-sm',
+    'dark:bg-card/95 dark:text-card-foreground',
+    isActive && 'ring-1 ring-primary/35 dark:ring-primary/45',
   )
 }
 
@@ -128,7 +137,9 @@ function SortableSlideThumbnail({
 
   const showQuestionBadge = slideHasQuestions(slide)
   const showPollBadge = slideHasPolls(slide)
+  const showMediaBadge = slideHasHostedMediaEmbed(slide)
   const isActive = index === currentSlideIndex
+  const previewSrc = slidePreviewImages[slide.id]
 
   return (
     <div
@@ -138,7 +149,7 @@ function SortableSlideThumbnail({
       onClick={() => onSlideSelect(index)}
     >
       <div
-        className="flex touch-none cursor-grab items-center justify-center px-1 py-0.5 active:cursor-grabbing"
+        className="flex touch-none cursor-grab items-center justify-center border-b border-border bg-muted/80 px-1 py-1 active:cursor-grabbing dark:bg-muted/55"
         {...attributes}
         {...listeners}
         onClick={(e) => e.stopPropagation()}
@@ -148,10 +159,15 @@ function SortableSlideThumbnail({
       </div>
 
       <div
-        className="relative box-border aspect-video w-full overflow-hidden bg-white p-2 text-[0.7rem]"
-        style={{ backgroundColor: slide.backgroundColor }}
+        className={cn(
+          'relative box-border aspect-video w-full overflow-hidden border-b border-border bg-white [container-type:inline-size] dark:bg-white/95',
+          previewSrc ? 'p-0' : 'p-2 text-[0.7rem]',
+        )}
+        style={{
+          backgroundColor: slide.backgroundColor || undefined,
+        }}
       >
-        {(showQuestionBadge || showPollBadge) && (
+        {(showQuestionBadge || showPollBadge || showMediaBadge) && (
           <div className="absolute right-1.5 top-1.5 z-[2] flex max-w-[calc(100%-12px)] flex-row flex-wrap justify-end gap-1">
             {showQuestionBadge && (
               <span
@@ -181,27 +197,75 @@ function SortableSlideThumbnail({
                 />
               </span>
             )}
+            {showMediaBadge && (
+              <span
+                className={interactionBadgeClass(isActive)}
+                title="Har innebygd video (YouTube/Vimeo)"
+                role="img"
+                aria-label="Har innebygd video (YouTube/Vimeo)"
+              >
+                <Clapperboard
+                  className="h-3 w-3"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </span>
+            )}
           </div>
         )}
 
-        {slidePreviewImages[slide.id] ? (
-          <img
-            src={slidePreviewImages[slide.id] || undefined}
-            alt={`${slide.title} forhåndsvisning`}
-            className="block h-full w-full rounded-md object-cover"
-          />
+        {previewSrc ? (
+          <div className="relative h-full min-h-0 w-full">
+            <img
+              src={previewSrc || undefined}
+              alt={`${slide.title} forhåndsvisning`}
+              className="block h-full w-full rounded-none object-cover sm:rounded-sm"
+            />
+            {showMediaBadge && (
+              <div
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                aria-hidden
+              >
+                <span
+                  className={cn(
+                    'font-bold uppercase tracking-[0.14em]',
+                    !slide.backgroundColor && 'text-foreground',
+                    'text-[clamp(0.625rem,20cqi,1.75rem)]',
+                  )}
+                  style={slide.backgroundColor ? { color: slide.backgroundColor } : undefined}
+                >
+                  MEDIA
+                </span>
+              </div>
+            )}
+          </div>
+        ) : showMediaBadge ? (
+          <div className="flex h-full min-h-[5.5rem] w-full flex-col">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-border bg-muted">
+              <span
+                className={cn(
+                  'font-bold uppercase tracking-[0.14em]',
+                  !slide.backgroundColor && 'text-foreground',
+                  'text-[clamp(0.75rem,22cqi,2rem)]',
+                )}
+                style={slide.backgroundColor ? { color: slide.backgroundColor } : undefined}
+              >
+                MEDIA
+              </span>
+            </div>
+          </div>
         ) : (
           <>
-            <div className="mb-1 truncate font-bold text-[#1a1a1a]">{slide.title}</div>
-            <div className="line-clamp-2 overflow-hidden text-ellipsis text-[#666]">
+            <div className="mb-1 truncate font-bold text-foreground">{slide.title}</div>
+            <div className="line-clamp-2 overflow-hidden text-ellipsis text-muted-foreground">
               {getSlidePreviewContent(slide)}
             </div>
           </>
         )}
       </div>
 
-      <div className="flex items-center justify-between bg-white/[0.05] p-2">
-        <span className="text-sm font-semibold text-white/70">{index + 1}</span>
+      <div className="flex items-center justify-between border-t border-border bg-muted/80 p-2 dark:bg-muted/55">
+        <span className="text-sm font-semibold tabular-nums text-foreground">{index + 1}</span>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
