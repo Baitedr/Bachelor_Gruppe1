@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LogOut, MonitorUp, ZoomIn, ZoomOut } from 'lucide-react'
-import { logoutStyleDestructiveButtonClassName } from '@/lib/utils'
+import { LogOut, MonitorUp, Radio, ZoomIn, ZoomOut } from 'lucide-react'
+import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
 import {
   getPresenterScreenChoices,
   openLiveProjectorWindow,
@@ -29,6 +29,30 @@ type QuestionAggregate = {
   total?: number
   recent_answers?: string[]
   question_type?: string
+}
+
+/** Aktiv poll slik den kommer fra ActionCable — samme form som i LivePresentation. */
+type WireActivePoll = { id: string | number; question: string; options: unknown[] }
+
+/** Sjekker om verdien er en aktiv poll slik at vi kan sammenligne id med lysbildets poll-kort. */
+const isWireActivePoll = (value: unknown): value is WireActivePoll => {
+  if (!value || typeof value !== 'object') return false
+  const poll = value as Record<string, unknown>
+  return (
+    (typeof poll.id === 'string' || typeof poll.id === 'number') &&
+    typeof poll.question === 'string' &&
+    Array.isArray(poll.options)
+  )
+}
+
+/** Aktivt spørsmål fra kanalen — trengs for å markere hvilket kort som sendes til publikum. */
+type WireActiveQuestion = { id: string | number; prompt: string }
+
+/** Sjekker om verdien er et aktivt spørsmål (åpent eller flervalg). */
+const isWireActiveQuestion = (value: unknown): value is WireActiveQuestion => {
+  if (!value || typeof value !== 'object') return false
+  const q = value as Record<string, unknown>
+  return (typeof q.id === 'string' || typeof q.id === 'number') && typeof q.prompt === 'string'
 }
 
 /**
@@ -125,6 +149,18 @@ const LivePresentationPresenter = ({
   }, [presentation?.id, screenChoices])
 
   const presenterNotes = (currentSlideData?.notes || '').trim()
+
+  /** Id for poll som faktisk broadcastes — brukes til «på lufta»-ramme på riktig kort. */
+  const liveWirePollId = useMemo(
+    () => (isWireActivePoll(activePoll) ? String(activePoll.id) : null),
+    [activePoll],
+  )
+  /** Id for spørsmål som vises for publikum akkurat nå. */
+  const liveWireQuestionId = useMemo(
+    () => (isWireActiveQuestion(activeQuestion) ? String(activeQuestion.id) : null),
+    [activeQuestion],
+  )
+  const anyAudienceInteractionLive = Boolean(liveWirePollId || liveWireQuestionId)
 
   const slideViewportProps = useMemo(
     () => ({
@@ -250,91 +286,171 @@ const LivePresentationPresenter = ({
               <PresenterSlideViewport {...slideViewportProps} />
             </div>
             <aside className='flex h-full min-h-0 w-full min-w-0 flex-col gap-3 sm:gap-3.5 lg:gap-4'>
-              <div className='max-h-[min(50%,22rem)] shrink-0 overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-sm'>
-                <div className='mb-2 flex items-center justify-between'>
-                  <h3 className='text-sm font-semibold text-foreground'>Spørsmål og verktøy</h3>
-                  <span className='rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary'>Live</span>
-                </div>
-                <div className='space-y-2 pr-1'>
-                  {currentSlideData?.polls?.map((poll) => (
-                    <div
-                      key={poll.id}
-                      className='space-y-2 rounded-lg border border-border bg-muted/45 p-2.5 shadow-sm dark:border-border dark:bg-muted/25 dark:shadow-none'
-                    >
-                      <Button
-                        className='h-auto w-full justify-start whitespace-normal break-words bg-primary/10 py-2 text-left leading-snug text-primary hover:bg-primary/20'
-                        variant='ghost'
-                        onClick={() => activatePoll(poll.id)}
-                      >
-                        Aktiver avstemning: {poll.question}
-                      </Button>
-                      {pollResults[String(poll.id)] && (
-                        <div className='space-y-1 text-sm'>
-                          <p className='font-medium'>Resultater ({pollResults[String(poll.id)].total} stemmer)</p>
-                          {Object.entries(pollResults[String(poll.id)].results || {}).map(([answer, count]) => (
-                            <p key={answer} className='text-muted-foreground'>
-                              {answer}: {count}
-                            </p>
-                          ))}
-                        </div>
+              {/* Verktøy: naturlig høyde (ingen egen scrollbar) — notater under tar resten av sidekolonnen */}
+              <Card className='flex shrink-0 flex-col overflow-hidden shadow-sm'>
+                <CardHeader className='flex-shrink-0 space-y-0 border-b border-border px-3 pb-2 pt-2.5 sm:px-3.5 sm:pb-2.5 sm:pt-3'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <CardTitle className='text-sm font-semibold leading-tight'>Spørsmål og verktøy</CardTitle>
+                    <Badge
+                      variant={anyAudienceInteractionLive ? 'default' : 'secondary'}
+                      className={cn(
+                        'gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                        anyAudienceInteractionLive && 'shadow-sm shadow-primary/20',
                       )}
-                    </div>
-                  ))}
+                    >
+                      {anyAudienceInteractionLive ? (
+                        <>
+                          <span className='relative flex h-1.5 w-1.5' aria-hidden>
+                            <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-foreground/55' />
+                            <span className='relative inline-flex h-1.5 w-1.5 rounded-full bg-primary-foreground' />
+                          </span>
+                          Live
+                        </>
+                      ) : (
+                        'Live'
+                      )}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className='space-y-2.5 p-3 pt-2.5 sm:p-3.5 sm:pt-3'>
+                  {currentSlideData?.polls?.map((poll) => {
+                    const pollIsLive = liveWirePollId === String(poll.id)
+                    return (
+                      <Card
+                        key={poll.id}
+                        className={cn(
+                          // Én ramme + lett skygge: tydelig kant mot verktøypanelet uten dobbel ring
+                          'overflow-hidden border border-border bg-muted/30 shadow-sm transition-[border-color,background-color] duration-200 dark:bg-muted/20',
+                          pollIsLive && 'border-primary/45 bg-primary/[0.07] dark:border-primary/40 dark:bg-primary/[0.11]',
+                        )}
+                      >
+                        {pollIsLive ? (
+                          <div
+                            className='flex items-center gap-2 border-b border-border/70 bg-primary/10 px-3 py-2 dark:border-border/50 dark:bg-primary/15'
+                            role='status'
+                            aria-live='polite'
+                          >
+                            <span className='relative flex h-2 w-2 shrink-0' aria-hidden>
+                              <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75' />
+                              <span className='relative inline-flex h-2 w-2 rounded-full bg-primary' />
+                            </span>
+                            <Radio className='h-3.5 w-3.5 shrink-0 text-primary' aria-hidden />
+                            <p className='min-w-0 flex-1 text-xs font-medium leading-snug text-primary'>
+                              Avstemningen er aktiv hos deltakere
+                            </p>
+                          </div>
+                        ) : null}
+                        <CardContent className='space-y-2.5 px-3 pb-3 pt-2 sm:px-3.5 sm:pb-3.5'>
+                          <Button
+                            className={cn(
+                              'h-auto w-full justify-start whitespace-normal break-words py-2.5 text-left text-sm leading-snug',
+                              pollIsLive
+                                ? 'border-primary/40 bg-card/90 text-foreground hover:bg-accent'
+                                : 'border-border bg-background/80 text-primary hover:bg-primary/10',
+                            )}
+                            variant='outline'
+                            onClick={() => activatePoll(poll.id)}
+                          >
+                            Aktiver avstemning: {poll.question}
+                          </Button>
+                          {pollResults[String(poll.id)] && (
+                            <div className='space-y-1.5 rounded-md border border-border/80 bg-muted/50 px-2.5 py-2 text-sm dark:bg-muted/35'>
+                              <p className='font-medium text-foreground'>
+                                Resultater ({pollResults[String(poll.id)].total} stemmer)
+                              </p>
+                              {Object.entries(pollResults[String(poll.id)].results || {}).map(([answer, count]) => (
+                                <p key={answer} className='text-muted-foreground'>
+                                  {answer}: {count}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
 
                   {currentSlideData?.questions?.map((question) => {
                     const result = questionResults[String(question.id)]
                     const total = result?.total || 0
                     const questionType = result?.question_type || question.type || 'open_text'
+                    const questionIsLive = liveWireQuestionId === String(question.id)
 
                     return (
-                      <div
+                      <Card
                         key={question.id}
-                        className='space-y-2 rounded-lg border border-border bg-muted/45 p-2.5 shadow-sm dark:border-border dark:bg-muted/25 dark:shadow-none'
-                      >
-                        <Button
-                          className='h-auto w-full justify-start whitespace-normal break-words bg-primary/10 py-2 text-left leading-snug text-primary hover:bg-primary/20'
-                          variant='ghost'
-                          onClick={() => activateQuestion(question.id)}
-                        >
-                          Aktiver spørsmål: {question.prompt}
-                        </Button>
-
-                        {result && (
-                          <div className='space-y-1 text-sm'>
-                            <p className='font-medium'>Resultater ({total} svar)</p>
-                            {questionType === 'single_choice' ? (
-                              (question.options || []).map((option) => {
-                                const count = result.results?.[option.text] || 0
-                                const percent = total > 0 ? Math.round((count / total) * 100) : 0
-
-                                return (
-                                  <p key={option.id} className='text-muted-foreground'>
-                                    {option.text}: {count} ({percent}%)
-                                  </p>
-                                )
-                              })
-                            ) : (
-                              <div className='space-y-2'>
-                                {(result.recent_answers || []).slice(-5).map((answer, index) => (
-                                  <p
-                                    key={`${question.id}-${index}`}
-                                    className='rounded-md border border-border bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground'
-                                  >
-                                    {answer}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                        className={cn(
+                          'overflow-hidden border border-border bg-muted/30 shadow-sm transition-[border-color,background-color] duration-200 dark:bg-muted/20',
+                          questionIsLive && 'border-primary/45 bg-primary/[0.07] dark:border-primary/40 dark:bg-primary/[0.11]',
                         )}
-                      </div>
+                      >
+                        {questionIsLive ? (
+                          <div
+                            className='flex items-center gap-2 border-b border-border/70 bg-primary/10 px-3 py-2 dark:border-border/50 dark:bg-primary/15'
+                            role='status'
+                            aria-live='polite'
+                          >
+                            <span className='relative flex h-2 w-2 shrink-0' aria-hidden>
+                              <span className='absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75' />
+                              <span className='relative inline-flex h-2 w-2 rounded-full bg-primary' />
+                            </span>
+                            <Radio className='h-3.5 w-3.5 shrink-0 text-primary' aria-hidden />
+                            <p className='min-w-0 flex-1 text-xs font-medium leading-snug text-primary'>
+                              Spørsmålet er aktiv hos deltakere
+                            </p>
+                          </div>
+                        ) : null}
+                        <CardContent className='space-y-2.5 px-3 pb-3 pt-2 sm:px-3.5 sm:pb-3.5'>
+                          <Button
+                            className={cn(
+                              'h-auto w-full justify-start whitespace-normal break-words py-2.5 text-left text-sm leading-snug',
+                              questionIsLive
+                                ? 'border-primary/40 bg-card/90 text-foreground hover:bg-accent'
+                                : 'border-border bg-background/80 text-primary hover:bg-primary/10',
+                            )}
+                            variant='outline'
+                            onClick={() => activateQuestion(question.id)}
+                          >
+                            Aktiver spørsmål: {question.prompt}
+                          </Button>
+
+                          {result && (
+                            <div className='space-y-1.5 rounded-md border border-border/80 bg-muted/50 px-2.5 py-2 text-sm dark:bg-muted/35'>
+                              <p className='font-medium text-foreground'>Resultater ({total} svar)</p>
+                              {questionType === 'single_choice' ? (
+                                (question.options || []).map((option) => {
+                                  const count = result.results?.[option.text] || 0
+                                  const percent = total > 0 ? Math.round((count / total) * 100) : 0
+
+                                  return (
+                                    <p key={option.id} className='text-muted-foreground'>
+                                      {option.text}: {count} ({percent}%)
+                                    </p>
+                                  )
+                                })
+                              ) : (
+                                <div className='space-y-2'>
+                                  {(result.recent_answers || []).slice(-5).map((answer, index) => (
+                                    <p
+                                      key={`${question.id}-${index}`}
+                                      className='rounded-md border border-border/80 bg-muted/50 px-3 py-2 text-sm font-medium leading-snug text-foreground dark:bg-muted/35'
+                                    >
+                                      {answer}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
                     )
                   })}
                   {!currentSlideData?.polls?.length && !currentSlideData?.questions?.length && (
                     <p className='text-sm text-muted-foreground'>Ingen spørsmål eller avstemninger på dette lysbildet.</p>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
               <div className='flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm'>
                 <div className='shrink-0 border-b border-border px-3 py-2.5'>
                   <div className='flex items-center justify-between gap-2'>
