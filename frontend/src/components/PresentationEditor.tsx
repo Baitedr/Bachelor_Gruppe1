@@ -741,7 +741,6 @@ ref: ForwardedRef<PresentationEditorHandle>
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
-                    clampAllObjectsToCanvas();
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
                     fabricCanvasRef.current.renderAll();
                     syncCanvasVideos();
@@ -1207,40 +1206,6 @@ ref: ForwardedRef<PresentationEditorHandle>
     const handleSlideSelect = (index: number) => {
         saveCurrentSlide();
         setCurrentSlideIndex(index);
-    };
-
-    //Sikkerer at det gitte objektet blir innenfor the synlige canvas området ved å justerer posisjonen sin hvis den overflower canvas
-    const clampObjectToCanvas = (object: any) => {
-        object.setCoords();
-        const bounds = object.getBoundingRect();
-
-        let nextLeft = object.left ?? 0;
-        let nextTop = object.top ?? 0;
-
-        const minBoundsLeft = CANVAS_PADDING;
-        const maxBoundsLeft = CANVAS_WIDTH - CANVAS_PADDING - bounds.width;
-        const targetBoundsLeft = Math.min(
-            Math.max(bounds.left, minBoundsLeft),
-            Math.max(minBoundsLeft, maxBoundsLeft)
-        );
-
-        const minBoundsTop = CANVAS_PADDING;
-        const maxBoundsTop = CANVAS_HEIGHT - CANVAS_PADDING - bounds.height;
-        const targetBoundsTop = Math.min(
-            Math.max(bounds.top, minBoundsTop),
-            Math.max(minBoundsTop, maxBoundsTop)
-        );
-
-        nextLeft += targetBoundsLeft - bounds.left;
-        nextTop += targetBoundsTop - bounds.top;
-
-        object.set({ left: nextLeft, top: nextTop });
-        object.setCoords();
-    };
-
-    const clampAllObjectsToCanvas = () => {
-        if (!fabricCanvasRef.current) return;
-        fabricCanvasRef.current.getObjects().forEach(clampObjectToCanvas);
     };
 
     // Helper function to constrain position within canvas bounds
