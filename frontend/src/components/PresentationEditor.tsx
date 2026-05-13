@@ -26,6 +26,9 @@ import {
     Play,
     MonitorPlay,
     Loader2,
+    Pipette,
+    Ban,
+    Check,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
 import PollCreator from './polls/PollCreator';
@@ -59,6 +62,62 @@ const FONT_FAMILIES = [
     { value: 'Courier New, monospace', label: 'Courier New' },
     { value: 'Verdana, sans-serif', label: 'Verdana' }
 ];
+
+/** 16 forhåndsvalg: hvit/svart i venstre kolonne + regnbuegradient i to rader. */
+const TOOLBAR_COLOR_PRESETS: readonly string[] = [
+    '#FFFFFF',
+    '#FF2D2D', '#FF6A00', '#FFAA00', '#FFD400', '#E8FF1A', '#78D200', '#00B87A',
+    '#000000',
+    '#00C2CC', '#009BFF', '#1F6BFF', '#4B42FF', '#7D3CFF', '#B139FF', '#FF2FA8',
+];
+
+const PRESET_SWATCH_CLASS =
+    'relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-input transition-transform hover:scale-105 hover:ring-2 hover:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const SELECTED_PRESET_SWATCH_CLASS =
+    'ring-2 ring-blue-500 ring-offset-1 ring-offset-background shadow-[0_0_0_1px_rgba(59,130,246,0.55)]';
+
+/** Gjør farge om til #rrggbb for native fargevelger. */
+function toHexColorForInput(cssColor: string, fallback = '#000000'): string {
+    if (typeof cssColor !== 'string') return fallback;
+    const t = cssColor.trim();
+    if (/^#[0-9A-Fa-f]{6}$/i.test(t)) return t.slice(0, 7);
+    if (/^#[0-9A-Fa-f]{3}$/i.test(t) && t.length === 4) {
+        const r = t[1]!;
+        const g = t[2]!;
+        const b = t[3]!;
+        return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    const rgb = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgb) {
+        const clamp = (x: string) => Math.min(255, Math.max(0, parseInt(x, 10)));
+        const h = (n: number) => n.toString(16).padStart(2, '0');
+        return `#${h(clamp(rgb[1]!))}${h(clamp(rgb[2]!))}${h(clamp(rgb[3]!))}`;
+    }
+    return fallback;
+}
+
+function isPresetSelected(selectedColor: string | undefined, presetHex: string, fallback = '#000000'): boolean {
+    return toHexColorForInput(selectedColor ?? fallback, fallback).toLowerCase() === presetHex.toLowerCase();
+}
+
+// Velger kontrastfarge på haken for god synlighet mot både lyse og mørke preset-farger.
+function getPresetCheckmarkClass(hex: string): string {
+    const normalized = toHexColorForInput(hex, '#000000');
+    const r = parseInt(normalized.slice(1, 3), 16);
+    const g = parseInt(normalized.slice(3, 5), 16);
+    const b = parseInt(normalized.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.62
+        ? 'text-black drop-shadow-[0_1px_1px_rgba(255,255,255,0.7)]'
+        : 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]';
+}
+
+/** Sjakkmønster for «ingen fyll» / gjennomsiktig forhåndsvisning (Tailwind for lys/mørk modus). */
+const CHECKERBOARD_SWATCH_CLASS =
+    'bg-zinc-100 bg-[length:8px_8px] bg-[repeating-conic-gradient(rgb(212_212_216)_0%_25%,rgb(250_250_250)_0%_50%)] dark:bg-zinc-900 dark:bg-[repeating-conic-gradient(rgb(63_63_70)_0%_25%,rgb(24_24_27)_0%_50%)]';
+
+const COLOR_MENU_MORE_BUTTON_CLASS =
+    'mt-2 h-9 w-full gap-2 border border-primary/40 bg-primary/10 text-sm font-semibold text-primary shadow-sm hover:bg-primary/18 hover:text-primary dark:border-primary/45 dark:bg-primary/15 dark:hover:bg-primary/25';
 
 // Når vinduet er smalere enn dette, kollapser sidepanelene automatisk.
 const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
@@ -221,7 +280,8 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isQuestionCreatorOpen, setIsQuestionCreatorOpen] = useState(false);
     const [editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
     const [questionToDeleteIndex, setQuestionToDeleteIndex] = useState<number | null>(null);
-    const [shapeColor, setShapeColor] = useState<string>('#667eea');
+    const [shapeFillColor, setShapeFillColor] = useState<string>('#667eea');
+    const [shapeStrokeColor, setShapeStrokeColor] = useState<string>('#667eea');
     const [shapeHasFill, setShapeHasFill] = useState(true);
     const [hasSelectedShape, setHasSelectedShape] = useState(false);
     const [textColor, setTextColor] = useState<string>('#000000');
@@ -238,6 +298,12 @@ ref: ForwardedRef<PresentationEditorHandle>
     const listMenuRef = useRef<HTMLDivElement | null>(null);
     const shapeMenuRef = useRef<HTMLDivElement | null>(null);
     const shapeColorPickerRef = useRef<HTMLDivElement | null>(null);
+    const backgroundColorMenuRef = useRef<HTMLDivElement | null>(null);
+    const textColorMenuRef = useRef<HTMLDivElement | null>(null);
+    const backgroundColorNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const textColorNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const shapeFillNativeInputRef = useRef<HTMLInputElement | null>(null);
+    const shapeStrokeNativeInputRef = useRef<HTMLInputElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const hasUnsavedChangesRef = useRef(false);
     const skipHistoryResetRef = useRef(false);
@@ -251,6 +317,8 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
+    const [isBackgroundColorMenuOpen, setIsBackgroundColorMenuOpen] = useState(false);
+    const [isTextColorMenuOpen, setIsTextColorMenuOpen] = useState(false);
     const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
     // Meny for "Presenter"-knappen (live-lobby og "presenter nå"-valg).
     const [isPresentMenuOpen, setIsPresentMenuOpen] = useState(false);
@@ -324,11 +392,17 @@ ref: ForwardedRef<PresentationEditorHandle>
         setHasSelectedText(Boolean(selectedText));
 
         if (selectedShape) {
-            const hasFill = selectedShape.fill !== null && selectedShape.fill !== undefined && selectedShape.fill !== 'transparent';
+            const hasFill =
+                selectedShape.fill !== null &&
+                selectedShape.fill !== undefined &&
+                selectedShape.fill !== 'transparent';
             setShapeHasFill(hasFill);
 
             if (typeof selectedShape.fill === 'string' && selectedShape.fill !== 'transparent') {
-                setShapeColor(selectedShape.fill);
+                setShapeFillColor(selectedShape.fill);
+            }
+            if (typeof selectedShape.stroke === 'string') {
+                setShapeStrokeColor(selectedShape.stroke);
             }
         }
 
@@ -489,9 +563,9 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 
     // Lagrer bakgrunnsfargen til lysbildet etter at live-forhåndsvisningen er ferdig.
-    const commitBackgroundColorChange = (color: string) => {
-
+    const commitBackgroundColorChange = () => {
         commitCanvasColorChange();
+        saveCurrentSlide(true);
     };
 
     const resetHistoryWithSnapshot = (snapshot: CanvasSnapshot | null) => {
@@ -1332,6 +1406,7 @@ ref: ForwardedRef<PresentationEditorHandle>
     };
 }, [isListMenuOpen]);
 
+// Lukker de nye farge-menyene ved klikk utenfor eller Escape, slik at de oppfører seg likt som øvrige verktøymenyer.
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
         const target = event.target as Node | null;
@@ -1355,6 +1430,43 @@ useEffect(() => {
         document.removeEventListener('keydown', handleEscape);
     };
 }, [isTextMenuOpen]);
+
+useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+        const target = event.target as Node | null;
+
+        if (
+            isBackgroundColorMenuOpen &&
+            backgroundColorMenuRef.current &&
+            target &&
+            !backgroundColorMenuRef.current.contains(target)
+        ) {
+            setIsBackgroundColorMenuOpen(false);
+        }
+
+        if (isTextColorMenuOpen && textColorMenuRef.current && target && !textColorMenuRef.current.contains(target)) {
+            setIsTextColorMenuOpen(false);
+        }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+        if (event.key !== 'Escape') return;
+        if (isBackgroundColorMenuOpen) {
+            setIsBackgroundColorMenuOpen(false);
+        }
+        if (isTextColorMenuOpen) {
+            setIsTextColorMenuOpen(false);
+        }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+    };
+}, [isBackgroundColorMenuOpen, isTextColorMenuOpen]);
 
 // Holder menyene lukket når brukeren klikker utenfor eller avbryter med Escape.
 useEffect(() => {
@@ -1588,8 +1700,8 @@ useEffect(() => {
                     top: pos.top,
                     width: 200,
                     height: 150,
-                    fill: shapeHasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 break;
@@ -1598,8 +1710,8 @@ useEffect(() => {
                     left: pos.left,
                     top: pos.top,
                     radius: 75,
-                    fill: shapeHasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 break;
@@ -1613,8 +1725,8 @@ useEffect(() => {
         }
     };
 
-    // Oppdaterer valgte figurer direkte på canvas mens brukeren drar i fargevelgeren.
-    const applySelectedShapeFillLive = (hasFill: boolean) => {
+    // Oppdaterer fyllfarge i sanntid uten å skrive historikk før brukeren bekrefter valg.
+    const applySelectedShapeFillColorLive = (fillHex: string) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1625,8 +1737,8 @@ useEffect(() => {
         activeObjects.forEach((obj: any) => {
             if (obj.type === 'rect' || obj.type === 'circle') {
                 obj.set({
-                    fill: hasFill ? shapeColor : null,
-                    stroke: shapeColor,
+                    fill: fillHex,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 changed = true;
@@ -1638,8 +1750,8 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
-    // Oppdaterer valgte figurer direkte pÃ¥ canvas mens brukeren drar i fargevelgeren.
-    const applySelectedShapeColorLive = (color: string) => {
+    // Holder konturfargen separat fra fyll, slik at begge kan justeres uavhengig.
+    const applySelectedShapeStrokeColorLive = (strokeHex: string) => {
         if (!fabricCanvasRef.current) return;
 
         const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -1650,8 +1762,33 @@ useEffect(() => {
         activeObjects.forEach((obj: any) => {
             if (obj.type === 'rect' || obj.type === 'circle') {
                 obj.set({
-                    fill: shapeHasFill ? color : null,
-                    stroke: color,
+                    fill: shapeHasFill ? shapeFillColor : null,
+                    stroke: strokeHex,
+                    strokeWidth: 2,
+                });
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.requestRenderAll();
+    };
+
+    // Setter valgt figur til transparent fyll, men beholder synlig kontur.
+    const applySelectedShapeNoFillLive = () => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (obj.type === 'rect' || obj.type === 'circle') {
+                obj.set({
+                    fill: null,
+                    stroke: shapeStrokeColor,
                     strokeWidth: 2,
                 });
                 changed = true;
@@ -1724,10 +1861,7 @@ useEffect(() => {
 
     const changeBackgroundColor = (color: string) => {
         applyBackgroundColorLive(color);
-        commitBackgroundColorChange(color);
-    };
-    const changeSelectedShapeColor = (color: string) => {
-        applySelectedShapeColorLive(color);
+        commitBackgroundColorChange();
     };
     const changeSelectedTextColor = (color: string) => {
         applySelectedTextColorLive(color);
@@ -2410,101 +2544,268 @@ useEffect(() => {
                         </div>
                         <Button onClick={deleteSelected} variant="destructive" size="sm" className="order-14 flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5" /> Slett</Button>
                         <div className="contents">
-                            <div className="relative order-11">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="relative flex items-center gap-1.5"
-                                >
-                                    <Palette className="h-3.5 w-3.5" /> Bakgrunnsfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: slides[currentSlideIndex]?.backgroundColor || '#ffffff' }}
-                                    />
-                                </Button>
+                            <div ref={backgroundColorMenuRef} className="relative order-11">
                                 <input
+                                    ref={backgroundColorNativeInputRef}
                                     type="color"
-                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                    value={slides[currentSlideIndex]?.backgroundColor || '#ffffff'}
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(slides[currentSlideIndex]?.backgroundColor || '#ffffff', '#ffffff')}
                                     onInput={(e) => {
                                         applyBackgroundColorLive((e.target as HTMLInputElement).value);
                                     }}
                                     onChange={(e) => {
                                         const color = e.target.value;
                                         applyBackgroundColorLive(color);
-                                        commitBackgroundColorChange(color);
+                                        commitBackgroundColorChange();
                                     }}
                                 />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1.5"
+                                    aria-haspopup="menu"
+                                    aria-expanded={isBackgroundColorMenuOpen}
+                                    onClick={() => {
+                                        setIsTextColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen(false);
+                                        setIsBackgroundColorMenuOpen((prev) => !prev);
+                                    }}
+                                >
+                                    <Palette className="h-3.5 w-3.5" /> Bakgrunnsfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: slides[currentSlideIndex]?.backgroundColor || '#ffffff' }}
+                                    />
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isBackgroundColorMenuOpen && (
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-md border border-border bg-background p-2 shadow-lg">
+                                        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Forhåndsdefinerte farger</p>
+                                        <div className="grid grid-cols-8 gap-1.5">
+                                            {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                const isSelected = isPresetSelected(slides[currentSlideIndex]?.backgroundColor, hex, '#ffffff');
+                                                return (
+                                                    <button
+                                                        key={hex}
+                                                        type="button"
+                                                        title={hex}
+                                                        aria-pressed={isSelected}
+                                                        className={`${PRESET_SWATCH_CLASS} ${
+                                                            isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                        }`}
+                                                        style={{ backgroundColor: hex }}
+                                                        onClick={() => {
+                                                            changeBackgroundColor(hex);
+                                                            setIsBackgroundColorMenuOpen(false);
+                                                        }}
+                                                    >
+                                                        {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            className={COLOR_MENU_MORE_BUTTON_CLASS}
+                                            onClick={() => {
+                                                setIsBackgroundColorMenuOpen(false);
+                                                requestAnimationFrame(() => backgroundColorNativeInputRef.current?.click());
+                                            }}
+                                        >
+                                            <Pipette className="h-4 w-4 shrink-0" />
+                                            <span>Flere farger…</span>
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             <div ref={shapeColorPickerRef} className="relative order-12">
+                                <input
+                                    ref={shapeFillNativeInputRef}
+                                    type="color"
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(shapeFillColor, '#667eea')}
+                                    onInput={(e) => {
+                                        const color = (e.target as HTMLInputElement).value;
+                                        setShapeFillColor(color);
+                                        setShapeHasFill(true);
+                                        applySelectedShapeFillColorLive(color);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        setShapeFillColor(color);
+                                        setShapeHasFill(true);
+                                        applySelectedShapeFillColorLive(color);
+                                        commitCanvasColorChange();
+                                    }}
+                                />
+                                <input
+                                    ref={shapeStrokeNativeInputRef}
+                                    type="color"
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(shapeStrokeColor, '#667eea')}
+                                    onInput={(e) => {
+                                        const color = (e.target as HTMLInputElement).value;
+                                        setShapeStrokeColor(color);
+                                        applySelectedShapeStrokeColorLive(color);
+                                    }}
+                                    onChange={(e) => {
+                                        const color = e.target.value;
+                                        setShapeStrokeColor(color);
+                                        applySelectedShapeStrokeColorLive(color);
+                                        commitCanvasColorChange();
+                                    }}
+                                />
                                 <Button
+                                    type="button"
                                     variant="outline"
                                     size="sm"
                                     className="flex items-center gap-1.5"
                                     disabled={!hasSelectedShape}
-                                    onClick={() => setIsShapeColorPickerOpen((prev) => !prev)}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isShapeColorPickerOpen}
+                                    onClick={() => {
+                                        if (!hasSelectedShape) return;
+                                        setIsBackgroundColorMenuOpen(false);
+                                        setIsTextColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen((prev) => !prev);
+                                    }}
                                 >
                                     <Square className="h-3.5 w-3.5" /> Figurfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: shapeColor }}
-                                    />
+                                    <span className="flex h-4 w-[18px] shrink-0 overflow-hidden rounded-sm border border-border">
+                                        <span
+                                            className={`h-full min-w-0 flex-1 ${!shapeHasFill ? CHECKERBOARD_SWATCH_CLASS : ''}`}
+                                            style={shapeHasFill ? { backgroundColor: shapeFillColor } : undefined}
+                                        />
+                                        <span
+                                            className="h-full min-w-0 flex-1 border-l border-border/80"
+                                            style={{ backgroundColor: shapeStrokeColor }}
+                                        />
+                                    </span>
+                                    <ChevronDown className="h-3.5 w-3.5" />
                                 </Button>
                                 {isShapeColorPickerOpen && hasSelectedShape && (
-                                    <div className="absolute left-0 top-full z-30 mt-2 min-w-52 rounded-md border border-border bg-background p-3 shadow-lg">
-                                        <Label className="flex items-center gap-2 px-0 py-0 text-xs font-medium">
-                                            <span>Farge</span>
-                                            <input
-                                                type="color"
-                                                className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
-                                                value={shapeColor}
-                                                onInput={(e) => {
-                                                    const color = (e.target as HTMLInputElement).value;
-                                                    setShapeColor(color);
-                                                    applySelectedShapeColorLive(color);
-                                                }}
-                                                onChange={(e) => {
-                                                    const color = e.target.value;
-                                                    setShapeColor(color);
-                                                    applySelectedShapeColorLive(color);
-                                                    commitCanvasColorChange();
-                                                }}
-                                            />
-                                        </Label>
-                                        <Label className="mt-3 flex items-center gap-2 px-0 py-0 text-xs font-medium">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 cursor-pointer"
-                                                checked={shapeHasFill}
-                                                onChange={(e) => {
-                                                    const nextHasFill = e.target.checked;
-                                                    setShapeHasFill(nextHasFill);
-                                                    applySelectedShapeFillLive(nextHasFill);
-                                                    commitCanvasColorChange();
-                                                }}
-                                            />
-                                            Fyll figur
-                                        </Label>
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-72 overflow-hidden rounded-md border border-border bg-background shadow-lg">
+                                        <div className="space-y-3 p-2">
+                                            <div>
+                                                <p className="mb-1.5 px-0.5 text-xs font-medium text-muted-foreground">Fyll</p>
+                                                <button
+                                                    type="button"
+                                                    title="Ingen fyll (gjennomsiktig)"
+                                                    className={`relative mb-1.5 flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-md border text-xs font-semibold transition-shadow hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                                        !shapeHasFill
+                                                            ? 'border-primary shadow-sm ring-2 ring-primary/30'
+                                                            : 'border-border text-foreground'
+                                                    }`}
+                                                    onClick={() => {
+                                                        setShapeHasFill(false);
+                                                        applySelectedShapeNoFillLive();
+                                                        commitCanvasColorChange();
+                                                    }}
+                                                >
+                                                    <span
+                                                        className={`pointer-events-none absolute inset-0 ${CHECKERBOARD_SWATCH_CLASS}`}
+                                                    />
+                                                    <Ban className="relative z-[1] h-3.5 w-3.5 text-muted-foreground" />
+                                                    <span className="relative z-[1]">Ingen fyll</span>
+                                                </button>
+                                                <div className="grid grid-cols-8 gap-1.5">
+                                                    {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                        const isSelected = shapeHasFill && isPresetSelected(shapeFillColor, hex, '#667eea');
+                                                        return (
+                                                            <button
+                                                                key={`fill-${hex}`}
+                                                                type="button"
+                                                                title={hex}
+                                                                aria-pressed={isSelected}
+                                                                className={`${PRESET_SWATCH_CLASS} ${
+                                                                    isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                                }`}
+                                                                style={{ backgroundColor: hex }}
+                                                                onClick={() => {
+                                                                    setShapeFillColor(hex);
+                                                                    setShapeHasFill(true);
+                                                                    applySelectedShapeFillColorLive(hex);
+                                                                    commitCanvasColorChange();
+                                                                }}
+                                                            >
+                                                                {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className={`${COLOR_MENU_MORE_BUTTON_CLASS} mb-2`}
+                                                    onClick={() => {
+                                                        requestAnimationFrame(() => shapeFillNativeInputRef.current?.click());
+                                                    }}
+                                                >
+                                                    <Pipette className="h-4 w-4 shrink-0" />
+                                                    <span>Andre fyllfarger…</span>
+                                                </Button>
+                                            </div>
+                                            <div className="border-t border-border pt-3">
+                                                <p className="mb-1.5 px-0.5 text-xs font-medium text-muted-foreground">Kontur</p>
+                                                <div className="grid grid-cols-8 gap-1.5">
+                                                    {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                        const isSelected = isPresetSelected(shapeStrokeColor, hex, '#667eea');
+                                                        return (
+                                                            <button
+                                                                key={`stroke-${hex}`}
+                                                                type="button"
+                                                                title={hex}
+                                                                aria-pressed={isSelected}
+                                                                className={`${PRESET_SWATCH_CLASS} ${
+                                                                    isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                                }`}
+                                                                style={{ backgroundColor: hex }}
+                                                                onClick={() => {
+                                                                    setShapeStrokeColor(hex);
+                                                                    applySelectedShapeStrokeColorLive(hex);
+                                                                    commitCanvasColorChange();
+                                                                }}
+                                                            >
+                                                                {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className={`${COLOR_MENU_MORE_BUTTON_CLASS} mb-2`}
+                                                    onClick={() => {
+                                                        requestAnimationFrame(() => shapeStrokeNativeInputRef.current?.click());
+                                                    }}
+                                                >
+                                                    <Pipette className="h-4 w-4 shrink-0" />
+                                                    <span>Andre konturfarger…</span>
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                            <div className="relative order-13">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="relative flex items-center gap-1.5"
-                                    disabled={!hasSelectedText}
-                                >
-                                    <Type className="h-3.5 w-3.5" /> Tekstfarge
-                                    <span
-                                        className="h-4 w-4 rounded-sm border border-border"
-                                        style={{ backgroundColor: textColor }}
-                                    />
-                                </Button>
+                            <div ref={textColorMenuRef} className="relative order-13">
                                 <input
+                                    ref={textColorNativeInputRef}
                                     type="color"
-                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                                    value={textColor}
+                                    className="sr-only"
+                                    aria-hidden
+                                    tabIndex={-1}
+                                    value={toHexColorForInput(textColor, '#000000')}
                                     disabled={!hasSelectedText}
                                     onInput={(e) => {
                                         const color = (e.target as HTMLInputElement).value;
@@ -2518,6 +2819,71 @@ useEffect(() => {
                                         commitCanvasColorChange();
                                     }}
                                 />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-1.5"
+                                    disabled={!hasSelectedText}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isTextColorMenuOpen}
+                                    onClick={() => {
+                                        if (!hasSelectedText) return;
+                                        setIsBackgroundColorMenuOpen(false);
+                                        setIsShapeColorPickerOpen(false);
+                                        setIsTextColorMenuOpen((prev) => !prev);
+                                    }}
+                                >
+                                    <Type className="h-3.5 w-3.5" /> Tekstfarge
+                                    <span
+                                        className="h-4 w-4 rounded-sm border border-border"
+                                        style={{ backgroundColor: textColor }}
+                                    />
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                </Button>
+                                {isTextColorMenuOpen && hasSelectedText && (
+                                    <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-md border border-border bg-background p-2 shadow-lg">
+                                        <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">Forhåndsdefinerte farger</p>
+                                        <div className="grid grid-cols-8 gap-1.5">
+                                            {TOOLBAR_COLOR_PRESETS.map((hex) => {
+                                                const isSelected = isPresetSelected(textColor, hex, '#000000');
+                                                return (
+                                                    <button
+                                                        key={hex}
+                                                        type="button"
+                                                        title={hex}
+                                                        aria-pressed={isSelected}
+                                                        className={`${PRESET_SWATCH_CLASS} ${
+                                                            isSelected ? SELECTED_PRESET_SWATCH_CLASS : ''
+                                                        }`}
+                                                        style={{ backgroundColor: hex }}
+                                                        onClick={() => {
+                                                            setTextColor(hex);
+                                                            applySelectedTextColorLive(hex);
+                                                            commitCanvasColorChange();
+                                                            setIsTextColorMenuOpen(false);
+                                                        }}
+                                                    >
+                                                        {isSelected && <Check className={`h-3.5 w-3.5 ${getPresetCheckmarkClass(hex)}`} strokeWidth={3} />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            className={COLOR_MENU_MORE_BUTTON_CLASS}
+                                            onClick={() => {
+                                                setIsTextColorMenuOpen(false);
+                                                requestAnimationFrame(() => textColorNativeInputRef.current?.click());
+                                            }}
+                                        >
+                                            <Pipette className="h-4 w-4 shrink-0" />
+                                            <span>Flere farger…</span>
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             <select
                                 value={fontFamily}
