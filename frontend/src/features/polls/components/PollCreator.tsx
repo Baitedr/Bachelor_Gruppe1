@@ -93,7 +93,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps)
 
   return (
     <div className='space-y-4'>
-      <h2 className='text-xl font-semibold text-foreground'>Opprett avstemning</h2>
+      <h2 className='text-xl font-semibold text-foreground'>Opprett en poll</h2>
       <form onSubmit={handleSave} className='space-y-6'>
         <div className='space-y-2'>
           <Label>Spørsmål</Label>
@@ -160,7 +160,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps)
               <XCircle className='h-4 w-4' /> Avbryt
             </Button>
           )}
-          <Button type='submit' variant='default' className='flex items-center gap-1.5'>
+          <Button type='submit' variant='default' className='ml-auto flex items-center gap-1.5'>
             <Save className='h-4 w-4' /> Lagre
           </Button>
         </div>
