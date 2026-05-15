@@ -3,7 +3,6 @@ import LivePresentation from '@/features/live/LivePresentation'
 import LivePresentationProjectorShell from '@/features/live/LivePresentationProjectorShell'
 import Login from '@/features/auth/Login'
 import PhoneInteraction from '@/features/live/JoinPage'
-import PollsPage from '@/features/polls/PollsPage'
 import PresentationEditor from '@/features/editor/PresentationEditor'
 import type { PresentationEditorHandle } from '@/features/editor/PresentationEditor'
 import SessionLobby from '@/features/live/SessionLobby'
@@ -28,7 +27,6 @@ type Page =
   | 'login'
   | 'home'
   | 'editor'
-  | 'polls'
   | 'lobby'
   | 'live'
   | 'phoneinteraction'
@@ -1372,8 +1370,6 @@ function App() {
             </CardContent>
           </Card>
         )}
-
-        {currentPage === 'polls' && <PollsPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
 
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>

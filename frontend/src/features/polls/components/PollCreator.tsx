@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { X, Plus, Trash2, Save, XCircle } from 'lucide-react'
 
+// Grenseverdier for antall svaralternativer i en poll.
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 10
 
@@ -12,6 +13,7 @@ type PollOptionInput = {
   votes?: number
 }
 
+// Inndata ved redigering av eksisterende poll, alle felt er valgfrie.
 type PollInputData = {
   id?: string | number
   question?: string
@@ -19,6 +21,7 @@ type PollInputData = {
   createdAt?: string
 }
 
+// Utdata som sendes til onSave, alle felt er påkrevd.
 type PollOutputData = {
   id: string | number
   question: string
@@ -35,18 +38,24 @@ type PollCreatorProps = {
   onCancel?: () => void
 }
 
+
+// Skjema for å opprette eller redigere en poll.
+// Brukes både i PresentationEditor (inline) og som frittstående komponent.
 const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps) => {
   const [pollQuestion, setPollQuestion] = useState<string>(initialData?.question || '')
+  // Alternativer lagres som rene tekststrenger; konverteres til objekter ved lagring.
   const [pollOptions, setPollOptions] = useState<string[]>(
     initialData?.options?.map((opt) => opt.text) || Array(MIN_OPTIONS).fill('')
   )
 
+  // Legger til et tomt alternativ så lenge vi er under maksimumsgrensen.
   const handleAddOption = () => {
     if (pollOptions.length < MAX_OPTIONS) {
       setPollOptions([...pollOptions, ''])
     }
   }
 
+  // Fjerner alternativet på gitt indeks, men aldri under minimumsgrensen.
   const handleRemoveOption = (index: number) => {
     if (pollOptions.length > MIN_OPTIONS) {
       setPollOptions(pollOptions.filter((_, i) => i !== index))
@@ -67,6 +76,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps)
       return
     }
 
+    // Filtrer ut tomme alternativer før validering og lagring.
     const validOptions = pollOptions.filter((opt) => opt.trim() !== '')
     if (validOptions.length < 2) {
       alert('Vennligst oppgi minst 2 alternativer')
@@ -74,6 +84,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps)
     }
 
     const pollData: PollOutputData = {
+      // Behold eksisterende id ved redigering; generer ny ved oppretting.
       id: initialData?.id || Date.now(),
       question: pollQuestion,
       options: validOptions.map((opt) => ({
@@ -86,6 +97,7 @@ const PollCreator = ({ initialData = null, onSave, onCancel }: PollCreatorProps)
     onSave(pollData)
   }
 
+  // Nullstiller skjemaet til starttilstand uten å lukke det.
   const handleClear = () => {
     setPollQuestion('')
     setPollOptions(Array(MIN_OPTIONS).fill(''))
