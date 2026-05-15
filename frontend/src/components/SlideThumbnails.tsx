@@ -16,6 +16,10 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
+//Rendrer en liste med thumbnails for presentationediotor
+//Støtter slide interaksjoner som sletting, duplisering og reordering ved drag and drop 
+//Show slide preview, tittel og thumbnail bilde av ikoner for spørsmål, avstemning og polls
+
 type SlideObject = {
   templateText?: string
   text?: string
