@@ -3,9 +3,19 @@ import { StaticCanvas } from 'fabric'
 import { hideFabricEmbedPlaceholdersForLiveOverlay } from '../../lib/fabricSlideObjects'
 import SlideEmbedOverlays, { type SlideEmbedLiveContext } from '../SlideEmbedOverlays'
 
+/**
+ * Live-canvas for visning av ett lysbilde med responsiv skalering.
+ * @author T3lluz
+ */
 /** Standard lysbildestørrelse når JSON mangler eksplisitte mål (16:9). */
 const BASE_WIDTH = 960
 const BASE_HEIGHT = 540
+
+const styles = {
+  canvasStageWrap: 'box-border flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-visible p-4 sm:p-5',
+  canvasFrame:
+    'relative overflow-hidden rounded-lg shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]',
+} as const
 
 export type LiveSlideCanvasData = {
   backgroundColor?: string
@@ -30,13 +40,16 @@ const LivePresentationCanvas = ({
   presenterToolbar?: ReactNode
   embedLive?: SlideEmbedLiveContext | null
 }) => {
+  // DOM-referanser for canvas og wrapper brukes i skaleringsregnestykket.
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fabricRef = useRef<InstanceType<typeof StaticCanvas> | null>(null)
+  // Tvinger re-layout av iframe-overlays når sceneinnhold endres.
   const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const baseSizeRef = useRef({ width: BASE_WIDTH, height: BASE_HEIGHT })
 
+  // Scene-størrelse sendes til overlay-komponenten for korrekt plassering av embeds.
   const sceneSize = useMemo(() => {
     const rawWidth = Number(slideData?.fabricData?.width)
     const rawHeight = Number(slideData?.fabricData?.height)
@@ -46,6 +59,7 @@ const LivePresentationCanvas = ({
     }
   }, [slideData])
 
+  // Leser basestørrelse fra fabricData (fallback til standard 16:9).
   const resolveBaseSize = () => {
     const rawWidth = Number(slideData?.fabricData?.width)
     const rawHeight = Number(slideData?.fabricData?.height)
@@ -55,6 +69,7 @@ const LivePresentationCanvas = ({
     return baseSizeRef.current
   }
 
+  // Beregner mål og zoom slik at hele lysbildet alltid holder seg innenfor stage.
   const fitToContainer = () => {
     if (!containerRef.current || !wrapperRef.current || !fabricRef.current) return
 
@@ -76,6 +91,7 @@ const LivePresentationCanvas = ({
   }
 
   useEffect(() => {
+    // Oppretter én statisk Fabric-canvas ved mount.
     if (!canvasRef.current) return
 
     const { width, height } = resolveBaseSize()
@@ -93,8 +109,10 @@ const LivePresentationCanvas = ({
   }, [])
 
   useEffect(() => {
+    // Re-rendrer canvas hver gang slideData endres.
     if (!fabricRef.current) return
 
+    // Laster nytt slide-innhold, resetter viewport og trigger overlay-relayout.
     const renderData = async () => {
       const { width, height } = resolveBaseSize()
       if (slideData?.fabricData) {
@@ -117,6 +135,7 @@ const LivePresentationCanvas = ({
   }, [slideData])
 
   useEffect(() => {
+    // Følger container-størrelse (resizing/fullskjerm) og skalerer canvas fortløpende.
     const observer = new ResizeObserver(() => fitToContainer())
     if (containerRef.current) observer.observe(containerRef.current)
     fitToContainer()
@@ -124,14 +143,9 @@ const LivePresentationCanvas = ({
   }, [])
 
   return (
-    <div
-      ref={containerRef}
-      className='box-border flex h-full min-h-0 w-full min-w-0 items-center justify-center overflow-visible p-4 sm:p-5'
-    >
-      <div
-        ref={wrapperRef}
-        className='relative overflow-hidden rounded-lg shadow-[0_22px_50px_-12px_rgba(15,23,42,0.28),0_10px_28px_-8px_rgba(15,23,42,0.14),0_2px_8px_-2px_rgba(15,23,42,0.08)] dark:shadow-[0_24px_56px_-10px_rgba(0,0,0,0.65),0_12px_32px_-8px_rgba(0,0,0,0.45)]'
-      >
+    // Wrapper holder korrekt aspect ratio, mens selve canvas fyller wrapperen.
+    <div ref={containerRef} className={styles.canvasStageWrap}>
+      <div ref={wrapperRef} className={styles.canvasFrame}>
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
         <SlideEmbedOverlays
           fabricCanvasRef={fabricRef}

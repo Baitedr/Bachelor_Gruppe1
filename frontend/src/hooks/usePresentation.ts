@@ -33,38 +33,66 @@ type CableReceived = {
   question_id?: string
   recent_answers?: string[]
   question_type?: string
+  interaction_type?: string
+  interaction_id?: string | number
   embed_key?: string
   state?: string
   time?: unknown
   seq?: unknown
+  sent_at_ms?: unknown
+  /** `live_state_snapshot`-payload sendt fra backend ved (re)connect. */
+  current_slide?: unknown
+  liveboard_slide_index?: unknown
+  active_interaction?: unknown
 }
+
+/**
+ * Internt resultatobjekt for én poll/spørsmål. Brukes som verdi i resultat-maps.
+ */
+type PollResultsEntry = { results?: Record<string, number>; total?: number }
+type QuestionResultsEntry = {
+  results?: Record<string, number>
+  total?: number
+  recent_answers?: string[]
+  question_type?: string
+}
+
+/** Hjelper for å hente verdier ut av ukjent payload uten å miste typesikkerhet. */
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+
+/**
+ * Én aktiv interaksjon om gangen — enten en poll ELLER et spørsmål. Tidligere hadde vi
+ * to separate state-felter (`activePoll`, `activeQuestion`) som *skulle* være gjensidig
+ * utelukkende, men i praksis kunne ende opp truthy samtidig hvis events kom i feil
+ * rekkefølge etter reconnect. Da viste publikum begge seksjoner. Ved å gå via én
+ * intern state-verdi er "begge synlig samtidig" umulig per konstruksjon.
+ */
+type ActiveInteractionState =
+  | { kind: 'poll'; data: unknown; acceptingAnswers: boolean }
+  | { kind: 'question'; data: unknown; acceptingAnswers: boolean }
+  | null
 
 export const usePresentation = (presentationId: string | number | null, token: string | null) => {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [activePoll, setActivePoll] = useState<unknown>(null)
-  const [pollResults, setPollResults] = useState<Record<string, { results?: Record<string, number>; total?: number }>>({})
+  const [activeInteraction, setActiveInteraction] = useState<ActiveInteractionState>(null)
+  const [pollResults, setPollResults] = useState<Record<string, PollResultsEntry>>({})
   const [sessionEnded, setSessionEnded] = useState(false)
   const [participantCount, setParticipantCount] = useState(0)
   const [sessionStarted, setSessionStarted] = useState(false)
   const [submittedPollIds, setSubmittedPollIds] = useState<Record<string, boolean>>({})
-  const [activeQuestion, setActiveQuestion] = useState<unknown>(null)
-  const [questionResults, setQuestionResults] = useState<
-    Record<
-      string,
-      {
-        results?: Record<string, number>
-        total?: number
-        recent_answers?: string[]
-        question_type?: string
-      }
-    >
-  >({})
+  const [questionResults, setQuestionResults] = useState<Record<string, QuestionResultsEntry>>({})
   const [submittedQuestionIds, setSubmittedQuestionIds] = useState<Record<string, boolean>>({})
   /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
   const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState<number | null>(null)
 
   /** Synkronisert YouTube/Vimeo-avspilling (presentatør → alle klienter). */
   const [embedPlayback, setEmbedPlayback] = useState<EmbedPlaybackPayload | null>(null)
+
+  // Avledede verdier — eksponert med samme navn som før så ingen consumer trenger endring.
+  const activePoll = activeInteraction?.kind === 'poll' ? activeInteraction.data : null
+  const activeQuestion = activeInteraction?.kind === 'question' ? activeInteraction.data : null
+  const interactionAcceptingAnswers = activeInteraction ? activeInteraction.acceptingAnswers : true
 
   const cableRef = useRef<ReturnType<typeof createConsumer> | null>(null)
   const subscriptionRef = useRef<{ perform: (action: string, data: object) => void; unsubscribe: () => void } | null>(
@@ -93,8 +121,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
             case 'slide_change': {
               const idx = normalizeSlideIndex(data.slide_index)
               if (idx !== null) setCurrentSlide(idx)
-              setActivePoll(null)
-              setActiveQuestion(null)
+              setActiveInteraction(null)
               setEmbedPlayback(null)
               const resume = data.resume_liveboard === true || data.resume_liveboard === 'true'
               if (resume && idx !== null) {
@@ -106,8 +133,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
             }
             case 'liveboard_started': {
               if (data.clear_interactions !== false) {
-                setActivePoll(null)
-                setActiveQuestion(null)
+                setActiveInteraction(null)
               }
               const lbIdx = normalizeSlideIndex(data.slide_index)
               if (lbIdx !== null) setLiveboardForSlideIndex(lbIdx)
@@ -117,11 +143,20 @@ export const usePresentation = (presentationId: string | number | null, token: s
               setLiveboardForSlideIndex(null)
               break
             case 'interactions_cleared':
-              setActivePoll(null)
-              setActiveQuestion(null)
+              setActiveInteraction(null)
+              break
+            case 'interactions_stopped':
+              // Behold hvilken interaksjon som er aktiv, men marker som stengt for svar.
+              setActiveInteraction((prev) =>
+                prev ? { ...prev, acceptingAnswers: false } : prev,
+              )
               break
             case 'poll_activated':
-              setActivePoll(data.poll)
+              setActiveInteraction({
+                kind: 'poll',
+                data: data.poll ?? null,
+                acceptingAnswers: true,
+              })
               break
             case 'poll_results':
               setPollResults((prev) => ({
@@ -154,7 +189,11 @@ export const usePresentation = (presentationId: string | number | null, token: s
               lastRealtimeSessionStateAtRef.current = Date.now()
               break
             case 'question_activated':
-              setActiveQuestion(data.question || null)
+              setActiveInteraction({
+                kind: 'question',
+                data: data.question ?? null,
+                acceptingAnswers: true,
+              })
               break
             case 'question_results':
               setQuestionResults((prev) => ({
@@ -167,18 +206,98 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 },
               }))
               break
+            case 'live_state_snapshot': {
+              // Sendt kun til denne klienten ved (re)connect. Brukes til full resync
+              // så audience som blir med midt i økten umiddelbart får riktig slide,
+              // liveboard og evt. aktiv interaksjon — uten å vente på neste handling.
+              const slideIdx = normalizeSlideIndex(data.current_slide)
+              if (slideIdx !== null) setCurrentSlide(slideIdx)
+
+              const lbIdx = normalizeSlideIndex(data.liveboard_slide_index)
+              setLiveboardForSlideIndex(lbIdx)
+
+              const interaction = asRecord(data.active_interaction)
+              if (!interaction) {
+                setActiveInteraction(null)
+                break
+              }
+
+              const interactionKind = interaction.type === 'poll'
+                ? 'poll'
+                : interaction.type === 'question'
+                  ? 'question'
+                  : null
+              if (!interactionKind) {
+                setActiveInteraction(null)
+                break
+              }
+
+              const accepting = interaction.accepting_answers !== false
+
+              if (interactionKind === 'poll') {
+                const pollData = interaction.poll ?? null
+                setActiveInteraction({ kind: 'poll', data: pollData, acceptingAnswers: accepting })
+                const results = asRecord(interaction.poll_results)
+                const pollId = asRecord(pollData)?.id
+                if (results && pollId != null) {
+                  setPollResults((prev) => ({
+                    ...prev,
+                    [String(pollId)]: {
+                      results: (results.results as Record<string, number>) || {},
+                      total: typeof results.total === 'number' ? results.total : 0,
+                    },
+                  }))
+                }
+              } else {
+                const questionData = interaction.question ?? null
+                setActiveInteraction({
+                  kind: 'question',
+                  data: questionData,
+                  acceptingAnswers: accepting,
+                })
+                const results = asRecord(interaction.question_results)
+                const qId = asRecord(questionData)?.id
+                if (results && qId != null) {
+                  setQuestionResults((prev) => ({
+                    ...prev,
+                    [String(qId)]: {
+                      results: (results.results as Record<string, number>) || {},
+                      total: typeof results.total === 'number' ? results.total : 0,
+                      recent_answers: Array.isArray(results.recent_answers)
+                        ? (results.recent_answers as string[])
+                        : [],
+                      question_type:
+                        typeof results.question_type === 'string'
+                          ? (results.question_type as string)
+                          : 'open_text',
+                    },
+                  }))
+                }
+              }
+
+              lastRealtimeSessionStateAtRef.current = Date.now()
+              break
+            }
             case 'embed_playback': {
-              // Publikum: oppdater innebygd video via postMessage (kun nyeste `seq`).
+              // Publikum: oppdater innebygd video via spiller-API (kun nyeste `seq`).
               const slideIdx = normalizeSlideIndex(data.slide_index)
               const key = (data.embed_key || '').toString()
               if (slideIdx === null || !key) break
               const st = data.state === 'play' ? 'play' : 'pause'
+              const rawSentAt = data.sent_at_ms
+              const sentAtMs =
+                typeof rawSentAt === 'number'
+                  ? rawSentAt
+                  : rawSentAt != null
+                    ? Number(rawSentAt)
+                    : undefined
               setEmbedPlayback({
                 slide_index: slideIdx,
                 embed_key: key,
                 state: st,
                 time: Number(data.time) || 0,
                 seq: Number(data.seq) || 0,
+                sent_at_ms: Number.isFinite(sentAtMs) ? (sentAtMs as number) : undefined,
               })
               break
             }
@@ -291,6 +410,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
     }
   }
 
+  const stopInteractions = () => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.perform('stop_interactions', {})
+    }
+  }
+
   const activateQuestion = (questionId: string | number) => {
     if (subscriptionRef.current) {
       subscriptionRef.current.perform('activate_question', { question_id: questionId })
@@ -331,5 +456,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     submittedQuestionIds,
     embedPlayback,
     broadcastEmbedPlayback,
+    stopInteractions,
+    interactionAcceptingAnswers,
   }
 }

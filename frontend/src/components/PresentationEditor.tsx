@@ -49,6 +49,7 @@ import {
 import { parseYoutubeId, parseVimeoId } from '../lib/embedUrls';
 import { FabricEmbed, FabricVideo, createVideoElement } from '../lib/fabricSlideObjects';
 import SlideEmbedOverlays from './SlideEmbedOverlays';
+import { cn } from '@/lib/utils';
 
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -718,13 +719,6 @@ ref: ForwardedRef<PresentationEditorHandle>
 
         return () => resizeObserver.disconnect();
     }, [updateCanvasScale, isLeftSidebarCollapsed, isRightSidebarCollapsed]);
-
-    // Skriver skalering direkte på wrapper for å unngå inline-style i JSX.
-    useEffect(() => {
-        if (!canvasScaleWrapperRef.current) return;
-
-        canvasScaleWrapperRef.current.style.transform = `scale(${canvasScale})`;
-    }, [canvasScale]);
 
     // Laster aktivt lysbilde inn i Fabric ved bytte av slide.
     useEffect(() => {
@@ -2936,43 +2930,62 @@ useEffect(() => {
                 <div className="flex min-h-0 w-full flex-1 overflow-hidden">
                     <div
                         ref={canvasViewportRef}
-                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent px-2 py-1 sm:px-4 sm:py-1.5 md:px-5 md:py-2"
+                        className="relative flex min-h-0 w-full flex-1 items-center justify-center rounded-[10px] bg-transparent px-2 py-1 sm:px-4 sm:py-1.5 md:px-5 md:py-2 dark:bg-zinc-950/40"
                     >
+                        {/* Ytre ramme = skalert pikselstørrelse; indre div scale(top-left). outline-none mot global * outline-ring. */}
                         <div
-                            ref={canvasScaleWrapperRef}
-                            className="relative h-135 w-240 origin-center rounded-lg ring-1 ring-border/45 shadow-[0_6px_28px_rgba(0,0,0,0.05),0_1px_4px_rgba(0,0,0,0.04)] dark:ring-border/35 dark:shadow-[0_10px_36px_rgba(0,0,0,0.35)] [&_canvas]:rounded-lg"
+                            className={cn(
+                                'relative shrink-0 overflow-hidden rounded-lg border border-border bg-transparent',
+                                'shadow-[0_4px_22px_rgba(0,0,0,0.07)]',
+                                'dark:border-[3px] dark:border-white/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.14),0_12px_44px_rgba(0,0,0,0.62)]',
+                                'outline-none focus-visible:outline-none',
+                            )}
+                            style={{
+                                width: CANVAS_WIDTH * canvasScale,
+                                height: CANVAS_HEIGHT * canvasScale,
+                            }}
                         >
-                            <canvas ref={canvasRef} />
-                            <SlideEmbedOverlays
-                                fabricCanvasRef={fabricCanvasRef}
-                                variant="editor"
-                                layoutRevision={embedLayoutRevision}
-                                sceneSize={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
-                            />
-                            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
-                                {guideLines.map((line, index) => (
-                                    <div
-                                        key={`${line.orientation}-${line.position}-${index}`}
-                                        className="absolute bg-blue-600/80"
-                                        style={
-                                            line.orientation === 'vertical'
-                                                ? {
-                                                    left: `${line.position}px`,
-                                                    top: 0,
-                                                    bottom: 0,
-                                                    width: '1px',
-                                                    borderLeft: '1px dashed rgba(37,99,235,0.95)',
-                                                }
-                                                : {
-                                                    top: `${line.position}px`,
-                                                    left: 0,
-                                                    right: 0,
-                                                    height: '1px',
-                                                    borderTop: '1px dashed rgba(37,99,235,0.95)',
-                                                }
-                                        }
-                                    />
-                                ))}
+                            <div
+                                ref={canvasScaleWrapperRef}
+                                className="relative origin-top-left"
+                                style={{
+                                    width: CANVAS_WIDTH,
+                                    height: CANVAS_HEIGHT,
+                                    transform: `scale(${canvasScale})`,
+                                }}
+                            >
+                                <canvas ref={canvasRef} />
+                                <SlideEmbedOverlays
+                                    fabricCanvasRef={fabricCanvasRef}
+                                    variant="editor"
+                                    layoutRevision={embedLayoutRevision}
+                                    sceneSize={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+                                />
+                                <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                                    {guideLines.map((line, index) => (
+                                        <div
+                                            key={`${line.orientation}-${line.position}-${index}`}
+                                            className="absolute bg-blue-600/80"
+                                            style={
+                                                line.orientation === 'vertical'
+                                                    ? {
+                                                        left: `${line.position}px`,
+                                                        top: 0,
+                                                        bottom: 0,
+                                                        width: '1px',
+                                                        borderLeft: '1px dashed rgba(37,99,235,0.95)',
+                                                    }
+                                                    : {
+                                                        top: `${line.position}px`,
+                                                        left: 0,
+                                                        right: 0,
+                                                        height: '1px',
+                                                        borderTop: '1px dashed rgba(37,99,235,0.95)',
+                                                    }
+                                            }
+                                        />
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3043,10 +3056,16 @@ useEffect(() => {
                             <BarChart3 className="h-4 w-4" />
                         </Button>
                         {/* Kompakte badges gjør antall lettere å lese i smal kollapset sidebar. */}
-                        <Badge variant="outline" className="px-1.5 py-0 text-[10px] leading-none">
+                        <Badge
+                            variant="secondary"
+                            className="rounded-md border border-border px-1.5 py-0 text-[10px] font-semibold uppercase leading-none text-secondary-foreground"
+                        >
                             S {(slides[currentSlideIndex]?.questions || []).length}
                         </Badge>
-                        <Badge variant="outline" className="px-1.5 py-0 text-[10px] leading-none">
+                        <Badge
+                            variant="secondary"
+                            className="rounded-md border border-border px-1.5 py-0 text-[10px] font-semibold uppercase leading-none text-secondary-foreground"
+                        >
                             P {(slides[currentSlideIndex]?.polls || []).length}
                         </Badge>
                     </div>
