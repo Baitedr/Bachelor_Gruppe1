@@ -1,5 +1,5 @@
-import { cn, resolveTextWithVariables, type PresentationVariable } from '../lib/utils'
-import { Button } from './ui/button'
+import { cn, resolveTextWithVariables, type PresentationVariable } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { BarChart2, Clapperboard, Copy, GripVertical, MessageSquare, Trash2 } from 'lucide-react'
 import {
   DndContext,

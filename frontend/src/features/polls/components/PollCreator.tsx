@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { X, Plus, Trash2, Save, XCircle } from 'lucide-react'
 
 const MIN_OPTIONS = 2

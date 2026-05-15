@@ -1,4 +1,5 @@
 require "active_support/core_ext/integer/time"
+require "active_support/core_ext/numeric/bytes"
 require_relative "../secret_key_base_resolver"
 
 Rails.application.configure do

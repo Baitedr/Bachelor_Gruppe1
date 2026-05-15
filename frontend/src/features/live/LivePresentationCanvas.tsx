@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StaticCanvas } from 'fabric'
-import { hideFabricEmbedPlaceholdersForLiveOverlay } from '../../lib/fabricSlideObjects'
-import SlideEmbedOverlays, { type SlideEmbedLiveContext } from '../SlideEmbedOverlays'
+import { hideFabricEmbedPlaceholdersForLiveOverlay } from '@/lib/fabricSlideObjects'
+import SlideEmbedOverlays, { type SlideEmbedLiveContext } from '@/features/editor/SlideEmbedOverlays'
 
 /**
  * Live-canvas for visning av ett lysbilde med responsiv skalering.

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePresentation } from '../../hooks/usePresentation'
+import { usePresentation } from '@/hooks/usePresentation'
 import {
   normalizePresentationVariables,
   resolveFabricDataWithVariables,
   resolveTextWithVariables,
   type PresentationVariable,
-} from '../../lib/utils'
-import api from '../../services/api'
-import LivePresentationAudience from './ui/LivePresentationAudience.tsx'
-import LivePresentationPresenter from './ui/LivePresentationPresenter.tsx'
+} from '@/lib/utils'
+import api from '@/services/api'
+import LivePresentationAudience from './ui/LivePresentationAudience'
+import LivePresentationPresenter from './ui/LivePresentationPresenter'
 import type { PresenterSlideData } from './PresenterSlideViewport'
 
 /**

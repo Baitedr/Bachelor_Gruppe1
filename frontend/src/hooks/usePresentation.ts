@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createConsumer } from '@rails/actioncable'
-import api from '../services/api'
-import type { EmbedPlaybackPayload } from '../lib/embedLiveShared'
+import api from '@/services/api'
+import type { EmbedPlaybackPayload } from '@/lib/embedLiveShared'
 
 /** Kanal/JSON kan gi indeks som tall eller streng; må matche strengt mellom liveboard og currentSlide. */
 const normalizeSlideIndex = (value: unknown): number | null => {

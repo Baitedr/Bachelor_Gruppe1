@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { EmbedProvider } from '../lib/embedUrls';
-import { getEmbedIframeSrc } from '../lib/embedUrls';
-import type { EmbedPlaybackPayload } from '../lib/embedLiveShared';
+import type { EmbedProvider } from '@/lib/embedUrls';
+import { getEmbedIframeSrc } from '@/lib/embedUrls';
+import type { EmbedPlaybackPayload } from '@/lib/embedLiveShared';
 import {
     createAudiencePlaybackController,
     ensureVimeoPlayerScript,
     ensureYoutubeIframeApi,
     type AudiencePlayerController,
     type PresenterIntent,
-} from '../lib/hostedPlayerControl';
+} from '@/lib/hostedPlayerControl';
 
 type LayoutPct = {
     leftPct: number;

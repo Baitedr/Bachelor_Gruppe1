@@ -88,6 +88,21 @@ VITE_DEV_BACKEND_ORIGIN=http://localhost:3002
 
 ## Struktur (kort)
 
-- `frontend/src/`: UI, editor, live session, lobby, polls og autentisering
-- `backend/app/`: controllere, modeller og channels
-- `backend/config/`: routes, database, cable og miljø-konfig
+**Frontend** (`frontend/src/`)
+
+- `app/` — app-shell (`App.tsx`)
+- `features/auth/` — innlogging
+- `features/editor/` — slide-editor (Fabric)
+- `features/live/` — live-sesjon, lobby, join, projector
+- `features/polls/` — poll-administrasjon
+- `components/ui/` — delte shadcn-komponenter
+- `lib/`, `hooks/`, `services/` — hjelpekode og API-klient
+
+**Backend** (`backend/app/`)
+
+- `controllers/api/v1/` — REST-endepunkter
+- `controllers/concerns/` — delt auth (JWT)
+- `models/` — Active Record-modeller
+- `serializers/` — JSON-responser
+- `services/` — forretningslogikk (f.eks. lagring av slides)
+- `channels/` — Action Cable (live)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import PollResults from './PollResults'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 
 type PollOption = {
   id?: string | number

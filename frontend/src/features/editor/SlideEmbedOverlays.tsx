@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { Canvas, StaticCanvas } from 'fabric';
-import { FabricEmbed } from '../lib/fabricSlideObjects';
-import { getEmbedIframeSrc } from '../lib/embedUrls';
-import type { EmbedPlaybackPayload } from '../lib/embedLiveShared';
-import type { EmbedProvider } from '../lib/embedUrls';
+import { FabricEmbed } from '@/lib/fabricSlideObjects';
+import { getEmbedIframeSrc } from '@/lib/embedUrls';
+import type { EmbedPlaybackPayload } from '@/lib/embedLiveShared';
+import type { EmbedProvider } from '@/lib/embedUrls';
 import { cn } from '@/lib/utils';
 import SyncedHostedEmbed from './SyncedHostedEmbed';
-import { Button } from './ui/button';
+import { Button } from '@/components/ui/button';
 
 export type SlideEmbedOverlayVariant = 'editor' | 'live';
 

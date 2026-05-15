@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlusCircle, List, ArrowLeft, Trash2 } from 'lucide-react'
-import api from '../../services/api'
-import PollCreator from './PollCreator'
-import PollViewer from './PollViewer'
+import api from '@/services/api'
+import PollCreator from './components/PollCreator'
+import PollViewer from './components/PollViewer'
 
 type PollOption = {
   id: string | number

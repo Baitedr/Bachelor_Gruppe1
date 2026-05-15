@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react'
-import { usePresentation } from '../../hooks/usePresentation'
-import { Badge } from '../ui/badge'
-import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { usePresentation } from '@/hooks/usePresentation'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 /**
  * Lobby før live-økt starter; viser kode, deltakerantall og startknapp.

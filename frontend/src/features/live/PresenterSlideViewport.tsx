@@ -1,9 +1,9 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import LivePresentationCanvas from './LivePresentationCanvas'
-import LiveResultsBoard from './ui/LiveResultsBoard.tsx'
-import type { SlideEmbedLiveContext } from '../SlideEmbedOverlays'
+import LiveResultsBoard from './ui/LiveResultsBoard'
+import type { SlideEmbedLiveContext } from '@/features/editor/SlideEmbedOverlays'
 
 /**
  * Felles viewport for presentatør: vanlig slide, fabric-slide eller liveboard.

@@ -31,23 +31,23 @@ import {
     Check,
 } from 'lucide-react';
 import SlideThumbnails from './SlideThumbnails';
-import PollCreator from './polls/PollCreator';
+import PollCreator from '@/features/polls/components/PollCreator';
 import Question from './Question';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
-import { createDefaultSlideFabricData } from '../lib/fabricDefaults';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { createDefaultSlideFabricData } from '@/lib/fabricDefaults';
 // hjelpefunksjoner for å normalisere og håndtere presentasjonsvariabler
 import {
     normalizePresentationVariables,
     normalizeVariableName,
     resolveFabricDataWithVariables,
     type PresentationVariable,
-} from '../lib/utils';
-import { parseYoutubeId, parseVimeoId } from '../lib/embedUrls';
-import { FabricEmbed, FabricVideo, createVideoElement } from '../lib/fabricSlideObjects';
+} from '@/lib/utils';
+import { parseYoutubeId, parseVimeoId } from '@/lib/embedUrls';
+import { FabricEmbed, FabricVideo, createVideoElement } from '@/lib/fabricSlideObjects';
 import SlideEmbedOverlays from './SlideEmbedOverlays';
 import { cn } from '@/lib/utils';
 

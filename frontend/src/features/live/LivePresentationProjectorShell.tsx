@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Maximize, Minimize } from 'lucide-react'
-import { usePresentation } from '../../hooks/usePresentation'
-import { exitFullscreenDoc, getFullscreenElement, requestFullscreenEl } from '../../lib/fullscreenDisplay'
+import { usePresentation } from '@/hooks/usePresentation'
+import { exitFullscreenDoc, getFullscreenElement, requestFullscreenEl } from '@/lib/fullscreenDisplay'
 import {
   normalizePresentationVariables,
   resolveFabricDataWithVariables,
   resolveTextWithVariables,
   type PresentationVariable,
-} from '../../lib/utils'
-import api from '../../services/api'
-import { Button } from '../ui/button'
+} from '@/lib/utils'
+import api from '@/services/api'
+import { Button } from '@/components/ui/button'
 import { PresenterSlideViewport, type PresenterSlideData } from './PresenterSlideViewport'
 import { usePresenterSlideDeck } from './usePresenterSlideDeck'
 

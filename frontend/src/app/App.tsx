@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
-import LivePresentation from './components/livesession/LivePresentation'
-import LivePresentationProjectorShell from './components/livesession/LivePresentationProjectorShell'
-import Login from './components/Login'
-import PhoneInteraction from './components/livesession/joinSession'
-import PollPage from './components/polls/PollPage'
-import PresentationEditor from './components/PresentationEditor'
-import type { PresentationEditorHandle } from './components/PresentationEditor'
-import SessionLobby from './components/livesession/SessionLobby'
-import Navbar from './components/ui/Navbar'
+import LivePresentation from '@/features/live/LivePresentation'
+import LivePresentationProjectorShell from '@/features/live/LivePresentationProjectorShell'
+import Login from '@/features/auth/Login'
+import PhoneInteraction from '@/features/live/JoinPage'
+import PollsPage from '@/features/polls/PollsPage'
+import PresentationEditor from '@/features/editor/PresentationEditor'
+import type { PresentationEditorHandle } from '@/features/editor/PresentationEditor'
+import SessionLobby from '@/features/live/SessionLobby'
+import Navbar from '@/components/ui/Navbar'
 import { ModeToggle } from '@/components/ui/mode-toggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,8 +19,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import api from './services/api'
-import { createDefaultSlideFabricData } from './lib/fabricDefaults'
+import api from '@/services/api'
+import { createDefaultSlideFabricData } from '@/lib/fabricDefaults'
 import { cn, logoutStyleDestructiveButtonClassName } from '@/lib/utils'
 import { useIsMobileDevice } from '@/hooks/useIsMobileDevice'
 
@@ -1373,7 +1373,7 @@ function App() {
           </Card>
         )}
 
-        {currentPage === 'polls' && <PollPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
+        {currentPage === 'polls' && <PollsPage onNavigate={(page) => setCurrentPage(page as Page)} user={user} />}
 
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>
