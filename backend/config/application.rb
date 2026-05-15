@@ -15,12 +15,12 @@ module Backend
     config.load_defaults 7.1
     config.api_only = true
 
-    # Vite build is copied to public/ in the production image; serve assets and index.
+    
     if Rails.env.production?
       config.middleware.insert_before 0, ActionDispatch::Static, Rails.public_path.to_s
     end
 
-    # Required for OmniAuth in API-only mode
+  
     config.session_store :cookie_store,
       key: '_proslides_session',
       same_site: :lax,
@@ -29,16 +29,15 @@ module Backend
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use config.session_store, config.session_options
 
-    # Optimize database connection pool for cold-start requests
-    # Increase from default 5 to handle better concurrency under load
+  
     config.database_connection_pool_size = 10
 
-    # Eager load models in production to avoid cold-start penalties on first requests
+    
     if Rails.env.production?
       config.eager_load_paths += %W(#{config.root}/app/models)
     end
     
-    # CORS: comma-separated origins in ALLOWED_ORIGINS (production); dev default below
+   
     config.middleware.insert_before 0, Rack::Cors do
       allow do
         origins(
@@ -51,7 +50,6 @@ module Backend
       end
     end
 
-    # ActionCable configuration
     config.action_cable.mount_path = '/cable'
     config.action_cable.disable_request_forgery_protection = true
   end 

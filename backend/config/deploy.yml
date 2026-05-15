@@ -1,17 +1,12 @@
-# Kamal deploy for slides.rubynor.com (VPS from Rubynor).
-# Docker build context is the repo root so the image includes the Vite frontend in public/.
-# Run from the backend/ folder (Kamal config lives here), e.g.:
-#   cd backend
-#   bundle exec kamal deploy
-# From repo root (Windows):  .\scripts\kamal.ps1 deploy
-#
-# Kamal reads `.env` for secrets (see `.env.example`). Use an SSH key that can reach `servers.web`.
+# Deploy-konfigurasjon for slides-api-tjenesten.
+# Definerer servere, SSH-tilgang, proxy, Docker image, miljøvariabler, secrets og Redis-tilbehør.
+# Brukes for å automatisere utrulling og drift av backend-applikasjonen på slides.rubynor.com.
 
 secrets_path: .env
 
 service: slides
 
-# Replace with your registry image, e.g. docker.io/myuser/slides-api or ghcr.io/org/slides-api
+
 image: t3lluz/slides-api
 
 servers:
@@ -29,30 +24,28 @@ proxy:
   app_port: 3000
 
 registry:
-  # Docker Hub: username must match the namespace in image (e.g. t3lluz/slides-api → t3lluz).
-  # For GHCR, set server: ghcr.io and username to your GitHub username.
+  
   username: t3lluz
   password:
     - KAMAL_REGISTRY_PASSWORD
 
 builder:
   arch: amd64
-  # Parent of backend/ = monorepo root (frontend + backend in one image).
-  # dockerfile is resolved from cwd (backend/), not from context — use Dockerfile not backend/Dockerfile.
+ 
   context: ..
   dockerfile: Dockerfile
 
 env:
   clear:
-    # Action Cable (production uses redis adapter — see config/cable.yml)
+   
     REDIS_URL: redis://slides-redis:6379/1
-    # Frontend origins allowed by CORS (comma-separated)
+    # Frontend-opprinnelser som er tillatt av CORS (kommaseparert)
     ALLOWED_ORIGINS: https://slides.rubynor.com
-    # OAuth redirect target (must match public site URL)
+    # OAuth-omdirigering (må matche offentlig nettadresse)
     FRONTEND_URL: https://slides.rubynor.com
     # Callback-URL mot Google/GitHub må bruke offentlig https (Kamal-proxy).
     OMNIAUTH_FULL_HOST: https://slides.rubynor.com
-  # Include GOOGLE_* and/or GITHUB_* in backend/.env (empty values = that provider is disabled in omniauth.rb).
+  # Inkluder GOOGLE_* og/eller GITHUB_* i backend/.env (tomme verdier = den leverandøren er deaktivert i omniauth.rb).
   secret:
     - SECRET_KEY_BASE
     - DATABASE_URL
@@ -69,9 +62,7 @@ accessories:
     directories:
       - data:/data
 
-# Optional Postgres on the same VPS: add a `postgres:` entry under accessories (see Kamal docs),
-# set POSTGRES_PASSWORD in secrets, and point DATABASE_URL at the accessory host, e.g.
-# postgresql://slides:PASSWORD@slides-postgres:5432/slides_production
+
 
 aliases:
   console: app exec --interactive --reuse "bin/rails console"

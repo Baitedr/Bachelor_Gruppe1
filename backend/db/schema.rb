@@ -1,17 +1,9 @@
-# This file is auto-generated from the current state of the database. Instead
-# of editing this file, please use the migrations feature of Active Record to
-# incrementally modify your database, and then regenerate this schema definition.
-#
-# This file is the source Rails uses to define your schema when running `bin/rails
-# db:schema:load`. When creating a new database, `bin/rails db:schema:load` tends to
-# be faster and is potentially less error prone than running all of your
-# migrations from scratch. Old migrations may fail to apply correctly if those
-# migrations use external dependencies or application code.
-#
-# It's strongly recommended that you check this file into your version control system.
+# Automatisk generert database-skjema for prosjektet.
+# Viser tabellstrukturer, indekser, constraints og relasjoner for alle modeller.
+# Oppdateres automatisk av Rails-migrasjoner og brukes til å holde oversikt over gjeldende databaseoppsett.
 
 ActiveRecord::Schema[8.1].define(version: 2026_05_08_000100) do
-  # These are extensions that must be enabled in order to support this database
+  # Dette er extensions som mp være aktivert for å støtte denne databasen
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_session_jwt"
   enable_extension "uuid-ossp"
