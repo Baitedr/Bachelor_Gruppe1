@@ -242,6 +242,7 @@ module Api
                 )
             end
             
+            
             def live_presentation_payload(presentation)
                 slides = presentation.slides.order(:slide_index).includes(polls: :poll_options)
 
