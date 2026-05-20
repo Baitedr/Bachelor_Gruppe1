@@ -1,6 +1,9 @@
 import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText } from 'fabric';
+import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText, config } from 'fabric';
 import {
+    AlignCenter,
+    AlignLeft,
+    AlignRight,
     BarChart3,
     Circle as CircleIcon,
     ArrowRight,
@@ -54,6 +57,29 @@ import { cn } from '@/lib/utils';
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const CANVAS_PADDING = 30;
+
+/**
+ * Lerretet skaleres med CSS `transform: scale()` for å passe viewporteren. Uten ekstra
+ * pikseltetthet blir tekst uklar fordi bitmap oppskaleres. Fabric bruker `devicePixelRatio`
+ * på backing store; vi multipliserer med den faktiske skaleringen (avgrenset for ytelse).
+ */
+const MAX_EDITOR_CANVAS_PIXEL_RATIO = 3;
+
+function getSafePosition(
+    preferredLeft: number,
+    preferredTop: number,
+    elementWidth = 200,
+    elementHeight = 150,
+): { left: number; top: number } {
+    const minPos = CANVAS_PADDING;
+    const maxLeft = CANVAS_WIDTH - elementWidth - CANVAS_PADDING;
+    const maxTop = CANVAS_HEIGHT - elementHeight - CANVAS_PADDING;
+
+    return {
+        left: Math.max(minPos, Math.min(preferredLeft, maxLeft)),
+        top: Math.max(minPos, Math.min(preferredTop, maxTop)),
+    };
+}
 /** Ekstra luft rundt den skalerte sliden i viewporter (ikke samme som lerrets-padding for objekter). */
 const CANVAS_VIEWPORT_OUTSET = 8;
 const FONT_FAMILIES = [
@@ -61,8 +87,13 @@ const FONT_FAMILIES = [
     { value: 'Times New Roman, serif', label: 'Times New Roman' },
     { value: 'Georgia, serif', label: 'Georgia' },
     { value: 'Courier New, monospace', label: 'Courier New' },
-    { value: 'Verdana, sans-serif', label: 'Verdana' }
+    { value: 'Verdana, sans-serif', label: 'Verdana' },
 ];
+
+/** Forhåndsvalg for skriftstørrelse på lysbilde-tekst (Fabric `fontSize`). */
+const FONT_SIZE_OPTIONS: readonly number[] = [12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72];
+
+type TextAlignChoice = 'left' | 'center' | 'right';
 
 /** 16 forhåndsvalg: hvit/svart i venstre kolonne + regnbuegradient i to rader. */
 const TOOLBAR_COLOR_PRESETS: readonly string[] = [
@@ -135,7 +166,65 @@ type AlignmentPoint = {
     label: 'start' | 'center' | 'end';
 };
 
-const ALIGNMENT_TOLERANCE = 6;
+/** Pikselradius i lerrets koordinater: kant/senter må være nær en snap-linje. */
+const SNAPPING_TOLERANCE = 11;
+
+/** Slå sammen duplikat-kandidater fra flere objekter (samme linje ett steg unna). */
+function dedupeSnapValues(values: number[], epsilon = 0.75): number[] {
+    const sorted = [...values].filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+    const out: number[] = [];
+    for (const v of sorted) {
+        if (out.length === 0 || Math.abs(out[out.length - 1]! - v) > epsilon) {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+/** Finn beste forskyvning langs én akse og stilling for hjelpelinje. */
+function computeAxisSnapAndGuide(
+    targetPoints: AlignmentPoint[],
+    candidateValues: number[],
+    tolerance: number,
+): { delta: number; guidePosition: number | null } {
+    let bestDistance = tolerance + 1;
+    let delta = 0;
+    let guidePosition: number | null = null;
+
+    for (const tp of targetPoints) {
+        for (const cv of candidateValues) {
+            const distance = Math.abs(tp.value - cv);
+            if (distance > tolerance || distance >= bestDistance) continue;
+
+            bestDistance = distance;
+            delta = cv - tp.value;
+            guidePosition = cv;
+        }
+    }
+
+    return { delta, guidePosition };
+}
+
+/** Lodrette snap-kandidater: lysbildekant, marg, horisontalt senter (+ objektdeler legges til ved snap). */
+function getSlideSnapXCandidates(): number[] {
+    return dedupeSnapValues([
+        0,
+        CANVAS_PADDING,
+        CANVAS_WIDTH / 2,
+        CANVAS_WIDTH - CANVAS_PADDING,
+        CANVAS_WIDTH,
+    ]);
+}
+
+function getSlideSnapYCandidates(): number[] {
+    return dedupeSnapValues([
+        0,
+        CANVAS_PADDING,
+        CANVAS_HEIGHT / 2,
+        CANVAS_HEIGHT - CANVAS_PADDING,
+        CANVAS_HEIGHT,
+    ]);
+}
 
 type CanvasSnapshot = {
     backgroundColor: string;
@@ -306,11 +395,17 @@ ref: ForwardedRef<PresentationEditorHandle>
     const shapeFillNativeInputRef = useRef<HTMLInputElement | null>(null);
     const shapeStrokeNativeInputRef = useRef<HTMLInputElement | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
+    const canvasScaleRef = useRef(1);
+    canvasScaleRef.current = canvasScale;
+    /** Globale Fabric `config.devicePixelRatio` før denne editoren justerer den (gjenopprettes ved unmount). */
+    const fabricDevicePixelRatioRestoreRef = useRef(config.devicePixelRatio);
     const hasUnsavedChangesRef = useRef(false);
     const skipHistoryResetRef = useRef(false);
     const [presentationVariables, setPresentationVariables] = useState<PresentationVariable[]>([]);
     const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
     const [fontFamily, setFontFamily] = useState('Arial, sans-serif');
+    const [textFontSize, setTextFontSize] = useState(28);
+    const [textAlign, setTextAlign] = useState<TextAlignChoice>('left');
     const [isTextBold, setIsTextBold] = useState(false);
     const [isTextItalic, setIsTextItalic] = useState(false);
     const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
@@ -354,6 +449,21 @@ ref: ForwardedRef<PresentationEditorHandle>
         const nextScale = Math.min(availableWidth / CANVAS_WIDTH, availableHeight / CANVAS_HEIGHT);
 
         setCanvasScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
+    }, []);
+
+    /** Synkroniserer Fabric-backing store med skjerm-DPR og CSS canvas-skalering for skarp tekst. */
+    const applyEditorCanvasHiRes = useCallback(() => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        const winDpr = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+        const effective = Math.min(
+            MAX_EDITOR_CANVAS_PIXEL_RATIO,
+            Math.max(1, winDpr * canvasScaleRef.current),
+        );
+
+        config.configure({ devicePixelRatio: effective });
+        canvas.setDimensions({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
     }, []);
 
     const markDirty = () => {
@@ -415,6 +525,14 @@ ref: ForwardedRef<PresentationEditorHandle>
             setFontFamily((selectedText as any).fontFamily);
         }
         if (selectedText) {
+            const fs = (selectedText as any).fontSize;
+            if (typeof fs === 'number' && Number.isFinite(fs) && fs > 0) {
+                setTextFontSize(Math.round(fs));
+            }
+            const ta = (selectedText as any).textAlign as string | undefined;
+            if (ta === 'left' || ta === 'center' || ta === 'right') {
+                setTextAlign(ta);
+            }
             setIsTextBold(isBoldFontWeight((selectedText as any).fontWeight));
             setIsTextItalic((selectedText as any).fontStyle === 'italic');
         }
@@ -645,6 +763,13 @@ ref: ForwardedRef<PresentationEditorHandle>
         setDirtyState(false);
     }, [presentation?.id]);
 
+    // Gjenopprett Fabric sin globale devicePixelRatio når editoren forlates (unngår å påvirke andre sider).
+    useEffect(() => {
+        return () => {
+            config.configure({ devicePixelRatio: fabricDevicePixelRatioRestoreRef.current });
+        };
+    }, []);
+
     // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
     useEffect(() => {
         if (canvasRef.current && !fabricCanvasRef.current) {
@@ -652,11 +777,12 @@ ref: ForwardedRef<PresentationEditorHandle>
                 width: 960,
                 height: 540,
                 backgroundColor: '#ffffff',
+                enableRetinaScaling: true,
             });
 
             fabricCanvasRef.current.set({ backgroundColor: '#ffffff' });
             fabricCanvasRef.current.renderAll();
-
+            queueMicrotask(() => applyEditorCanvasHiRes());
         }
 
         return () => {
@@ -666,7 +792,18 @@ ref: ForwardedRef<PresentationEditorHandle>
                 fabricCanvasRef.current = null;
             }
         };
-    }, [stopVideoRenderLoop]);
+    }, [stopVideoRenderLoop, applyEditorCanvasHiRes]);
+
+    // Oppdater lerrets pikseltetthet når viewporter-skala eller skjerm-DPR-effekt endres.
+    useEffect(() => {
+        applyEditorCanvasHiRes();
+    }, [canvasScale, applyEditorCanvasHiRes]);
+
+    useEffect(() => {
+        const onResize = () => applyEditorCanvasHiRes();
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, [applyEditorCanvasHiRes]);
 
     // Setter riktig initial kollaps-status ved første render.
     useEffect(() => {
@@ -775,58 +912,35 @@ ref: ForwardedRef<PresentationEditorHandle>
             if (!target) return;
 
             const targetPoints = getObjectAlignmentPoints(target);
-            const nextGuideLines: GuideLine[] = [];
-            let deltaX = 0;
-            let deltaY = 0;
-            let bestXDistance = ALIGNMENT_TOLERANCE + 1;
-            let bestYDistance = ALIGNMENT_TOLERANCE + 1;
+            const slideX = getSlideSnapXCandidates();
+            const slideY = getSlideSnapYCandidates();
 
-            const xCandidates: AlignmentPoint[] = [
-                { value: CANVAS_WIDTH / 2, label: 'center' as const },
-            ];
-            const yCandidates: AlignmentPoint[] = [
-                { value: CANVAS_HEIGHT / 2, label: 'center' as const },
-            ];
+            const xCandidateValues: number[] = [...slideX];
+            const yCandidateValues: number[] = [...slideY];
 
+            const activeTargets = canvas.getActiveObjects();
             canvas.getObjects().forEach((obj) => {
                 if (obj === target) return;
+                if (activeTargets.includes(obj)) return;
 
                 const points = getObjectAlignmentPoints(obj);
-                xCandidates.push(...points.x);
-                yCandidates.push(...points.y);
+                points.x.forEach((p) => xCandidateValues.push(p.value));
+                points.y.forEach((p) => yCandidateValues.push(p.value));
             });
 
-            targetPoints.x.forEach((point) => {
-                xCandidates.forEach((candidate) => {
-                    if (point.label !== candidate.label) return;
+            const uniqueX = dedupeSnapValues(xCandidateValues);
+            const uniqueY = dedupeSnapValues(yCandidateValues);
 
-                    const distance = Math.abs(point.value - candidate.value);
-                    if (distance >= bestXDistance || distance > ALIGNMENT_TOLERANCE) return;
+            const snapX = computeAxisSnapAndGuide(targetPoints.x, uniqueX, SNAPPING_TOLERANCE);
+            const snapY = computeAxisSnapAndGuide(targetPoints.y, uniqueY, SNAPPING_TOLERANCE);
 
-                    bestXDistance = distance;
-                    deltaX = candidate.value - point.value;
-                    nextGuideLines.push({
-                        orientation: 'vertical',
-                        position: candidate.value,
-                    });
-                });
-            });
-
-            targetPoints.y.forEach((point) => {
-                yCandidates.forEach((candidate) => {
-                    if (point.label !== candidate.label) return;
-
-                    const distance = Math.abs(point.value - candidate.value);
-                    if (distance >= bestYDistance || distance > ALIGNMENT_TOLERANCE) return;
-
-                    bestYDistance = distance;
-                    deltaY = candidate.value - point.value;
-                    nextGuideLines.push({
-                        orientation: 'horizontal',
-                        position: candidate.value,
-                    });
-                });
-            });
+            const nextGuideLines: GuideLine[] = [];
+            if (snapX.guidePosition !== null) {
+                nextGuideLines.push({ orientation: 'vertical', position: snapX.guidePosition });
+            }
+            if (snapY.guidePosition !== null) {
+                nextGuideLines.push({ orientation: 'horizontal', position: snapY.guidePosition });
+            }
 
             setGuideLines(
                 nextGuideLines.filter(
@@ -834,14 +948,13 @@ ref: ForwardedRef<PresentationEditorHandle>
                         lines.findIndex(
                             (candidate) =>
                                 candidate.orientation === line.orientation &&
-                                Math.abs(candidate.position - line.position) < 0.5
-                        ) === index
-                )
+                                Math.abs(candidate.position - line.position) < 0.5,
+                        ) === index,
+                ),
             );
 
-            if (deltaX !== 0 || deltaY !== 0) {
-                // En liten nudge gir snapping uten at flyttingen føles låst.
-                nudgeObjectBy(target, deltaX, deltaY);
+            if (snapX.delta !== 0 || snapY.delta !== 0) {
+                nudgeObjectBy(target, snapX.delta, snapY.delta);
             }
         };
 
@@ -869,10 +982,12 @@ ref: ForwardedRef<PresentationEditorHandle>
 
         //Håndterer en endring i canvas og oppdaterer slide preview bilde 
         const handleCanvasChangeWithPreview = () => {
+            setGuideLines([]);
             handleCanvasChange();
             updatePreview();
         };
 
+        canvas.on('object:moving', handleObjectMoving);
         canvas.on('object:added', handleCanvasChangeWithPreview);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
@@ -885,6 +1000,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         syncHasSelectedShape();
 
         return () => {
+            canvas.off('object:moving', handleObjectMoving);
             canvas.off('object:added', handleCanvasChangeWithPreview);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
@@ -1202,18 +1318,6 @@ ref: ForwardedRef<PresentationEditorHandle>
         setCurrentSlideIndex(index);
     };
 
-    // Helper function to constrain position within canvas bounds
-    const getSafePosition = (preferredLeft: number, preferredTop: number, elementWidth = 200, elementHeight = 150) => {
-        const minPos = CANVAS_PADDING;
-        const maxLeft = CANVAS_WIDTH - elementWidth - CANVAS_PADDING; // Account for typical element width safely
-        const maxTop = CANVAS_HEIGHT - elementHeight - CANVAS_PADDING;  // Account for typical element height safely
-        
-        return {
-            left: Math.max(minPos, Math.min(preferredLeft, maxLeft)),
-            top: Math.max(minPos, Math.min(preferredTop, maxTop)),
-        };
-    };
-
     // Fabric.js Tools. Legger til en ny teskstboks til canvaset på en sikker måte. Legger til nåværende tekst style
     const addText = () => {
         if (!fabricCanvasRef.current) return;
@@ -1225,7 +1329,8 @@ ref: ForwardedRef<PresentationEditorHandle>
             width: 420,
             originX: 'left',
             originY: 'top',
-            fontSize: 28,
+            fontSize: textFontSize,
+            textAlign,
             fill: textColor,
             fontFamily,
             fontWeight: isTextBold ? 'bold' : 'normal',
@@ -1252,6 +1357,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             originX: 'left',
             originY: 'top',
             fontSize: 48,
+            textAlign,
             fill: textColor,
             fontFamily,
             fontWeight: 'bold',
@@ -1338,9 +1444,10 @@ ref: ForwardedRef<PresentationEditorHandle>
             width: 420,
             originX: 'left',
             originY: 'top',
-            fontSize: 24,
-            fill: '#000000',
-            fontFamily: 'Arial',
+            fontSize: textFontSize,
+            textAlign,
+            fill: textColor,
+            fontFamily,
             lineHeight: 1.35,
         });
         text.set('listStyleType', styleType);
@@ -1544,8 +1651,7 @@ useEffect(() => {
         action?.();
     };
 
-    //Legger til et nytt bilde til canvas i en sikker posisjon, og setter det som et aktivt objekt
-    const addImageObject = async (source: string) => {
+    const addImageObject = useCallback(async (source: string) => {
         if (!fabricCanvasRef.current) return;
 
         const img = await FabricImage.fromURL(source);
@@ -1556,7 +1662,7 @@ useEffect(() => {
         fabricCanvasRef.current.add(img);
         fabricCanvasRef.current.setActiveObject(img);
         fabricCanvasRef.current.renderAll();
-    };
+    }, []);
 
     //Legger til video til canvas i en trygg posisjon. Setter video object som aktiv og starter video
     const addVideoObject = async (source: string) => {
@@ -1630,6 +1736,56 @@ useEffect(() => {
         reader.readAsDataURL(file);
         event.target.value = '';
     };
+
+    /** Lim inn bilder med Ctrl+V når fokus ikke er i et skjemafelt (unngår å kapre tekstlimaling i input/tekstfelt). */
+    useEffect(() => {
+        const isSkippableFocus = (element: Element | null) => {
+            if (!element || !(element instanceof HTMLElement)) return false;
+            if (element.closest('[data-skip-slide-clipboard-image]')) return true;
+            if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+                return true;
+            }
+            if (element.isContentEditable) return true;
+            if (element.closest('[contenteditable="true"]')) return true;
+            return false;
+        };
+
+        const handlePaste = (event: ClipboardEvent) => {
+            if (!fabricCanvasRef.current) return;
+            if (isSkippableFocus(document.activeElement)) return;
+
+            const items = event.clipboardData?.items;
+            if (!items?.length) return;
+
+            let imageFile: File | null = null;
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file' && typeof item.type === 'string' && item.type.startsWith('image/')) {
+                    imageFile = item.getAsFile();
+                    if (imageFile) break;
+                }
+            }
+            if (!imageFile) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const reader = new FileReader();
+            reader.onload = async (loadEvent) => {
+                const dataUrl = loadEvent.target?.result;
+                if (typeof dataUrl !== 'string') return;
+                try {
+                    await addImageObject(dataUrl);
+                } catch (error) {
+                    console.error('Paste image onto slide failed:', error);
+                }
+            };
+            reader.readAsDataURL(imageFile);
+        };
+
+        window.addEventListener('paste', handlePaste);
+        return () => window.removeEventListener('paste', handlePaste);
+    }, [addImageObject]);
 
     const openLocalMediaFilePicker = () => {
         setIsMediaMenuOpen(false);
@@ -2158,6 +2314,7 @@ useEffect(() => {
                         </p>
                         <Input
                             autoFocus
+                            data-skip-slide-clipboard-image
                             value={embedUrlInput}
                             onChange={(e) => {
                                 setEmbedUrlInput(e.target.value);
@@ -2263,6 +2420,7 @@ useEffect(() => {
                             type="text"
                             className="h-auto min-w-0 flex-1 basis-[min(100%,280px)] rounded-md border-border bg-input px-3 py-[0.55rem] text-base text-foreground"
                             value={presentationTitle}
+                            data-skip-slide-clipboard-image
                             onChange={(e) => {
                                 setPresentationTitle(e.target.value);
                                 markDirty();
@@ -2870,24 +3028,111 @@ useEffect(() => {
                                     </div>
                                 )}
                             </div>
-                            <select
-                                value={fontFamily}
-                                className="order-4 h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                                onChange={(e) => {
-                                    const nextFontFamily = e.target.value;
-                                    setFontFamily(nextFontFamily);
-                                    if (hasSelectedText) {
-                                        applySelectedTextStylesLive({ fontFamily: nextFontFamily });
-                                        commitCanvasColorChange();
-                                    }
-                                }}
-                            >
-                                {FONT_FAMILIES.map((font) => (
-                                    <option key={font.value} value={font.value}>
-                                        {font.label}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="order-4 flex max-w-full flex-wrap items-center gap-2">
+                                <select
+                                    aria-label="Skrifttype"
+                                    value={fontFamily}
+                                    className="h-9 min-w-[6.5rem] max-w-[10rem] shrink rounded-md border border-border bg-background px-2 text-sm text-foreground sm:min-w-0 sm:max-w-none sm:px-3"
+                                    onChange={(e) => {
+                                        const nextFontFamily = e.target.value;
+                                        setFontFamily(nextFontFamily);
+                                        if (hasSelectedText) {
+                                            applySelectedTextStylesLive({ fontFamily: nextFontFamily });
+                                            commitCanvasColorChange();
+                                        }
+                                    }}
+                                >
+                                    {FONT_FAMILIES.map((font) => (
+                                        <option key={font.value} value={font.value}>
+                                            {font.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <select
+                                    aria-label="Skriftstørrelse"
+                                    value={String(textFontSize)}
+                                    className="h-9 w-[4.75rem] shrink-0 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                                    onChange={(e) => {
+                                        const nextSize = Number(e.target.value);
+                                        if (!Number.isFinite(nextSize) || nextSize <= 0) return;
+                                        const rounded = Math.round(nextSize);
+                                        setTextFontSize(rounded);
+                                        if (hasSelectedText) {
+                                            applySelectedTextStylesLive({ fontSize: rounded });
+                                            commitCanvasColorChange();
+                                        }
+                                    }}
+                                >
+                                    {!FONT_SIZE_OPTIONS.includes(textFontSize) && (
+                                        <option value={String(textFontSize)}>{textFontSize}px</option>
+                                    )}
+                                    {FONT_SIZE_OPTIONS.map((size) => (
+                                        <option key={size} value={String(size)}>
+                                            {size}px
+                                        </option>
+                                    ))}
+                                </select>
+                                <div
+                                    className="flex shrink-0 items-center gap-0.5 rounded-md border border-border bg-background p-0.5"
+                                    role="group"
+                                    aria-label="Tekstjustering"
+                                >
+                                    <Button
+                                        type="button"
+                                        variant={textAlign === 'left' ? 'default' : 'ghost'}
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        title="Venstrejuster tekst"
+                                        aria-label="Venstrejuster tekst"
+                                        aria-pressed={textAlign === 'left'}
+                                        onClick={() => {
+                                            setTextAlign('left');
+                                            if (hasSelectedText) {
+                                                applySelectedTextStylesLive({ textAlign: 'left' });
+                                                commitCanvasColorChange();
+                                            }
+                                        }}
+                                    >
+                                        <AlignLeft className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={textAlign === 'center' ? 'default' : 'ghost'}
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        title="Midtstill tekst"
+                                        aria-label="Midtstill tekst"
+                                        aria-pressed={textAlign === 'center'}
+                                        onClick={() => {
+                                            setTextAlign('center');
+                                            if (hasSelectedText) {
+                                                applySelectedTextStylesLive({ textAlign: 'center' });
+                                                commitCanvasColorChange();
+                                            }
+                                        }}
+                                    >
+                                        <AlignCenter className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={textAlign === 'right' ? 'default' : 'ghost'}
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        title="Høyrejuster tekst"
+                                        aria-label="Høyrejuster tekst"
+                                        aria-pressed={textAlign === 'right'}
+                                        onClick={() => {
+                                            setTextAlign('right');
+                                            if (hasSelectedText) {
+                                                applySelectedTextStylesLive({ textAlign: 'right' });
+                                                commitCanvasColorChange();
+                                            }
+                                        }}
+                                    >
+                                        <AlignRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
                             <Button
                                 variant={isTextBold ? 'default' : 'outline'}
                                 size="sm"
@@ -2995,6 +3240,7 @@ useEffect(() => {
                     <Label htmlFor="presenter-notes" className="mb-1.5 block text-xs font-semibold text-foreground">Notater for slides</Label>
                     <Textarea
                         id="presenter-notes"
+                        data-skip-slide-clipboard-image
                         value={slides[currentSlideIndex]?.notes || ''}
                         onChange={(e) => {
                             const value = e.target.value;
