@@ -1,5 +1,29 @@
 import react, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ForwardedRef } from 'react';
-import { Canvas, IText, Textbox, FabricImage, Rect, Circle, FabricText, config } from 'fabric';
+import {
+    Canvas,
+    Control,
+    IText,
+    Textbox,
+    FabricImage,
+    Rect,
+    Circle,
+    FabricText,
+    FabricObject,
+    config,
+    controlsUtils,
+    type TransformActionHandler,
+} from 'fabric';
+
+const {
+    changeWidth,
+    changeHeight,
+    changeObjectWidth,
+    changeObjectHeight,
+    wrapWithFireEvent,
+    wrapWithFixedAnchor,
+    rotationWithSnapping,
+    rotationStyleHandler,
+} = controlsUtils;
 import {
     AlignCenter,
     AlignLeft,
@@ -154,6 +178,39 @@ const COLOR_MENU_MORE_BUTTON_CLASS =
 // Når vinduet er smalere enn dette, kollapser sidepanelene automatisk.
 const SIDEBAR_AUTO_COLLAPSE_BREAKPOINT = 1500;
 
+/** Skriftstørrelser i flytende hurtigmeny for tekst. */
+const CONTEXT_MENU_FONT_SIZES: readonly number[] = [18, 24, 28, 36, 48];
+
+const CONTEXT_MENU_GAP_PX = 4;
+const CONTEXT_MENU_EST_HEIGHT_PX = 34;
+const CONTEXT_MENU_EST_WIDTH_TEXT_PX = 248;
+const CONTEXT_MENU_EST_WIDTH_DELETE_PX = 40;
+
+/** Skjermposisjon for hurtigmeny: top-venstre av objekt, over boksen (flipper under ved kant). */
+function getEditorContextMenuAnchor(
+    canvas: Canvas,
+    target: FabricObject,
+): { clientX: number; clientY: number; placement: 'above' | 'below' } | null {
+    target.setCoords();
+    const rect = target.getBoundingRect();
+    const canvasEl = canvas.getElement();
+    if (!canvasEl) return null;
+
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const scaleX = canvasRect.width / canvas.getWidth();
+    const scaleY = canvasRect.height / canvas.getHeight();
+    const clientX = canvasRect.left + rect.left * scaleX;
+    const topY = canvasRect.top + rect.top * scaleY;
+    const bottomY = canvasRect.top + (rect.top + rect.height) * scaleY;
+
+    const aboveTop = topY - CONTEXT_MENU_GAP_PX;
+    const fitsAbove = aboveTop - CONTEXT_MENU_EST_HEIGHT_PX >= 8;
+    if (fitsAbove) {
+        return { clientX, clientY: aboveTop, placement: 'above' };
+    }
+    return { clientX, clientY: bottomY + CONTEXT_MENU_GAP_PX, placement: 'below' };
+}
+
 type MediaKind = 'image' | 'video';
 
 type GuideLine = {
@@ -224,6 +281,168 @@ function getSlideSnapYCandidates(): number[] {
         CANVAS_HEIGHT - CANVAS_PADDING,
         CANVAS_HEIGHT,
     ]);
+}
+
+const TEXTBOX_EDITOR_PROPS = ['editorFixedHeight', 'listStyleType'] as const;
+
+function ensureTextboxCustomProperties() {
+    const existing = FabricObject.customProperties || [];
+    const merged = [...existing];
+    for (const key of TEXTBOX_EDITOR_PROPS) {
+        if (!merged.includes(key)) merged.push(key);
+    }
+    FabricObject.customProperties = merged;
+}
+
+function isEditorTextType(type: string | undefined): boolean {
+    return type === 'textbox' || type === 'i-text';
+}
+
+const changeObjectCornerDimensions: TransformActionHandler = (eventData, transform, x, y) => {
+    const widthChanged = changeObjectWidth(eventData, transform, x, y);
+    const heightChanged = changeObjectHeight(eventData, transform, x, y);
+    return widthChanged || heightChanged;
+};
+
+const changeCornerBoxSize = wrapWithFireEvent(
+    'resizing',
+    wrapWithFixedAnchor(changeObjectCornerDimensions),
+);
+
+/** Fabric sin scaleCursorStyleHandler bruker vinkel senter→håndtak; på brede textboxer blir hjørner nesten horisontale. */
+const RESIZE_CURSOR_MAP = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne', 'e'] as const;
+
+function resizeCursorIndexFromControl(control: Control): number | null {
+    const { x, y } = control;
+    if (x < 0 && y < 0) return 5;
+    if (x > 0 && y < 0) return 7;
+    if (x > 0 && y > 0) return 1;
+    if (x < 0 && y > 0) return 3;
+    if (x !== 0 && y === 0) return x > 0 ? 0 : 4;
+    if (x === 0 && y !== 0) return y > 0 ? 2 : 6;
+    return null;
+}
+
+function editorResizeCursorStyleHandler(
+    _eventData: unknown,
+    control: Control,
+    fabricObject: { angle?: number; getTotalAngle?: () => number },
+): string {
+    const base = resizeCursorIndexFromControl(control);
+    if (base === null) return 'default';
+    const rawAngle =
+        (typeof fabricObject.getTotalAngle === 'function'
+            ? fabricObject.getTotalAngle()
+            : fabricObject.angle) ?? 0;
+    const angleDeg = ((rawAngle % 360) + 360) % 360;
+    const n = (base + Math.round(angleDeg / 45)) % 8;
+    return `${RESIZE_CURSOR_MAP[n]}-resize`;
+}
+
+function createEditorTextControls() {
+    const side = (x: number, y: number, handler: typeof changeWidth) =>
+        new Control({
+            x,
+            y,
+            actionHandler: handler,
+            cursorStyleHandler: editorResizeCursorStyleHandler,
+            actionName: 'resizing',
+        });
+
+    const corner = (x: number, y: number) =>
+        new Control({
+            x,
+            y,
+            actionHandler: changeCornerBoxSize,
+            cursorStyleHandler: editorResizeCursorStyleHandler,
+            actionName: 'resizing',
+        });
+
+    return {
+        ml: side(-0.5, 0, changeWidth),
+        mr: side(0.5, 0, changeWidth),
+        mt: side(0, -0.5, changeHeight),
+        mb: side(0, 0.5, changeHeight),
+        tl: corner(-0.5, -0.5),
+        tr: corner(0.5, -0.5),
+        bl: corner(-0.5, 0.5),
+        br: corner(0.5, 0.5),
+        mtr: new Control({
+            x: 0,
+            y: -0.5,
+            actionHandler: rotationWithSnapping,
+            cursorStyleHandler: rotationStyleHandler,
+            offsetY: -40,
+            withConnection: true,
+            actionName: 'rotate',
+        }),
+    };
+}
+
+function stabilizeTextboxEditorLayout(obj: any): void {
+    if (!obj || !isEditorTextType(obj.type)) return;
+
+    if (typeof obj.initDimensions === 'function') {
+        obj.initDimensions();
+    }
+
+    const naturalH = typeof obj.height === 'number' ? obj.height : 0;
+    const fixedH = obj.editorFixedHeight;
+    if (typeof fixedH === 'number' && fixedH > naturalH + 0.5) {
+        obj.set({ height: fixedH, scaleX: 1, scaleY: 1 });
+    } else {
+        obj.set({ scaleX: 1, scaleY: 1 });
+        if (typeof fixedH !== 'number' || fixedH < naturalH) {
+            obj.set('editorFixedHeight', naturalH);
+        }
+    }
+
+    obj._clearCache?.();
+    obj.setCoords?.();
+}
+
+function normalizeTextboxScaleFromCorners(obj: any): boolean {
+    if (!obj || obj.type !== 'textbox') return false;
+    const sx = typeof obj.scaleX === 'number' ? obj.scaleX : 1;
+    const sy = typeof obj.scaleY === 'number' ? obj.scaleY : 1;
+    if (Math.abs(sx - 1) < 0.001 && Math.abs(sy - 1) < 0.001) return false;
+
+    const minW = typeof obj.minWidth === 'number' ? obj.minWidth : 20;
+    const newWidth = Math.max(minW, Math.round((obj.width || 0) * sx));
+    const scaledVisualH = Math.max(0, (obj.height || 0) * sy);
+
+    obj.set({ width: newWidth, scaleX: 1, scaleY: 1 });
+    if (typeof obj.initDimensions === 'function') {
+        obj.initDimensions();
+    }
+
+    const naturalH = typeof obj.height === 'number' ? obj.height : 0;
+    const nextFixedH = Math.max(naturalH, Math.round(scaledVisualH));
+    obj.set('editorFixedHeight', nextFixedH);
+    if (nextFixedH > naturalH + 0.5) {
+        obj.set('height', nextFixedH);
+    }
+
+    obj._clearCache?.();
+    obj.setCoords?.();
+    return true;
+}
+
+function configureTextboxForEditor(obj: any): void {
+    if (!obj || !isEditorTextType(obj.type)) return;
+
+    obj.set({
+        lockScalingX: false,
+        lockScalingY: false,
+        lockScalingFlip: true,
+    });
+    obj.controls = createEditorTextControls();
+    stabilizeTextboxEditorLayout(obj);
+}
+
+function configureAllTextboxesOnCanvas(canvas: Canvas | null) {
+    if (!canvas) return;
+    canvas.getObjects().forEach((obj) => configureTextboxForEditor(obj));
 }
 
 type CanvasSnapshot = {
@@ -411,6 +630,9 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [listStyleType, setListStyleType] = useState<ListStyleType>('bullet');
     const [isListMenuOpen, setIsListMenuOpen] = useState(false);
     const [isTextMenuOpen, setIsTextMenuOpen] = useState(false);
+    const [isFontFamilyMenuOpen, setIsFontFamilyMenuOpen] = useState(false);
+    const [isFontSizeMenuOpen, setIsFontSizeMenuOpen] = useState(false);
+    const [fontSizeInputValue, setFontSizeInputValue] = useState('28');
     const [isShapeMenuOpen, setIsShapeMenuOpen] = useState(false);
     const [isShapeColorPickerOpen, setIsShapeColorPickerOpen] = useState(false);
     const [isBackgroundColorMenuOpen, setIsBackgroundColorMenuOpen] = useState(false);
@@ -423,8 +645,17 @@ ref: ForwardedRef<PresentationEditorHandle>
     const [embedUrlError, setEmbedUrlError] = useState<string | null>(null);
     const [embedLayoutRevision, setEmbedLayoutRevision] = useState(0);
     const textMenuRef = useRef<HTMLDivElement | null>(null);
+    const fontFamilyMenuRef = useRef<HTMLDivElement | null>(null);
+    const fontSizeMenuRef = useRef<HTMLDivElement | null>(null);
     const mediaMenuRef = useRef<HTMLDivElement | null>(null);
     const presentMenuRef = useRef<HTMLDivElement | null>(null);
+    const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
+    /** Flytende hurtigmeny på canvas (skjermkoordinater, forankret til objekt). */
+    const [editorContextMenu, setEditorContextMenu] = useState<{
+        clientX: number;
+        clientY: number;
+        placement: 'above' | 'below';
+    } | null>(null);
 
     //Sjekker dirtystate for å aktivere autosave
     const setDirtyState = (next: boolean) => {
@@ -470,6 +701,10 @@ ref: ForwardedRef<PresentationEditorHandle>
         setDirtyState(true)
     };
 
+    useEffect(() => {
+        setFontSizeInputValue(String(textFontSize));
+    }, [textFontSize]);
+
     const captureCanvasPreview = () => {
         if (!fabricCanvasRef.current) return null;
 
@@ -482,10 +717,31 @@ ref: ForwardedRef<PresentationEditorHandle>
 
     const isShapeObject = (obj: any) => obj?.type === 'rect' || obj?.type === 'circle';
     const isTextObject = (obj: any) => obj?.type === 'i-text' || obj?.type === 'textbox' || obj?.type === 'text';
-    const isVideoObject = (obj: any) => obj?.type === 'video';
+    const isContextMenuEligibleTarget = (obj: unknown): obj is FabricObject =>
+        Boolean(obj && typeof obj === 'object' && (obj as { type?: string }).type !== 'activeSelection');
     const isEditableTextObject = (obj: any): obj is FabricEditableTextObject => obj?.type === 'i-text' || obj?.type === 'textbox';
+
+    const openEditorContextMenuForTarget = useCallback((target: FabricObject) => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+        const anchor = getEditorContextMenuAnchor(canvas, target);
+        if (anchor) setEditorContextMenu(anchor);
+    }, []);
+
+    const isVideoObject = (obj: any) => obj?.type === 'video';
     const isBoldFontWeight = (weight: any) => weight === 'bold' || Number(weight) >= 700;
     const handleGuideReset = () => setGuideLines([]);
+
+    /** Markering av tegn mens man redigerer (ikke kun sammenkoblet musepeker). */
+    const hasPartialTextSelection = (obj: any): boolean =>
+        Boolean(
+            obj &&
+                isEditableTextObject(obj) &&
+                obj.isEditing &&
+                typeof obj.selectionStart === 'number' &&
+                typeof obj.selectionEnd === 'number' &&
+                obj.selectionEnd !== obj.selectionStart,
+        );
 
     const syncHasSelectedShape = () => {
         const canvas = fabricCanvasRef.current;
@@ -518,23 +774,65 @@ ref: ForwardedRef<PresentationEditorHandle>
         }
 
         if (selectedText && typeof selectedText.fill === 'string') {
-            setTextColor(selectedText.fill);
+            // Oppdater mer detaljert i blokken under hvis ikke redigeringsfelt
+            if (!(isEditableTextObject(selectedText) && selectedText.isEditing)) {
+                setTextColor(selectedText.fill);
+            }
         }
 
         if (selectedText && typeof (selectedText as any).fontFamily === 'string') {
-            setFontFamily((selectedText as any).fontFamily);
+            if (!(isEditableTextObject(selectedText) && selectedText.isEditing)) {
+                setFontFamily((selectedText as any).fontFamily);
+            }
         }
         if (selectedText) {
-            const fs = (selectedText as any).fontSize;
-            if (typeof fs === 'number' && Number.isFinite(fs) && fs > 0) {
-                setTextFontSize(Math.round(fs));
-            }
             const ta = (selectedText as any).textAlign as string | undefined;
             if (ta === 'left' || ta === 'center' || ta === 'right') {
                 setTextAlign(ta);
             }
-            setIsTextBold(isBoldFontWeight((selectedText as any).fontWeight));
-            setIsTextItalic((selectedText as any).fontStyle === 'italic');
+
+            let fillFrom = (selectedText as any).fill;
+            let fontFamilyFrom = (selectedText as any).fontFamily;
+            let fontSizeFrom = (selectedText as any).fontSize;
+            let weightFrom = (selectedText as any).fontWeight;
+            let styleFrom = (selectedText as any).fontStyle;
+
+            if (
+                isEditableTextObject(selectedText) &&
+                selectedText.isEditing &&
+                typeof selectedText.selectionStart === 'number' &&
+                typeof selectedText.selectionEnd === 'number' &&
+                typeof selectedText.getSelectionStyles === 'function'
+            ) {
+                const start = selectedText.selectionStart;
+                const endIdx = Math.max(selectedText.selectionEnd, start + 1);
+                const stylesArr = selectedText.getSelectionStyles(start, endIdx, true);
+                const atCursor = stylesArr?.[0] || {};
+
+                if (typeof atCursor.fill === 'string') {
+                    fillFrom = atCursor.fill;
+                }
+                if (typeof atCursor.fontFamily === 'string') {
+                    fontFamilyFrom = atCursor.fontFamily;
+                }
+                if (typeof atCursor.fontSize === 'number' && Number.isFinite(atCursor.fontSize)) {
+                    fontSizeFrom = atCursor.fontSize;
+                }
+                if (atCursor.fontWeight !== undefined && atCursor.fontWeight !== '') {
+                    weightFrom = atCursor.fontWeight;
+                }
+                if (atCursor.fontStyle !== undefined && atCursor.fontStyle !== '') {
+                    styleFrom = atCursor.fontStyle;
+                }
+            }
+
+            if (typeof fillFrom === 'string') setTextColor(fillFrom);
+            if (typeof fontFamilyFrom === 'string') setFontFamily(fontFamilyFrom);
+            if (typeof fontSizeFrom === 'number' && Number.isFinite(fontSizeFrom) && fontSizeFrom > 0) {
+                setTextFontSize(Math.round(fontSizeFrom));
+            }
+            setIsTextBold(isBoldFontWeight(weightFrom));
+            setIsTextItalic(styleFrom === 'italic');
         }
     };
 
@@ -715,6 +1013,7 @@ ref: ForwardedRef<PresentationEditorHandle>
                     }
                 }
             });
+            configureAllTextboxesOnCanvas(fabricCanvasRef.current);
             fabricCanvasRef.current.backgroundColor = snapshot.backgroundColor || '#ffffff';
             fabricCanvasRef.current.renderAll();
             syncCanvasVideos();
@@ -773,11 +1072,13 @@ ref: ForwardedRef<PresentationEditorHandle>
     // Initialiserer selve Fabric.js-lerretet når komponenten monteres.
     useEffect(() => {
         if (canvasRef.current && !fabricCanvasRef.current) {
+            ensureTextboxCustomProperties();
             fabricCanvasRef.current = new Canvas(canvasRef.current, {
                 width: 960,
                 height: 540,
                 backgroundColor: '#ffffff',
                 enableRetinaScaling: true,
+                stopContextMenu: false,
             });
 
             fabricCanvasRef.current.set({ backgroundColor: '#ffffff' });
@@ -867,12 +1168,14 @@ ref: ForwardedRef<PresentationEditorHandle>
 
             const backgroundColor = currentSlide.backgroundColor || '#ffffff';
             clearGuideLines();
+            setEditorContextMenu(null);
 
             isApplyingCanvasStateRef.current = true;
 
             if (currentSlide.fabricData) {
                 fabricCanvasRef.current.loadFromJSON(currentSlide.fabricData).then(() => {
                     fabricCanvasRef.current.backgroundColor = backgroundColor;
+                    configureAllTextboxesOnCanvas(fabricCanvasRef.current);
                     fabricCanvasRef.current.renderAll();
                     syncCanvasVideos();
                     isApplyingCanvasStateRef.current = false;
@@ -910,6 +1213,7 @@ ref: ForwardedRef<PresentationEditorHandle>
         const handleObjectMoving = (event: any) => {
             const target = event.target;
             if (!target) return;
+            setEditorContextMenu(null);
 
             const targetPoints = getObjectAlignmentPoints(target);
             const slideX = getSlideSnapXCandidates();
@@ -987,30 +1291,124 @@ ref: ForwardedRef<PresentationEditorHandle>
             updatePreview();
         };
 
+        /** Textbox: behold bokshøyde og fontSize ved resize. */
+        const handleTextboxLayoutOnModified = (event: any) => {
+            const obj = event?.target;
+            if (!obj || obj.type === 'activeSelection' || !isEditorTextType(obj.type)) return;
+
+            const baked = normalizeTextboxScaleFromCorners(obj);
+            if (!baked && typeof obj.height === 'number') {
+                obj.set('editorFixedHeight', obj.height);
+            }
+            stabilizeTextboxEditorLayout(obj);
+            canvas.requestRenderAll();
+        };
+
+        const handleTextboxLayoutWhileScaling = (event: any) => {
+            const obj = event?.target;
+            if (!obj || !isEditorTextType(obj.type)) return;
+            if (normalizeTextboxScaleFromCorners(obj)) {
+                canvas.requestRenderAll();
+            }
+        };
+
+        const handleTextboxContentChanged = () => {
+            const active = canvas.getActiveObject() as { type?: string } | undefined;
+            if (active && isEditorTextType(active.type)) {
+                stabilizeTextboxEditorLayout(active);
+                canvas.requestRenderAll();
+            }
+        };
+
+        const handleTextSelectionAdjusted = () => {
+            syncHasSelectedShape();
+        };
+
+        /** Egendefinert hurtig meny (Fabric stopContextMenu=false; vi blokkerer standard nettlesermeny sjøl). */
+        const handleEditorContextMenuOpen = (opt: any) => {
+            const domEvent = opt?.e as MouseEvent | undefined;
+            if (!domEvent) return;
+            domEvent.preventDefault();
+            domEvent.stopPropagation();
+
+            const t = opt?.target;
+            if (!t || !isContextMenuEligibleTarget(t)) {
+                setEditorContextMenu(null);
+                return;
+            }
+
+            canvas.setActiveObject(t);
+            canvas.requestRenderAll();
+            syncHasSelectedShape();
+            openEditorContextMenuForTarget(t);
+        };
+
+        const handleSelectionClearedContextMenu = () => {
+            setEditorContextMenu(null);
+        };
+
+        const handleTextEditingEntered = () => {
+            setEditorContextMenu(null);
+        };
+
+        const handleObjectScaling = () => {
+            setEditorContextMenu(null);
+        };
+
         canvas.on('object:moving', handleObjectMoving);
-        canvas.on('object:added', handleCanvasChangeWithPreview);
+        canvas.on('object:scaling', handleTextboxLayoutWhileScaling);
+        canvas.on('object:modified', handleTextboxLayoutOnModified);
+        canvas.on('contextmenu', handleEditorContextMenuOpen);
+        canvas.on('text:editing:entered', handleTextEditingEntered);
+        canvas.on('object:scaling', handleObjectScaling);
+        canvas.on('text:selection:changed', handleTextSelectionAdjusted);
+        const handleObjectAdded = (event: { target?: { type?: string } }) => {
+            if (isEditorTextType(event.target?.type)) {
+                configureTextboxForEditor(event.target);
+            }
+            handleCanvasChangeWithPreview();
+        };
+
+        canvas.on('object:added', handleObjectAdded);
         canvas.on('object:modified', handleCanvasChangeWithPreview);
         canvas.on('object:removed', handleCanvasChangeWithPreview);
         canvas.on('text:changed', handleCanvasChangeWithPreview);
+        canvas.on('text:changed', handleTextboxContentChanged);
         canvas.on('selection:created', syncHasSelectedShape);
         canvas.on('selection:updated', syncHasSelectedShape);
         canvas.on('selection:cleared', handleGuideReset);
+        canvas.on('selection:cleared', handleSelectionClearedContextMenu);
         canvas.on('selection:cleared', syncHasSelectedShape);
 
         syncHasSelectedShape();
 
         return () => {
             canvas.off('object:moving', handleObjectMoving);
-            canvas.off('object:added', handleCanvasChangeWithPreview);
+            canvas.off('object:scaling', handleTextboxLayoutWhileScaling);
+            canvas.off('object:modified', handleTextboxLayoutOnModified);
+            canvas.off('contextmenu', handleEditorContextMenuOpen);
+            canvas.off('text:editing:entered', handleTextEditingEntered);
+            canvas.off('object:scaling', handleObjectScaling);
+            canvas.off('text:selection:changed', handleTextSelectionAdjusted);
+            canvas.off('object:added', handleObjectAdded);
             canvas.off('object:modified', handleCanvasChangeWithPreview);
             canvas.off('object:removed', handleCanvasChangeWithPreview);
             canvas.off('text:changed', handleCanvasChangeWithPreview);
+            canvas.off('text:changed', handleTextboxContentChanged);
             canvas.off('selection:created', syncHasSelectedShape);
             canvas.off('selection:updated', syncHasSelectedShape);
             canvas.off('selection:cleared', handleGuideReset);
+            canvas.off('selection:cleared', handleSelectionClearedContextMenu);
             canvas.off('selection:cleared', syncHasSelectedShape);
         };
-    }, [clearGuideLines, getObjectAlignmentPoints, nudgeObjectBy, syncCanvasVideos]);
+    }, [
+        clearGuideLines,
+        getObjectAlignmentPoints,
+        nudgeObjectBy,
+        openEditorContextMenuForTarget,
+        syncCanvasVideos,
+        syncHasSelectedShape,
+    ]);
 
     // Oppdaterer state-arrayen med oppdatert JSON-data fra lerretet (canvas) for gjeldende lysbilde
     const buildSlidesWithCurrentCanvasState = () => {
@@ -1100,6 +1498,51 @@ ref: ForwardedRef<PresentationEditorHandle>
     // Muliggjør sletting av objekter på lerretet ved å trykke på "Delete" og "Backspace"-tasten
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            /** `*` / `-` + mellomrom → punkt- / bindestrekliste (Markdown-lignende). */
+            if (event.key === ' ' || event.code === 'Space') {
+                const ae = document.activeElement;
+                const canvas = fabricCanvasRef.current;
+                if (!canvas) return;
+
+                const activeObject = canvas.getActiveObject() as FabricEditableTextObject | undefined;
+
+                const isFabricTextTyping =
+                    activeObject?.isEditing &&
+                    isEditableTextObject(activeObject) &&
+                    activeObject.hiddenTextarea &&
+                    ae === activeObject.hiddenTextarea;
+
+                if (isFabricTextTyping) {
+                    const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
+                    const cur = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
+                    const lineStart = currentText.lastIndexOf('\n', Math.max(0, cur - 1)) + 1;
+                    const selectionEnd =
+                        typeof activeObject.selectionEnd === 'number' ? activeObject.selectionEnd : cur;
+
+                    const beforeSlice = currentText.slice(lineStart, cur);
+                    const listShortcuts: Array<{ trigger: string; styleType: ListStyleType }> = [
+                        { trigger: '*', styleType: 'bullet' },
+                        { trigger: '-', styleType: 'dash' },
+                    ];
+
+                    for (const { trigger, styleType } of listShortcuts) {
+                        if (beforeSlice !== trigger || selectionEnd !== cur) continue;
+
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const marker = getListMarker(styleType);
+                        const nextText =
+                            `${currentText.slice(0, lineStart)}${marker} ${currentText.slice(cur)}`;
+                        const nextCursorPosition = lineStart + marker.length + 1;
+
+                        activeObject.set('listStyleType', styleType);
+                        syncActiveTextboxAfterEdit(activeObject, nextText, nextCursorPosition);
+                        return;
+                    }
+                }
+            }
+
             if (event.key === 'Enter') {
                 const canvas = fabricCanvasRef.current;
                 if (!canvas) return;
@@ -1203,6 +1646,23 @@ ref: ForwardedRef<PresentationEditorHandle>
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+
+    useEffect(() => {
+        if (!editorContextMenu) return;
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setEditorContextMenu(null);
+        };
+        const handlePointer = (e: MouseEvent) => {
+            if (editorContextMenuRef.current?.contains(e.target as Node)) return;
+            setEditorContextMenu(null);
+        };
+        window.addEventListener('keydown', handleEscape);
+        window.addEventListener('mousedown', handlePointer, true);
+        return () => {
+            window.removeEventListener('keydown', handleEscape);
+            window.removeEventListener('mousedown', handlePointer, true);
+        };
+    }, [editorContextMenu]);
     
     // Håndterer opprettelse, oppdatering og sletting av presentasjonsvariabler som kan brukes i tekstobjekter på lysbildene.
     const addVariable = () => {
@@ -1338,6 +1798,7 @@ ref: ForwardedRef<PresentationEditorHandle>
             lineHeight: 1.2,
             templateText: 'Klikk for å redigere',
         });
+        configureTextboxForEditor(text);
         
         fabricCanvasRef.current.add(text);
         fabricCanvasRef.current.setActiveObject(text);
@@ -1350,10 +1811,11 @@ ref: ForwardedRef<PresentationEditorHandle>
     const addTitle = () => {
         if (!fabricCanvasRef.current) return;
         
-        const pos = getSafePosition(80, 60, 340, 60);
-        const text = new IText('Tittel', { // Slide Title
+        const pos = getSafePosition(80, 60, 480, 72);
+        const text = new Textbox('Tittel', {
             left: pos.left,
             top: pos.top,
+            width: 480,
             originX: 'left',
             originY: 'top',
             fontSize: 48,
@@ -1365,7 +1827,8 @@ ref: ForwardedRef<PresentationEditorHandle>
             lineHeight: 1.16,
             templateText: 'Tittel',
         });
-        
+        configureTextboxForEditor(text);
+
         fabricCanvasRef.current.add(text);
         fabricCanvasRef.current.setActiveObject(text);
         fabricCanvasRef.current.renderAll();
@@ -1432,8 +1895,75 @@ ref: ForwardedRef<PresentationEditorHandle>
         return currentLine.startsWith(`${marker} `);
     };
 
-    //Legger til en ny bullet list til canvaset på en sikker måte
-    const addBulletList = (styleType: ListStyleType = listStyleType) => {
+    const syncActiveTextboxAfterEdit = (
+        activeObject: FabricEditableTextObject,
+        nextText: string,
+        nextCursorPosition: number,
+    ) => {
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        activeObject.set('text', nextText);
+        if (typeof activeObject.setSelectionStart === 'function') {
+            activeObject.setSelectionStart(nextCursorPosition);
+        } else {
+            activeObject.selectionStart = nextCursorPosition;
+        }
+        if (typeof activeObject.setSelectionEnd === 'function') {
+            activeObject.setSelectionEnd(nextCursorPosition);
+        } else {
+            activeObject.selectionEnd = nextCursorPosition;
+        }
+
+        if (activeObject.hiddenTextarea) {
+            activeObject.hiddenTextarea.value = nextText;
+            activeObject.hiddenTextarea.selectionStart = nextCursorPosition;
+            activeObject.hiddenTextarea.selectionEnd = nextCursorPosition;
+            activeObject.hiddenTextarea.focus();
+        }
+
+        if (typeof activeObject._updateTextarea === 'function') {
+            activeObject._updateTextarea();
+        }
+
+        activeObject.setCoords();
+        canvas.requestRenderAll();
+        markDirty();
+        pushHistorySnapshot(createCanvasSnapshot());
+
+        const currentId = currentSlideIdRef.current;
+        if (currentId) {
+            const dataUrl = captureCanvasPreview();
+            if (dataUrl) {
+                setSlidePreviewImages((prev) => ({
+                    ...prev,
+                    [currentId]: dataUrl,
+                }));
+            }
+        }
+    };
+
+    /** Bruker liste i tekstboks brukeren skriver i nå. */
+    const applyListStyleToEditingTextbox = (activeObject: FabricEditableTextObject, styleType: ListStyleType) => {
+        const marker = getListMarker(styleType);
+        const currentText = typeof activeObject.text === 'string' ? activeObject.text : '';
+        const cur = typeof activeObject.selectionStart === 'number' ? activeObject.selectionStart : currentText.length;
+
+        const nextText =
+            currentText.trim().length > 0 ? normalizeListText(currentText, styleType) : `${marker} `;
+
+        const lineStart = nextText.lastIndexOf('\n', Math.max(0, cur - 1)) + 1;
+        const linePrefix = nextText.slice(lineStart);
+        const nextCursorPosition = linePrefix.startsWith(`${marker} `)
+            ? lineStart + marker.length + 1
+            : Math.min(cur, nextText.length);
+
+        activeObject.set('listStyleType', styleType);
+        syncActiveTextboxAfterEdit(activeObject, nextText, nextCursorPosition);
+    };
+
+    /** Ny liste-boks når brukeren ikke redigerer tekst allerede. */
+    const createNewListTextbox = (styleType: ListStyleType) => {
         if (!fabricCanvasRef.current) return;
 
         const pos = getSafePosition(80, 150, 420, 140);
@@ -1451,12 +1981,27 @@ ref: ForwardedRef<PresentationEditorHandle>
             lineHeight: 1.35,
         });
         text.set('listStyleType', styleType);
+        configureTextboxForEditor(text);
 
         fabricCanvasRef.current.add(text);
         fabricCanvasRef.current.setActiveObject(text);
         fabricCanvasRef.current.renderAll();
         text.enterEditing();
         text.selectAll();
+    };
+
+    const applyListStyle = (styleType: ListStyleType) => {
+        setListStyleType(styleType);
+        const canvas = fabricCanvasRef.current;
+        if (!canvas) return;
+
+        const activeObject = canvas.getActiveObject();
+        if (activeObject && isEditableTextObject(activeObject) && activeObject.isEditing) {
+            applyListStyleToEditingTextbox(activeObject, styleType);
+            return;
+        }
+
+        createNewListTextbox(styleType);
     };
 
     //Håndterer lukking av list style meny når brukeren klikker utenfor eller trykker esc
@@ -1493,11 +2038,19 @@ useEffect(() => {
         if (isTextMenuOpen && textMenuRef.current && target && !textMenuRef.current.contains(target)) {
             setIsTextMenuOpen(false);
         }
+        if (isFontFamilyMenuOpen && fontFamilyMenuRef.current && target && !fontFamilyMenuRef.current.contains(target)) {
+            setIsFontFamilyMenuOpen(false);
+        }
+        if (isFontSizeMenuOpen && fontSizeMenuRef.current && target && !fontSizeMenuRef.current.contains(target)) {
+            setIsFontSizeMenuOpen(false);
+        }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
         if (event.key === 'Escape') {
             setIsTextMenuOpen(false);
+            setIsFontFamilyMenuOpen(false);
+            setIsFontSizeMenuOpen(false);
         }
     };
 
@@ -1508,7 +2061,7 @@ useEffect(() => {
         document.removeEventListener('mousedown', handleOutsideClick);
         document.removeEventListener('keydown', handleEscape);
     };
-}, [isTextMenuOpen]);
+}, [isTextMenuOpen, isFontFamilyMenuOpen, isFontSizeMenuOpen]);
 
 useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -1940,8 +2493,64 @@ useEffect(() => {
         let changed = false;
 
         activeObjects.forEach((obj: any) => {
-            if (isTextObject(obj)) {
-                obj.set('fill', color);
+            if (!isTextObject(obj)) return;
+
+            if (hasPartialTextSelection(obj)) {
+                obj.setSelectionStyles({ fill: color }, obj.selectionStart, obj.selectionEnd);
+                typeof obj.initDimensions === 'function' && obj.initDimensions();
+                changed = true;
+                return;
+            }
+
+            obj.set('fill', color);
+            changed = true;
+        });
+
+        if (!changed) return;
+
+        fabricCanvasRef.current.requestRenderAll();
+    };
+
+    // Oppdaterer stiler på gjeldende tekst­markering eller hele tekst­objektet (ikke hele boksens innhold ved delvis utvalg).
+    const applySelectedTextStylesLive = (styles: Record<string, unknown>) => {
+        if (!fabricCanvasRef.current) return;
+
+        const activeObjects = fabricCanvasRef.current.getActiveObjects();
+        if (!activeObjects.length) return;
+
+        const textAlignRaw = styles.textAlign as TextAlignChoice | undefined;
+        const inlineKeys = ['fontWeight', 'fontStyle', 'fontSize', 'fontFamily', 'underline', 'linethrough', 'fill'] as const;
+
+        let changed = false;
+
+        activeObjects.forEach((obj: any) => {
+            if (!isTextObject(obj)) return;
+
+            if (typeof textAlignRaw === 'string' && (textAlignRaw === 'left' || textAlignRaw === 'center' || textAlignRaw === 'right')) {
+                obj.set({ textAlign: textAlignRaw });
+                changed = true;
+            }
+
+            const inlinePatch: Record<string, unknown> = {};
+            for (const key of inlineKeys) {
+                if (key in styles) {
+                    inlinePatch[key] = styles[key];
+                }
+            }
+
+            if (Object.keys(inlinePatch).length === 0) {
+                typeof obj.initDimensions === 'function' && obj.initDimensions();
+                obj.setCoords();
+                return;
+            }
+
+            if (hasPartialTextSelection(obj)) {
+                obj.setSelectionStyles(inlinePatch, obj.selectionStart, obj.selectionEnd);
+                typeof obj.initDimensions === 'function' && obj.initDimensions();
+                changed = true;
+            } else {
+                obj.set(inlinePatch);
+                obj.setCoords();
                 changed = true;
             }
         });
@@ -1951,26 +2560,19 @@ useEffect(() => {
         fabricCanvasRef.current.requestRenderAll();
     };
 
-    //Oppdaterer gitte style egenskaper til alle selected text objkter i canvaset og render canvas
-    const applySelectedTextStylesLive = (styles: Record<string, unknown>) => {
-        if (!fabricCanvasRef.current) return;
-
-        const activeObjects = fabricCanvasRef.current.getActiveObjects();
-        if (!activeObjects.length) return;
-
-        let changed = false;
-
-        activeObjects.forEach((obj: any) => {
-            if (isTextObject(obj)) {
-                obj.set(styles);
-                obj.setCoords();
-                changed = true;
-            }
-        });
-
-        if (!changed) return;
-
-        fabricCanvasRef.current.requestRenderAll();
+    const commitFontSizeFromInput = () => {
+        const parsed = parseInt(fontSizeInputValue.replace(/px$/i, '').trim(), 10);
+        if (!Number.isFinite(parsed) || parsed < 8 || parsed > 400) {
+            setFontSizeInputValue(String(textFontSize));
+            return;
+        }
+        const rounded = Math.round(parsed);
+        setTextFontSize(rounded);
+        setFontSizeInputValue(String(rounded));
+        if (hasSelectedText) {
+            applySelectedTextStylesLive({ fontSize: rounded });
+            commitCanvasColorChange();
+        }
     };
 
     //Fjerner alle nåværende valgte objekter fra canvas og clearer selection
@@ -2277,6 +2879,28 @@ useEffect(() => {
     };
 
 
+    let contextMenuFabricTarget: unknown = null;
+    if (fabricCanvasRef.current) {
+        contextMenuFabricTarget = fabricCanvasRef.current.getActiveObject();
+    }
+    const contextMenuTargetIsText = Boolean(contextMenuFabricTarget && isTextObject(contextMenuFabricTarget));
+    const contextMenuShowDelete = Boolean(contextMenuFabricTarget);
+
+    const contextMenuStyle = (() => {
+        if (!editorContextMenu) return null;
+        const estWidth = contextMenuTargetIsText
+            ? CONTEXT_MENU_EST_WIDTH_TEXT_PX
+            : CONTEXT_MENU_EST_WIDTH_DELETE_PX;
+        const maxLeft =
+            typeof window !== 'undefined' ? Math.max(8, window.innerWidth - estWidth - 8) : editorContextMenu.clientX;
+        const left = Math.min(Math.max(editorContextMenu.clientX, 8), maxLeft);
+        const transform =
+            editorContextMenu.placement === 'above'
+                ? 'translateY(-100%)'
+                : undefined;
+        return { left, top: editorContextMenu.clientY, transform };
+    })();
+
     return (
         <div className="flex min-h-0 flex-1 items-stretch gap-2 overflow-hidden bg-background p-2">
             <Input
@@ -2554,8 +3178,7 @@ useEffect(() => {
                                         type="button"
                                         className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                                         onClick={() => {
-                                            setListStyleType('bullet');
-                                            addBulletList('bullet');
+                                            applyListStyle('bullet');
                                             setIsListMenuOpen(false);
                                         }}
                                     >
@@ -2566,8 +3189,7 @@ useEffect(() => {
                                         type="button"
                                         className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                                         onClick={() => {
-                                            setListStyleType('dash');
-                                            addBulletList('dash');
+                                            applyListStyle('dash');
                                             setIsListMenuOpen(false);
                                         }}
                                     >
@@ -2578,8 +3200,7 @@ useEffect(() => {
                                         type="button"
                                         className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                                         onClick={() => {
-                                            setListStyleType('arrow');
-                                            addBulletList('arrow');
+                                            applyListStyle('arrow');
                                             setIsListMenuOpen(false);
                                         }}
                                     >
@@ -3029,49 +3650,105 @@ useEffect(() => {
                                 )}
                             </div>
                             <div className="order-4 flex max-w-full flex-wrap items-center gap-2">
-                                <select
-                                    aria-label="Skrifttype"
-                                    value={fontFamily}
-                                    className="h-9 min-w-[6.5rem] max-w-[10rem] shrink rounded-md border border-border bg-background px-2 text-sm text-foreground sm:min-w-0 sm:max-w-none sm:px-3"
-                                    onChange={(e) => {
-                                        const nextFontFamily = e.target.value;
-                                        setFontFamily(nextFontFamily);
-                                        if (hasSelectedText) {
-                                            applySelectedTextStylesLive({ fontFamily: nextFontFamily });
-                                            commitCanvasColorChange();
-                                        }
-                                    }}
-                                >
-                                    {FONT_FAMILIES.map((font) => (
-                                        <option key={font.value} value={font.value}>
-                                            {font.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                <select
-                                    aria-label="Skriftstørrelse"
-                                    value={String(textFontSize)}
-                                    className="h-9 w-[4.75rem] shrink-0 rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                                    onChange={(e) => {
-                                        const nextSize = Number(e.target.value);
-                                        if (!Number.isFinite(nextSize) || nextSize <= 0) return;
-                                        const rounded = Math.round(nextSize);
-                                        setTextFontSize(rounded);
-                                        if (hasSelectedText) {
-                                            applySelectedTextStylesLive({ fontSize: rounded });
-                                            commitCanvasColorChange();
-                                        }
-                                    }}
-                                >
-                                    {!FONT_SIZE_OPTIONS.includes(textFontSize) && (
-                                        <option value={String(textFontSize)}>{textFontSize}px</option>
+                                <div ref={fontFamilyMenuRef} className="relative">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9 min-w-[5.5rem] max-w-[9rem] gap-1.5 px-2 sm:max-w-none sm:px-3"
+                                        aria-haspopup="menu"
+                                        aria-expanded={isFontFamilyMenuOpen}
+                                        onClick={() => {
+                                            setIsFontFamilyMenuOpen((prev) => !prev);
+                                            setIsFontSizeMenuOpen(false);
+                                        }}
+                                    >
+                                        <span className="truncate">
+                                            {FONT_FAMILIES.find((f) => f.value === fontFamily)?.label ?? 'Skrift'}
+                                        </span>
+                                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                                    </Button>
+                                    {isFontFamilyMenuOpen && (
+                                        <div className="absolute left-0 top-full z-20 mt-2 min-w-44 overflow-hidden rounded-md border border-border bg-background p-1 shadow-lg">
+                                            {FONT_FAMILIES.map((font) => (
+                                                <button
+                                                    key={font.value}
+                                                    type="button"
+                                                    className={`flex w-full items-center rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${
+                                                        fontFamily === font.value ? 'bg-accent/60 font-medium' : ''
+                                                    }`}
+                                                    onClick={() => {
+                                                        setFontFamily(font.value);
+                                                        if (hasSelectedText) {
+                                                            applySelectedTextStylesLive({ fontFamily: font.value });
+                                                            commitCanvasColorChange();
+                                                        }
+                                                        setIsFontFamilyMenuOpen(false);
+                                                    }}
+                                                >
+                                                    {font.label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     )}
-                                    {FONT_SIZE_OPTIONS.map((size) => (
-                                        <option key={size} value={String(size)}>
-                                            {size}px
-                                        </option>
-                                    ))}
-                                </select>
+                                </div>
+                                <div ref={fontSizeMenuRef} className="relative shrink-0">
+                                    <div className="flex h-9 w-[5.5rem] items-stretch overflow-hidden rounded-md border border-border bg-background">
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            aria-label="Skriftstørrelse"
+                                            className="min-w-0 flex-1 border-0 bg-transparent px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                                            value={fontSizeInputValue}
+                                            onChange={(e) => setFontSizeInputValue(e.target.value)}
+                                            onBlur={() => commitFontSizeFromInput()}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    (e.target as HTMLInputElement).blur();
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="flex shrink-0 items-center border-l border-border px-1.5 hover:bg-accent"
+                                            aria-label="Velg skriftstørrelse fra liste"
+                                            aria-haspopup="menu"
+                                            aria-expanded={isFontSizeMenuOpen}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setIsFontSizeMenuOpen((prev) => !prev);
+                                                setIsFontFamilyMenuOpen(false);
+                                            }}
+                                        >
+                                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        </button>
+                                    </div>
+                                    {isFontSizeMenuOpen && (
+                                        <div className="absolute left-0 top-full z-50 mt-2 max-h-56 min-w-[5.5rem] overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
+                                            {FONT_SIZE_OPTIONS.map((size) => (
+                                                <button
+                                                    key={size}
+                                                    type="button"
+                                                    className={`flex w-full items-center rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${
+                                                        textFontSize === size ? 'bg-accent/60 font-medium' : ''
+                                                    }`}
+                                                    onClick={() => {
+                                                        setTextFontSize(size);
+                                                        setFontSizeInputValue(String(size));
+                                                        if (hasSelectedText) {
+                                                            applySelectedTextStylesLive({ fontSize: size });
+                                                            commitCanvasColorChange();
+                                                        }
+                                                        setIsFontSizeMenuOpen(false);
+                                                    }}
+                                                >
+                                                    {size}px
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                                 <div
                                     className="flex shrink-0 items-center gap-0.5 rounded-md border border-border bg-background p-0.5"
                                     role="group"
@@ -3563,6 +4240,116 @@ useEffect(() => {
                                 <Trash2 className="h-4 w-4" /> Slett
                             </Button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {editorContextMenu && contextMenuStyle && (
+                <div
+                    ref={editorContextMenuRef}
+                    role="menu"
+                    aria-label="Elementhurtigmeny"
+                    className="fixed z-[9999] overflow-hidden rounded-md border border-border/80 bg-popover text-popover-foreground shadow-lg"
+                    style={contextMenuStyle}
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center gap-1 p-1">
+                        {contextMenuTargetIsText && (
+                            <>
+                                <div
+                                    className="flex shrink-0 items-center rounded border border-border/70 bg-background/80 p-0.5"
+                                    role="group"
+                                    aria-label="Tekststil"
+                                >
+                                    <button
+                                        type="button"
+                                        role="menuitemcheckbox"
+                                        aria-checked={isTextBold}
+                                        aria-label={isTextBold ? 'Fjern fet' : 'Fet'}
+                                        title={isTextBold ? 'Fjern fet' : 'Fet'}
+                                        className={cn(
+                                            'flex h-7 w-7 items-center justify-center rounded-sm text-xs font-bold transition-colors',
+                                            isTextBold
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-foreground hover:bg-accent',
+                                        )}
+                                        onClick={() => {
+                                            applySelectedTextStylesLive({ fontWeight: isTextBold ? 'normal' : 'bold' });
+                                            commitCanvasColorChange();
+                                            syncHasSelectedShape();
+                                        }}
+                                    >
+                                        B
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitemcheckbox"
+                                        aria-checked={isTextItalic}
+                                        aria-label={isTextItalic ? 'Fjern kursiv' : 'Kursiv'}
+                                        title={isTextItalic ? 'Fjern kursiv' : 'Kursiv'}
+                                        className={cn(
+                                            'flex h-7 w-7 items-center justify-center rounded-sm text-xs italic transition-colors',
+                                            isTextItalic
+                                                ? 'bg-primary text-primary-foreground'
+                                                : 'text-foreground hover:bg-accent',
+                                        )}
+                                        onClick={() => {
+                                            applySelectedTextStylesLive({ fontStyle: isTextItalic ? 'normal' : 'italic' });
+                                            commitCanvasColorChange();
+                                            syncHasSelectedShape();
+                                        }}
+                                    >
+                                        I
+                                    </button>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Skriftstørrelse">
+                                    {CONTEXT_MENU_FONT_SIZES.map((sz) => (
+                                        <button
+                                            key={`ctx-fs-${sz}`}
+                                            type="button"
+                                            role="menuitemradio"
+                                            aria-checked={textFontSize === sz}
+                                            aria-label={`${sz} piksler`}
+                                            title={`${sz}px`}
+                                            className={cn(
+                                                'h-7 min-w-[2rem] rounded-sm border px-1 text-[11px] font-medium tabular-nums leading-none transition-colors',
+                                                textFontSize === sz
+                                                    ? 'border-primary bg-primary/15 text-foreground'
+                                                    : 'border-border/70 bg-background/80 text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                            )}
+                                            onClick={() => {
+                                                applySelectedTextStylesLive({ fontSize: sz });
+                                                commitCanvasColorChange();
+                                                syncHasSelectedShape();
+                                            }}
+                                        >
+                                            {sz}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {contextMenuShowDelete && (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                aria-label="Slett element"
+                                title="Slett element"
+                                className={cn(
+                                    'flex h-7 shrink-0 items-center justify-center rounded-sm text-destructive transition-colors hover:bg-destructive/15',
+                                    contextMenuTargetIsText ? 'w-7' : 'gap-1 px-2 text-xs font-medium',
+                                )}
+                                onClick={() => {
+                                    deleteSelected();
+                                    setEditorContextMenu(null);
+                                    syncHasSelectedShape();
+                                }}
+                            >
+                                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                                {!contextMenuTargetIsText && <span>Slett</span>}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
