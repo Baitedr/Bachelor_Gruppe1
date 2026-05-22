@@ -794,15 +794,19 @@ function App() {
     })
   }
 
-  // Håndterer at en gjest blir med i en live presentasjonsøkt ved å sette relevant state og navigere til lobbyen.
-  const handleGuestJoin = (presentationId: string | number) => {
+  // Håndterer at en gjest blir med — lobby kun når økten ikke er startet ennå.
+  const handleGuestJoin = (
+    presentationId: string | number,
+    sessionStarted = false
+  ) => {
     const normalizedPresentationId = String(presentationId)
-    saveSessionState('lobby', normalizedPresentationId, null, true, false)
+    const nextPage: Page = sessionStarted ? 'live' : 'lobby'
+    saveSessionState(nextPage, normalizedPresentationId, null, true, false)
     setLivePresentationId(normalizedPresentationId)
     setLiveJoinCode(null)
     setLiveIsPresenter(false)
     setGuestMode(true)
-    setCurrentPage('lobby')
+    setCurrentPage(nextPage)
   }
 
   // Håndterer utlogging ved å rydde all relevant state, både lokalt og i sessionStorage, og navigere til login-siden.

@@ -25,7 +25,7 @@ function fullLiveJoinCode(suffix: string): string {
 
 interface LoginProps {
   onLoginSuccess?: (user: unknown) => void
-  onGuestJoin?: (presentationId: string | number) => void
+  onGuestJoin?: (presentationId: string | number, sessionStarted: boolean) => void
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
@@ -118,7 +118,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGuestJoin }) => {
     setIsLoading(true)
     try {
       const data = await api.guestJoin(fullLiveJoinCode(suffix))
-      onGuestJoin?.(data.presentation_id)
+      onGuestJoin?.(data.presentation_id, Boolean(data.session_started))
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Kunne ikke bli med i økten.') // Could not join session.
     } finally {
