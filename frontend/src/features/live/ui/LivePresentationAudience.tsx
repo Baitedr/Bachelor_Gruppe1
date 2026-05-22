@@ -165,7 +165,7 @@ const LivePresentationAudience = ({
     { results?: Record<string, number>; total?: number; recent_answers?: string[]; question_type?: 'single_choice' | 'open_text' }
   >
   sessionEnded: boolean
-  submitPollAnswer: (pollId: string | number, answer: string) => void
+  submitPollAnswer: (pollId: string | number, answer: string, optionId?: string | number) => void
   submitQuestionAnswer: (questionId: string | number, answer: string) => void
   audienceResults: Array<{ id: string | number; text: string; votes: number; percent: number }>
   activeQuestionChoiceResults: Array<{ id: string | number; text: string; count: number; percent: number }>
@@ -330,7 +330,7 @@ const LivePresentationAudience = ({
               key={option.id}
               className={styles.interactionChoiceButton}
               variant='outline'
-              onClick={() => submitPollAnswer(activePoll.id, option.text)}
+              onClick={() => submitPollAnswer(activePoll.id, option.text, option.id)}
             >
               {option.text}
             </Button>
@@ -536,7 +536,7 @@ const LivePresentationAudience = ({
                 </span>
               </div>
               {isFullscreen ? <ModeToggle /> : null}
-              {onLeaveSession && isFullscreen ? (
+              {onLeaveSession ? (
                 <Button
                   type='button'
                   variant='outline'

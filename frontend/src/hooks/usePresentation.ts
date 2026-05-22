@@ -106,6 +106,8 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const [submittedQuestionIds, setSubmittedQuestionIds] = useState<Record<string, boolean>>({})
   const [pendingQuestionIds, setPendingQuestionIds] = useState<Record<string, boolean>>({})
   const [questionAwaitingLateAck, setQuestionAwaitingLateAck] = useState<Record<string, boolean>>({})
+  const submittedPollIdsRef = useRef<Record<string, boolean>>({})
+  const submittedQuestionIdsRef = useRef<Record<string, boolean>>({})
   /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
   const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState<number | null>(null)
 
@@ -200,12 +202,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
       const pendingUi = pendingPollIdsRef.current[key]
       if (!awaitingAck && !pendingUi) return
       const baseline = pollTotalAtSubmitRef.current[key] ?? 0
-      // Ignore stale/foreign broadcasts until our vote is reflected or server acks this client.
       if (!force && awaitingAck && total <= baseline) return
 
       delete pollTotalAtSubmitRef.current[key]
       clearPollPending(key)
       clearPollAwaiting(key)
+      submittedPollIdsRef.current[key] = true
       setSubmittedPollIds((prev) => ({ ...prev, [key]: true }))
     },
     [clearPollPending, clearPollAwaiting],
@@ -223,6 +225,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
       delete questionTotalAtSubmitRef.current[key]
       clearQuestionPending(key)
       clearQuestionAwaiting(key)
+      submittedQuestionIdsRef.current[key] = true
       setSubmittedQuestionIds((prev) => ({ ...prev, [key]: true }))
     },
     [clearQuestionPending, clearQuestionAwaiting],
@@ -510,6 +513,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     subscriptionRef.current = subscription
 
     return () => {
+      subscriptionRef.current = null
       subscription.unsubscribe()
       consumer.disconnect()
     }
@@ -590,11 +594,11 @@ export const usePresentation = (presentationId: string | number | null, token: s
     }
   }
 
-  const submitPollAnswer = (pollId: string | number, answer: string) => {
+  const submitPollAnswer = (pollId: string | number, answer: string, optionId?: string | number) => {
     if (!subscriptionRef.current) return
     const key = String(pollId)
     if (
-      submittedPollIds[key] ||
+      submittedPollIdsRef.current[key] ||
       pendingPollIdsRef.current[key] ||
       submitAwaitingPollRef.current[key]
     ) {
@@ -603,11 +607,13 @@ export const usePresentation = (presentationId: string | number | null, token: s
 
     pollTotalAtSubmitRef.current[key] = pollResultsRef.current[key]?.total ?? 0
     schedulePollPending(key)
-    subscriptionRef.current.perform('submit_poll_response', {
+    const payload: Record<string, unknown> = {
       poll_id: pollId,
       answer,
       client_id: getLiveClientId(),
-    })
+    }
+    if (optionId != null) payload.option_id = optionId
+    subscriptionRef.current.perform('submit_poll_response', payload)
   }
 
   const startSession = () => {
@@ -632,7 +638,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
     if (!subscriptionRef.current) return
     const key = String(questionId)
     if (
-      submittedQuestionIds[key] ||
+      submittedQuestionIdsRef.current[key] ||
       pendingQuestionIdsRef.current[key] ||
       submitAwaitingQuestionRef.current[key]
     ) {

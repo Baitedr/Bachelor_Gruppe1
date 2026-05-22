@@ -361,6 +361,16 @@ class PresentationChannel < ApplicationCable::Channel
     end
   end
 
+  def poll_store_key(session_id, poll_id)
+    "presentation_session:#{params[:presentation_id]}:session:#{session_id}:poll:#{poll_id}"
+  end
+
+  def poll_store_for_session(session_id, poll_id)
+    Rails.cache.fetch(poll_store_key(session_id, poll_id)) do
+      { 'results' => {}, 'total' => 0, 'user_answers' => {} }
+    end
+  end
+
   # Henter et spørsmål fra presentasjonen basert på ID. Bygger et cachet oppslagskart over
   # alle spørsmål i slides en gang, slik at gjentatte WS-interaksjoner ikke skanner alle slides hver gang.
   def find_question_in_presentation(presentation, question_id)
@@ -433,8 +443,6 @@ class PresentationChannel < ApplicationCable::Channel
     return unless presentation.owner_id == current_user.id
 
     poll = Poll.includes(:poll_options, :slide).find(data['poll_id'])
-    # Sikrer at kun ÉN poll i hele presentasjonen er aktiv. Tidligere ble bare polls på
-    # samme slide deaktivert, så stale `is_active=true` kunne ligge på tidligere slides.
     deactivate_all_polls(presentation)
     poll.update!(is_active: true)
 
@@ -457,43 +465,54 @@ class PresentationChannel < ApplicationCable::Channel
     broadcast_poll_results(poll, active_session)
   end
 
-  # Deltaker sender svar på en poll, som lagres i databasen og oppdateres i sanntid for alle deltakere.
+  # Deltaker sender svar på en poll. Cache-basert flyt (samme mønster som spørsmål) for
+  # instant respons. DB-skriving skjer som sekundær backup etter broadcast.
   def submit_poll_response(data)
-    poll = Poll.includes(slide: :presentation).find(data['poll_id'])
-    presentation = poll.slide&.presentation
-    return unless presentation
-
+    presentation = Presentation.find(params[:presentation_id])
     active_session = active_session_for_presentation(presentation)
     return unless active_session
-    return unless poll.is_active?
+
+    poll_id = data['poll_id'] || data[:poll_id]
+    poll = Poll.includes(:poll_options).find(poll_id)
     return unless interaction_active_for_submission?(presentation, active_session, 'poll', poll.id)
 
-    answer_text = data['answer'].to_s.strip
+    answer_text = (data['answer'] || data[:answer]).to_s.strip
     return if answer_text.blank?
 
-    option = poll.poll_options.find_by(text: answer_text)
+    option_id = data['option_id'] || data[:option_id]
+    option = if option_id.present?
+               poll.poll_options.find_by(id: option_id) || poll.poll_options.find_by(text: answer_text)
+             else
+               poll.poll_options.find_by(text: answer_text)
+             end
     return unless option
 
-    existing = PollResponse.find_by(
-      poll_id: poll.id,
-      user_id: current_user.id,
-      presentation_session_id: active_session.id
-    )
-    if existing
+    store = poll_store_for_session(active_session.id, poll.id)
+    client_key = (data['client_id'] || data[:client_id]).presence || current_user.id.to_s
+    if store['user_answers'].key?(client_key)
       broadcast_poll_results(poll, active_session)
       transmit(type: 'poll_response_accepted', poll_id: poll.id)
       return
     end
 
-    PollResponse.create!(
-      poll_id: poll.id,
-      user_id: current_user.id,
-      presentation_session_id: active_session.id,
-      answer: option.text
-    )
+    store['user_answers'][client_key] = option.text
+    store['results'][option.text] = store['results'].fetch(option.text, 0) + 1
+    store['total'] = store['total'].to_i + 1
 
+    Rails.cache.write(poll_store_key(active_session.id, poll.id), store, expires_in: 12.hours)
     broadcast_poll_results(poll, active_session)
     transmit(type: 'poll_response_accepted', poll_id: poll.id)
+
+    # Sekundær DB-backup (feiler stille — cache er autoritativ under live-økt)
+    begin
+      PollResponse.find_or_create_by!(
+        poll_id: poll.id,
+        user_id: current_user.id,
+        presentation_session_id: active_session.id
+      ) { |r| r.answer = option.text }
+    rescue StandardError
+      # Cache-basert flyt har allerede broadcastet — DB-feil påvirker ikke live-opplevelsen
+    end
   end
 
   private
@@ -579,12 +598,12 @@ class PresentationChannel < ApplicationCable::Channel
       when 'poll'
         poll = Poll.includes(:poll_options).find_by(id: interaction['id'])
         if poll
-          poll_results = poll_results_for_session(poll, active_session)
+          store = poll_store_for_session(active_session.id, poll.id)
           interaction_payload = {
             type: 'poll',
             accepting_answers: interaction['accepting_answers'] == true,
             poll: serialize_poll(poll, active_session),
-            poll_results: poll_results
+            poll_results: { results: store['results'] || {}, total: store['total'] || 0 }
           }
         end
       when 'question'
@@ -643,14 +662,10 @@ class PresentationChannel < ApplicationCable::Channel
   end
 
   def poll_results_for_session(poll, active_session)
-    results = poll.poll_responses
-                  .where(presentation_session_id: active_session.id)
-                  .group(:answer)
-                  .count
-    { results: results, total: results.values.sum }
+    store = poll_store_for_session(active_session.id, poll.id)
+    { results: store['results'] || {}, total: store['total'] || 0 }
   end
 
-  # Hjelpemetode for å sende oppdaterte resultater for en poll til alle deltakere i sanntid, basert på svarene som er lagret i databasen for den aktive økten.
   def broadcast_poll_results(poll, active_session)
     return unless active_session
 
@@ -666,14 +681,9 @@ class PresentationChannel < ApplicationCable::Channel
     )
   end
 
-  # Hjelpemetode for å formatere en poll i en struktur som inkluderer spørsmål, alternativer og nåværende stemme-telling,
-  # basert på svarene som er lagret i databasen for den aktive økten.
   def serialize_poll(poll, active_session)
-    counts = if active_session
-               poll.poll_responses.where(presentation_session_id: active_session.id).group(:answer).count
-             else
-               {}
-             end
+    store = active_session ? poll_store_for_session(active_session.id, poll.id) : {}
+    results = store['results'] || {}
 
     {
       id: poll.id,
@@ -682,7 +692,7 @@ class PresentationChannel < ApplicationCable::Channel
         {
           id: option.id,
           text: option.text,
-          votes: counts[option.text].to_i
+          votes: results[option.text].to_i
         }
       end
     }

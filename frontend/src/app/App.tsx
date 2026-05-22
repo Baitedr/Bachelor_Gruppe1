@@ -140,6 +140,8 @@ function App() {
   const [startingLivePresentationId, setStartingLivePresentationId] = useState<string | null>(null)
   /** Presenter åpnet live uten lobby — trigge `start_session` på kanalen når LivePresentation er klar. */
   const [liveAutoStartPresenterSession, setLiveAutoStartPresenterSession] = useState(false)
+  /** Hvor presentatør startet live-økten fra — brukes for å navigere tilbake etter «Avslutt økt». */
+  const [liveSessionOrigin, setLiveSessionOrigin] = useState<'editor' | 'home' | null>(null)
   const [isNewPresentationSession, setIsNewPresentationSession] = useState(false)
   const [hasSavedCurrentSession, setHasSavedCurrentSession] = useState(false)
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(false)
@@ -219,6 +221,7 @@ function App() {
     setLivePresentationId(null)
     setLiveIsPresenter(false)
     setLiveAutoStartPresenterSession(false)
+    setLiveSessionOrigin(null)
   }
 
   const clearNavbarToastTimer = () => {
@@ -791,6 +794,7 @@ function App() {
 
   // Oppretter live-økt på server; lobby eller direkte til lysbilde velges med nextPage.
   const handleStartLive = async (presentationId: string) => {
+    setLiveSessionOrigin('home')
     await startPresenterSession(presentationId, {
       nextPage: 'lobby',
       errorMessage: LIVE_SESSION_START_ERROR,
@@ -824,6 +828,7 @@ function App() {
 
   /** Hjemskort: start som presentatør uten lobby (første lysbilde etter at kanalen er klar). */
   const handleStartLiveDirectFromHome = async (presentationId: string) => {
+    setLiveSessionOrigin('home')
     await startPresenterSession(presentationId, {
       nextPage: 'live',
       errorMessage: LIVE_SESSION_START_ERROR,
@@ -834,6 +839,7 @@ function App() {
     if (!activePresentation?.id) return
     const didSave = await presentationEditorRef.current?.savePresentation?.()
     if (!didSave) return
+    setLiveSessionOrigin('editor')
     await startPresenterSession(activePresentation.id, {
       nextPage: 'lobby',
       errorMessage: LIVE_SESSION_START_ERROR,
@@ -844,6 +850,7 @@ function App() {
     if (!activePresentation?.id) return
     const didSave = await presentationEditorRef.current?.savePresentation?.()
     if (!didSave) return
+    setLiveSessionOrigin('editor')
     await startPresenterSession(activePresentation.id, {
       nextPage: 'live',
       errorMessage: PRESENT_WITHOUT_LOBBY_ERROR,
@@ -916,8 +923,9 @@ function App() {
   }
 
 
-  // Håndterer avslutning av en live presentasjonsøkt ved å kommunisere med backend for å avslutte økten, rydde session-relatert state og navigere hjem.
+  // Håndterer avslutning av en live presentasjonsøkt ved å kommunisere med backend for å avslutte økten, rydde session-relatert state og navigere tilbake.
   const handleEndLiveSession = async () => {
+    const returnToEditor = liveSessionOrigin === 'editor' && livePresentationId
     if (livePresentationId) {
       try {
         await api.endSession(livePresentationId)
@@ -926,10 +934,23 @@ function App() {
       }
     }
     clearSessionState()
+
+    if (returnToEditor) {
+      try {
+        const data = await api.getPresentation(livePresentationId)
+        setActivePresentation(data.presentation)
+        resetLiveRuntimeState()
+        setCurrentPage('editor')
+        return
+      } catch {
+        // Fallback til hjem hvis presentasjonen ikke kan lastes
+      }
+    }
+
     persistHomePageState(guestMode)
     setActivePresentation(null)
-    setCurrentPage('home')
     resetLiveRuntimeState()
+    setCurrentPage('home')
   }
 
   // Håndterer oppdatering av brukerens profilnavn ved å sende oppdaterte data til backend og oppdatere lokal state.
@@ -1474,7 +1495,7 @@ function App() {
               isPresenter={liveIsPresenter}
               joinCode={liveJoinCode}
               onEndLiveSession={handleEndLiveSession}
-              onSessionEnd={handleGoHome}
+              onSessionEnd={liveIsPresenter ? undefined : handleGoHome}
               onLeaveSession={liveIsPresenter ? undefined : handleGoHome}
               autoStartPresenterSession={liveAutoStartPresenterSession}
             />
