@@ -137,7 +137,11 @@ const LivePresentationAudience = ({
   activeQuestionChoiceResults,
   activeQuestionType,
   hasAnsweredActivePoll,
+  isSubmittingActivePoll,
+  isPollAwaitingLateAck,
   hasAnsweredActiveQuestion,
+  isSubmittingActiveQuestion,
+  isQuestionAwaitingLateAck,
   interactionAcceptingAnswers,
   totalVotes,
   totalQuestionAnswers,
@@ -167,7 +171,11 @@ const LivePresentationAudience = ({
   activeQuestionChoiceResults: Array<{ id: string | number; text: string; count: number; percent: number }>
   activeQuestionType: 'single_choice' | 'open_text'
   hasAnsweredActivePoll: boolean
+  isSubmittingActivePoll: boolean
+  isPollAwaitingLateAck: boolean
   hasAnsweredActiveQuestion: boolean
+  isSubmittingActiveQuestion: boolean
+  isQuestionAwaitingLateAck: boolean
   interactionAcceptingAnswers: boolean
   totalVotes: number
   totalQuestionAnswers: number
@@ -312,7 +320,10 @@ const LivePresentationAudience = ({
         <p className={styles.interactionTag}>Avstemning</p>
         <h3 className={styles.interactionTitle}>{activePoll.question}</h3>
       </div>
-      {!hasAnsweredActivePoll && interactionAcceptingAnswers ? (
+      {!hasAnsweredActivePoll &&
+      !isSubmittingActivePoll &&
+      !isPollAwaitingLateAck &&
+      interactionAcceptingAnswers ? (
         <div className={styles.interactionChoices}>
           {activePoll.options.map((option) => (
             <Button
@@ -325,6 +336,12 @@ const LivePresentationAudience = ({
             </Button>
           ))}
         </div>
+      ) : isSubmittingActivePoll ? (
+        <p className={styles.mutedText}>Sender stemmen din…</p>
+      ) : isPollAwaitingLateAck ? (
+        <p className={styles.mutedText}>
+          Stemmen din er sendt. Venter på at resultatene oppdateres (treg nettverksforbindelse)…
+        </p>
       ) : (
         <div className={styles.interactionState}>
           {!interactionAcceptingAnswers && !hasAnsweredActivePoll ? (
@@ -359,7 +376,10 @@ const LivePresentationAudience = ({
         <p className={styles.interactionTag}>Spørsmål</p>
         <h3 className={styles.interactionTitle}>{activeQuestion.prompt}</h3>
       </div>
-      {!hasAnsweredActiveQuestion && interactionAcceptingAnswers ? (
+      {!hasAnsweredActiveQuestion &&
+      !isSubmittingActiveQuestion &&
+      !isQuestionAwaitingLateAck &&
+      interactionAcceptingAnswers ? (
         activeQuestionType === 'single_choice' ? (
           <div className={styles.interactionChoices}>
             {(activeQuestion.options || []).map((option) => (
@@ -386,6 +406,12 @@ const LivePresentationAudience = ({
             </Button>
           </div>
         )
+      ) : isSubmittingActiveQuestion ? (
+        <p className={styles.mutedText}>Sender svaret ditt…</p>
+      ) : isQuestionAwaitingLateAck ? (
+        <p className={styles.mutedText}>
+          Svaret ditt er sendt. Venter på at resultatene oppdateres (treg nettverksforbindelse)…
+        </p>
       ) : (
         <div className={styles.interactionState}>
           {!interactionAcceptingAnswers && !hasAnsweredActiveQuestion ? (

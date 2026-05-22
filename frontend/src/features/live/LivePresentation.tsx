@@ -110,11 +110,15 @@ const LivePresentation = ({
     sessionStarted,
     startSession,
     submittedPollIds,
+    pendingPollIds,
+    pollAwaitingLateAck,
     activeQuestion,
     questionResults,
     activateQuestion,
     submitQuestionAnswer,
     submittedQuestionIds,
+    pendingQuestionIds,
+    questionAwaitingLateAck,
     embedPlayback,
     broadcastEmbedPlayback,
     stopInteractions,
@@ -295,6 +299,8 @@ const LivePresentation = ({
   const totalVotes = activePollResult?.total || 0
   const activePollId = typedActivePoll ? String(typedActivePoll.id) : ''
   // Brukes for å bytte fra svarskjema til resultatskjema etter innsending.
+  const isSubmittingActivePoll = Boolean(typedActivePoll && pendingPollIds[activePollId])
+  const isPollAwaitingLateAck = Boolean(typedActivePoll && pollAwaitingLateAck[activePollId])
   const hasAnsweredActivePoll = Boolean(typedActivePoll && submittedPollIds[activePollId])
   // Tilsvarende oppslag for aktivt spørsmål.
   const activeQuestionResult = typedActiveQuestion
@@ -303,6 +309,8 @@ const LivePresentation = ({
   const totalQuestionAnswers = activeQuestionResult?.total || 0
   const activeQuestionType: LiveQuestionType = activeQuestionResult?.question_type || 'open_text'
   const activeQuestionId = typedActiveQuestion ? String(typedActiveQuestion.id) : ''
+  const isSubmittingActiveQuestion = Boolean(typedActiveQuestion && pendingQuestionIds[activeQuestionId])
+  const isQuestionAwaitingLateAck = Boolean(typedActiveQuestion && questionAwaitingLateAck[activeQuestionId])
   const hasAnsweredActiveQuestion = Boolean(typedActiveQuestion && submittedQuestionIds[activeQuestionId])
 
   // Samleflagg som styrer om interaksjons-overlay skal vises for publikum.
@@ -403,7 +411,11 @@ const LivePresentation = ({
           activeQuestionChoiceResults={activeQuestionChoiceResults}
           activeQuestionType={activeQuestionType}
           hasAnsweredActivePoll={hasAnsweredActivePoll}
+          isSubmittingActivePoll={isSubmittingActivePoll}
+          isPollAwaitingLateAck={isPollAwaitingLateAck}
           hasAnsweredActiveQuestion={hasAnsweredActiveQuestion}
+          isSubmittingActiveQuestion={isSubmittingActiveQuestion}
+          isQuestionAwaitingLateAck={isQuestionAwaitingLateAck}
           interactionAcceptingAnswers={interactionAcceptingAnswers}
           totalVotes={totalVotes}
           totalQuestionAnswers={totalQuestionAnswers}

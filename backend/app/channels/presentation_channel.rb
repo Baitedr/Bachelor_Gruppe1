@@ -327,7 +327,11 @@ class PresentationChannel < ApplicationCable::Channel
     # Lagrer svar i cache for rask tilgang og sanntidsoppdatering, og unngår duplikater basert på client_id eller user_id.
     store = question_store_for_session(active_session.id, question[:id])
     client_key = data['client_id'].presence || data[:client_id].presence || current_user.id.to_s
-    return if store['user_answers'].key?(client_key)
+    if store['user_answers'].key?(client_key)
+      broadcast_question_results(presentation, active_session, question)
+      transmit(type: 'question_response_accepted', question_id: question[:id])
+      return
+    end
 
     store['user_answers'][client_key] = answer
     store['results'][answer] = store['results'].fetch(answer, 0) + 1
@@ -341,6 +345,7 @@ class PresentationChannel < ApplicationCable::Channel
 
     Rails.cache.write(question_store_key(active_session.id, question[:id]), store, expires_in: 12.hours)
     broadcast_question_results(presentation, active_session, question)
+    transmit(type: 'question_response_accepted', question_id: question[:id])
   end
 
   # Hjelpemetode for å generere en unik cache-nøkkel for lagring av spørsmålssvar basert på presentasjons-ID, økt-ID og spørsmål-ID.
@@ -463,7 +468,10 @@ class PresentationChannel < ApplicationCable::Channel
     return unless poll.is_active?
     return unless interaction_active_for_submission?(presentation, active_session, 'poll', poll.id)
 
-    option = poll.poll_options.find_by(text: data['answer'])
+    answer_text = data['answer'].to_s.strip
+    return if answer_text.blank?
+
+    option = poll.poll_options.find_by(text: answer_text)
     return unless option
 
     existing = PollResponse.find_by(
@@ -471,7 +479,11 @@ class PresentationChannel < ApplicationCable::Channel
       user_id: current_user.id,
       presentation_session_id: active_session.id
     )
-    return if existing
+    if existing
+      broadcast_poll_results(poll, active_session)
+      transmit(type: 'poll_response_accepted', poll_id: poll.id)
+      return
+    end
 
     PollResponse.create!(
       poll_id: poll.id,
@@ -481,6 +493,7 @@ class PresentationChannel < ApplicationCable::Channel
     )
 
     broadcast_poll_results(poll, active_session)
+    transmit(type: 'poll_response_accepted', poll_id: poll.id)
   end
 
   private

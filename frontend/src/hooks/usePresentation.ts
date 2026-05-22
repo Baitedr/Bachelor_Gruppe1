@@ -73,6 +73,25 @@ type ActiveInteractionState =
   | { kind: 'question'; data: unknown; acceptingAnswers: boolean }
   | null
 
+const LIVE_CLIENT_ID_KEY = 'proslides-live-client-id'
+/** How long the "Sender …" spinner is shown before switching to late-ack copy. */
+const SUBMIT_PENDING_UI_MS = 12_000
+/** How long we still accept a confirming `poll_results` / `question_results` after submit (slow Wi‑Fi). */
+const SUBMIT_AWAITING_ACK_MS = 45_000
+
+const getLiveClientId = (): string => {
+  try {
+    let id = sessionStorage.getItem(LIVE_CLIENT_ID_KEY)
+    if (!id) {
+      id = `c_${Math.random().toString(36).slice(2)}_${Date.now()}`
+      sessionStorage.setItem(LIVE_CLIENT_ID_KEY, id)
+    }
+    return id
+  } catch {
+    return `c_${Date.now()}`
+  }
+}
+
 export const usePresentation = (presentationId: string | number | null, token: string | null) => {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [activeInteraction, setActiveInteraction] = useState<ActiveInteractionState>(null)
@@ -81,8 +100,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const [participantCount, setParticipantCount] = useState(0)
   const [sessionStarted, setSessionStarted] = useState(false)
   const [submittedPollIds, setSubmittedPollIds] = useState<Record<string, boolean>>({})
+  const [pendingPollIds, setPendingPollIds] = useState<Record<string, boolean>>({})
+  const [pollAwaitingLateAck, setPollAwaitingLateAck] = useState<Record<string, boolean>>({})
   const [questionResults, setQuestionResults] = useState<Record<string, QuestionResultsEntry>>({})
   const [submittedQuestionIds, setSubmittedQuestionIds] = useState<Record<string, boolean>>({})
+  const [pendingQuestionIds, setPendingQuestionIds] = useState<Record<string, boolean>>({})
+  const [questionAwaitingLateAck, setQuestionAwaitingLateAck] = useState<Record<string, boolean>>({})
   /** Når satt og lik currentSlide: alle klienter viser liveboard-resultater for dette lysbildet (synket via ActionCable). */
   const [liveboardForSlideIndex, setLiveboardForSlideIndex] = useState<number | null>(null)
 
@@ -99,6 +122,160 @@ export const usePresentation = (presentationId: string | number | null, token: s
     null,
   )
   const lastRealtimeSessionStateAtRef = useRef<number>(0)
+  const pendingPollIdsRef = useRef<Record<string, boolean>>({})
+  const pendingQuestionIdsRef = useRef<Record<string, boolean>>({})
+  const pendingPollTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const pendingQuestionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const submitAwaitingPollRef = useRef<Record<string, boolean>>({})
+  const submitAwaitingQuestionRef = useRef<Record<string, boolean>>({})
+  const submitAwaitingPollTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const submitAwaitingQuestionTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const confirmPollSubmissionRef = useRef<(pollId: string, total: number, force?: boolean) => void>(() => {})
+  const confirmQuestionSubmissionRef = useRef<(questionId: string, total: number, force?: boolean) => void>(
+    () => {},
+  )
+  const pollTotalAtSubmitRef = useRef<Record<string, number>>({})
+  const questionTotalAtSubmitRef = useRef<Record<string, number>>({})
+  const pollResultsRef = useRef(pollResults)
+  const questionResultsRef = useRef(questionResults)
+  pollResultsRef.current = pollResults
+  questionResultsRef.current = questionResults
+
+  const clearPollPending = useCallback((key: string) => {
+    delete pendingPollIdsRef.current[key]
+    const timer = pendingPollTimersRef.current[key]
+    if (timer) clearTimeout(timer)
+    delete pendingPollTimersRef.current[key]
+    setPendingPollIds((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const clearQuestionPending = useCallback((key: string) => {
+    delete pendingQuestionIdsRef.current[key]
+    const timer = pendingQuestionTimersRef.current[key]
+    if (timer) clearTimeout(timer)
+    delete pendingQuestionTimersRef.current[key]
+    setPendingQuestionIds((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const clearPollAwaiting = useCallback((key: string) => {
+    delete submitAwaitingPollRef.current[key]
+    const timer = submitAwaitingPollTimersRef.current[key]
+    if (timer) clearTimeout(timer)
+    delete submitAwaitingPollTimersRef.current[key]
+    setPollAwaitingLateAck((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const clearQuestionAwaiting = useCallback((key: string) => {
+    delete submitAwaitingQuestionRef.current[key]
+    const timer = submitAwaitingQuestionTimersRef.current[key]
+    if (timer) clearTimeout(timer)
+    delete submitAwaitingQuestionTimersRef.current[key]
+    setQuestionAwaitingLateAck((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const confirmPollSubmission = useCallback(
+    (pollId: string, total: number, force = false) => {
+      const key = String(pollId)
+      const awaitingAck = submitAwaitingPollRef.current[key]
+      const pendingUi = pendingPollIdsRef.current[key]
+      if (!awaitingAck && !pendingUi) return
+      const baseline = pollTotalAtSubmitRef.current[key] ?? 0
+      // Ignore stale/foreign broadcasts until our vote is reflected or server acks this client.
+      if (!force && awaitingAck && total <= baseline) return
+
+      delete pollTotalAtSubmitRef.current[key]
+      clearPollPending(key)
+      clearPollAwaiting(key)
+      setSubmittedPollIds((prev) => ({ ...prev, [key]: true }))
+    },
+    [clearPollPending, clearPollAwaiting],
+  )
+
+  const confirmQuestionSubmission = useCallback(
+    (questionId: string, total: number, force = false) => {
+      const key = String(questionId)
+      const awaitingAck = submitAwaitingQuestionRef.current[key]
+      const pendingUi = pendingQuestionIdsRef.current[key]
+      if (!awaitingAck && !pendingUi) return
+      const baseline = questionTotalAtSubmitRef.current[key] ?? 0
+      if (!force && awaitingAck && total <= baseline) return
+
+      delete questionTotalAtSubmitRef.current[key]
+      clearQuestionPending(key)
+      clearQuestionAwaiting(key)
+      setSubmittedQuestionIds((prev) => ({ ...prev, [key]: true }))
+    },
+    [clearQuestionPending, clearQuestionAwaiting],
+  )
+
+  confirmPollSubmissionRef.current = confirmPollSubmission
+  confirmQuestionSubmissionRef.current = confirmQuestionSubmission
+
+  const schedulePollPending = useCallback(
+    (key: string) => {
+      pendingPollIdsRef.current[key] = true
+      setPendingPollIds((prev) => ({ ...prev, [key]: true }))
+      const existingPendingTimer = pendingPollTimersRef.current[key]
+      if (existingPendingTimer) clearTimeout(existingPendingTimer)
+      pendingPollTimersRef.current[key] = setTimeout(() => {
+        clearPollPending(key)
+        if (submitAwaitingPollRef.current[key]) {
+          setPollAwaitingLateAck((prev) => ({ ...prev, [key]: true }))
+        }
+      }, SUBMIT_PENDING_UI_MS)
+
+      submitAwaitingPollRef.current[key] = true
+      const existingAckTimer = submitAwaitingPollTimersRef.current[key]
+      if (existingAckTimer) clearTimeout(existingAckTimer)
+      submitAwaitingPollTimersRef.current[key] = setTimeout(() => {
+        clearPollAwaiting(key)
+      }, SUBMIT_AWAITING_ACK_MS)
+    },
+    [clearPollPending, clearPollAwaiting],
+  )
+
+  const scheduleQuestionPending = useCallback(
+    (key: string) => {
+      pendingQuestionIdsRef.current[key] = true
+      setPendingQuestionIds((prev) => ({ ...prev, [key]: true }))
+      const existingPendingTimer = pendingQuestionTimersRef.current[key]
+      if (existingPendingTimer) clearTimeout(existingPendingTimer)
+      pendingQuestionTimersRef.current[key] = setTimeout(() => {
+        clearQuestionPending(key)
+        if (submitAwaitingQuestionRef.current[key]) {
+          setQuestionAwaitingLateAck((prev) => ({ ...prev, [key]: true }))
+        }
+      }, SUBMIT_PENDING_UI_MS)
+
+      submitAwaitingQuestionRef.current[key] = true
+      const existingAckTimer = submitAwaitingQuestionTimersRef.current[key]
+      if (existingAckTimer) clearTimeout(existingAckTimer)
+      submitAwaitingQuestionTimersRef.current[key] = setTimeout(() => {
+        clearQuestionAwaiting(key)
+      }, SUBMIT_AWAITING_ACK_MS)
+    },
+    [clearQuestionPending, clearQuestionAwaiting],
+  )
 
   useEffect(() => {
     if (!presentationId || !token) return
@@ -158,15 +335,24 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 acceptingAnswers: true,
               })
               break
-            case 'poll_results':
+            case 'poll_response_accepted': {
+              const pollId = String(data.poll_id)
+              confirmPollSubmissionRef.current(pollId, 0, true)
+              break
+            }
+            case 'poll_results': {
+              const pollId = String(data.poll_id)
+              const total = data.total || 0
               setPollResults((prev) => ({
                 ...prev,
-                [String(data.poll_id)]: {
+                [pollId]: {
                   results: data.results || {},
-                  total: data.total || 0,
+                  total,
                 },
               }))
+              confirmPollSubmissionRef.current(pollId, total)
               break
+            }
             case 'participant_joined':
               setParticipantCount(normalizeParticipantCount(data.count))
               lastRealtimeSessionStateAtRef.current = Date.now()
@@ -195,17 +381,26 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 acceptingAnswers: true,
               })
               break
-            case 'question_results':
+            case 'question_response_accepted': {
+              const questionId = String(data.question_id)
+              confirmQuestionSubmissionRef.current(questionId, 0, true)
+              break
+            }
+            case 'question_results': {
+              const questionId = String(data.question_id)
+              const total = data.total || 0
               setQuestionResults((prev) => ({
                 ...prev,
-                [String(data.question_id)]: {
+                [questionId]: {
                   results: data.results || {},
-                  total: data.total || 0,
+                  total,
                   recent_answers: data.recent_answers || [],
                   question_type: data.question_type || 'open_text',
                 },
               }))
+              confirmQuestionSubmissionRef.current(questionId, total)
               break
+            }
             case 'live_state_snapshot': {
               // Sendt kun til denne klienten ved (re)connect. Brukes til full resync
               // så audience som blir med midt i økten umiddelbart får riktig slide,
@@ -240,13 +435,15 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 const results = asRecord(interaction.poll_results)
                 const pollId = asRecord(pollData)?.id
                 if (results && pollId != null) {
+                  const snapshotTotal = typeof results.total === 'number' ? results.total : 0
                   setPollResults((prev) => ({
                     ...prev,
                     [String(pollId)]: {
                       results: (results.results as Record<string, number>) || {},
-                      total: typeof results.total === 'number' ? results.total : 0,
+                      total: snapshotTotal,
                     },
                   }))
+                  confirmPollSubmissionRef.current(String(pollId), snapshotTotal)
                 }
               } else {
                 const questionData = interaction.question ?? null
@@ -258,11 +455,12 @@ export const usePresentation = (presentationId: string | number | null, token: s
                 const results = asRecord(interaction.question_results)
                 const qId = asRecord(questionData)?.id
                 if (results && qId != null) {
+                  const snapshotTotal = typeof results.total === 'number' ? results.total : 0
                   setQuestionResults((prev) => ({
                     ...prev,
                     [String(qId)]: {
                       results: (results.results as Record<string, number>) || {},
-                      total: typeof results.total === 'number' ? results.total : 0,
+                      total: snapshotTotal,
                       recent_answers: Array.isArray(results.recent_answers)
                         ? (results.recent_answers as string[])
                         : [],
@@ -272,6 +470,7 @@ export const usePresentation = (presentationId: string | number | null, token: s
                           : 'open_text',
                     },
                   }))
+                  confirmQuestionSubmissionRef.current(String(qId), snapshotTotal)
                 }
               }
 
@@ -394,13 +593,20 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const submitPollAnswer = (pollId: string | number, answer: string) => {
     if (!subscriptionRef.current) return
     const key = String(pollId)
-    if (submittedPollIds[key]) return
+    if (
+      submittedPollIds[key] ||
+      pendingPollIdsRef.current[key] ||
+      submitAwaitingPollRef.current[key]
+    ) {
+      return
+    }
 
-    setSubmittedPollIds((prev) => ({ ...prev, [key]: true }))
-
+    pollTotalAtSubmitRef.current[key] = pollResultsRef.current[key]?.total ?? 0
+    schedulePollPending(key)
     subscriptionRef.current.perform('submit_poll_response', {
       poll_id: pollId,
       answer,
+      client_id: getLiveClientId(),
     })
   }
 
@@ -425,12 +631,20 @@ export const usePresentation = (presentationId: string | number | null, token: s
   const submitQuestionAnswer = (questionId: string | number, answer: string) => {
     if (!subscriptionRef.current) return
     const key = String(questionId)
-    if (submittedQuestionIds[key]) return
+    if (
+      submittedQuestionIds[key] ||
+      pendingQuestionIdsRef.current[key] ||
+      submitAwaitingQuestionRef.current[key]
+    ) {
+      return
+    }
 
-    setSubmittedQuestionIds((prev) => ({ ...prev, [key]: true }))
+    questionTotalAtSubmitRef.current[key] = questionResultsRef.current[key]?.total ?? 0
+    scheduleQuestionPending(key)
     subscriptionRef.current.perform('submit_question_response', {
       question_id: questionId,
       answer,
+      client_id: getLiveClientId(),
     })
   }
 
@@ -449,11 +663,15 @@ export const usePresentation = (presentationId: string | number | null, token: s
     sessionEnded,
     startSession,
     submittedPollIds,
+    pendingPollIds,
+    pollAwaitingLateAck,
     activeQuestion,
     questionResults,
     activateQuestion,
     submitQuestionAnswer,
     submittedQuestionIds,
+    pendingQuestionIds,
+    questionAwaitingLateAck,
     embedPlayback,
     broadcastEmbedPlayback,
     stopInteractions,

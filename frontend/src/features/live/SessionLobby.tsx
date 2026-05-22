@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { usePresentation } from '@/hooks/usePresentation'
+import api from '@/services/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -56,6 +57,20 @@ const SessionLobby = ({
     if (!joinUrl) return ''
     return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`
   }, [joinUrl])
+
+  // Publikum: sjekk server med én gang (unngår race der join-API sa lobby men økten allerede er startet).
+  useEffect(() => {
+    if (isPresenter || !presentationId) return
+
+    let cancelled = false
+    void api.resolveAudienceEntryPage(presentationId).then((page) => {
+      if (!cancelled && page === 'live') onSessionStarted()
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isPresenter, presentationId, onSessionStarted])
 
   // Varsler parent når økten er startet i kanalen.
   useEffect(() => {

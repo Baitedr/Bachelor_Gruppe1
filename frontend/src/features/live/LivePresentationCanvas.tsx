@@ -112,26 +112,35 @@ const LivePresentationCanvas = ({
     // Re-rendrer canvas hver gang slideData endres.
     if (!fabricRef.current) return
 
+    let cancelled = false
+    const canvas = fabricRef.current
+
     // Laster nytt slide-innhold, resetter viewport og trigger overlay-relayout.
     const renderData = async () => {
       const { width, height } = resolveBaseSize()
       if (slideData?.fabricData) {
-        await fabricRef.current!.loadFromJSON(slideData.fabricData as object)
-      } else {
-        fabricRef.current!.clear()
+        await canvas.loadFromJSON(slideData.fabricData as object)
+      } else if (!cancelled && fabricRef.current === canvas) {
+        canvas.clear()
       }
 
-      fabricRef.current!.setDimensions({ width, height })
-      fabricRef.current!.setViewportTransform([1, 0, 0, 1, 0, 0])
-      fabricRef.current!.backgroundColor = slideData?.backgroundColor || '#ffffff'
-      fabricRef.current!.renderAll()
+      if (cancelled || fabricRef.current !== canvas) return
+
+      canvas.setDimensions({ width, height })
+      canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+      canvas.backgroundColor = slideData?.backgroundColor || '#ffffff'
+      canvas.renderAll()
       // Skjul grå «ramme»-rektangler under iframe (unngår synlig kant ved skalering).
-      hideFabricEmbedPlaceholdersForLiveOverlay(fabricRef.current!)
+      hideFabricEmbedPlaceholdersForLiveOverlay(canvas)
       fitToContainer()
       setEmbedLayoutRevision((x) => x + 1)
     }
 
     void renderData()
+
+    return () => {
+      cancelled = true
+    }
   }, [slideData])
 
   useEffect(() => {

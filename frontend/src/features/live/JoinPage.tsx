@@ -37,7 +37,6 @@ interface JoinResponse {
 
 type JoinResult = {
   presentationId: string
-  sessionStarted: boolean
 }
 
 const styles = {
@@ -121,10 +120,7 @@ const PhoneInteraction = ({ onJoined }: { onJoined?: (payload: JoinResult) => vo
       setJoinCode('')
 
       if (payload.presentation_id && onJoined) {
-        onJoined({
-          presentationId: payload.presentation_id,
-          sessionStarted: Boolean(payload.session_started),
-        })
+        onJoined({ presentationId: payload.presentation_id })
       }
     } catch (error: unknown) {
       const backendMessage = (error as { response?: { data?: { error?: string } } })?.response?.data?.error

@@ -334,6 +334,30 @@ function App() {
     })
   }, [currentPage, activePresentation?.id, livePresentationId, liveJoinCode, liveIsPresenter, guestMode, user])
 
+  // Publikum i lobby: redirect til live så snart økten er startet (race / stale sessionStorage).
+  useEffect(() => {
+    if (currentPage !== 'lobby' || liveIsPresenter || !livePresentationId) return
+
+    let cancelled = false
+
+    const promoteToLiveIfStarted = async () => {
+      const nextPage = await api.resolveAudienceEntryPage(livePresentationId)
+      if (cancelled || nextPage !== 'live') return
+      saveSessionState('live', livePresentationId, liveJoinCode, guestMode, false)
+      setCurrentPage('live')
+    }
+
+    void promoteToLiveIfStarted()
+    const intervalId = window.setInterval(() => {
+      void promoteToLiveIfStarted()
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [currentPage, liveIsPresenter, livePresentationId, liveJoinCode, guestMode])
+
   //Håndterer OAuth callback: henter token fra url, og setter den som API auth, og rydder opp url
   useEffect(() => {
     const loc = window.location
@@ -356,7 +380,7 @@ function App() {
         try {
           const data = await api.guestJoin(qrJoinCode)
           const presentationId = String(data.presentation_id)
-          const nextPage: Page = data.session_started ? 'live' : 'lobby'
+          const nextPage: Page = await api.resolveAudienceEntryPage(presentationId)
           saveSessionState(nextPage, presentationId, null, true, false)
           setLivePresentationId(presentationId)
           setLiveJoinCode(null)
@@ -374,10 +398,19 @@ function App() {
       }
 
       if (saved?.guestMode) {
-        setLivePresentationId(saved.presentationId)
+        const presentationId = saved.presentationId ? String(saved.presentationId) : null
+        let nextPage: Page =
+          saved.page === 'lobby' || saved.page === 'live' ? saved.page : 'lobby'
+        if (presentationId && nextPage === 'lobby') {
+          nextPage = await api.resolveAudienceEntryPage(presentationId)
+        }
+        setLivePresentationId(presentationId)
         setLiveIsPresenter(false)
         setGuestMode(true)
-        setCurrentPage(saved.page)
+        if (presentationId && nextPage !== saved.page) {
+          saveSessionState(nextPage, presentationId, null, true, false)
+        }
+        setCurrentPage(nextPage)
         setIsAuthChecking(false)
         return
       }
@@ -392,10 +425,25 @@ function App() {
         setUser(data.user)
 
         if (saved?.page === 'lobby' || saved?.page === 'live') {
-          setLivePresentationId(saved.presentationId)
+          const presentationId = saved.presentationId ? String(saved.presentationId) : null
+          const isPresenter = Boolean(saved.isPresenter ?? saved.joinCode)
+          let nextPage: Page = saved.page
+          if (presentationId && !isPresenter && nextPage === 'lobby') {
+            nextPage = await api.resolveAudienceEntryPage(presentationId)
+          }
+          setLivePresentationId(presentationId)
           setLiveJoinCode(saved.joinCode ?? null)
-          setLiveIsPresenter(Boolean(saved.isPresenter ?? saved.joinCode))
-          setCurrentPage(saved.page)
+          setLiveIsPresenter(isPresenter)
+          if (presentationId && nextPage !== saved.page) {
+            saveSessionState(
+              nextPage,
+              presentationId,
+              saved.joinCode ?? null,
+              false,
+              isPresenter,
+            )
+          }
+          setCurrentPage(nextPage)
         } else if (savedPage) {
           setLivePresentationId(savedPage.livePresentationId)
           setLiveJoinCode(savedPage.liveJoinCode)
@@ -413,6 +461,14 @@ function App() {
           } else {
             let nextPage: Page = savedPage.currentPage === 'login' ? 'home' : savedPage.currentPage
             if (nextPage === 'editor' && !savedPage.activePresentationId) nextPage = 'home'
+            const isPresenter = Boolean(savedPage.liveIsPresenter ?? savedPage.liveJoinCode)
+            if (
+              nextPage === 'lobby' &&
+              !isPresenter &&
+              savedPage.livePresentationId
+            ) {
+              nextPage = await api.resolveAudienceEntryPage(savedPage.livePresentationId)
+            }
             setCurrentPage(nextPage)
           }
         } else {
@@ -794,19 +850,29 @@ function App() {
     })
   }
 
-  // Håndterer at en gjest blir med — lobby kun når økten ikke er startet ennå.
-  const handleGuestJoin = (
+  // Publikum: alltid bekreft øktstatus mot server (join-svar kan være ett øyeblikk for tidlig).
+  const navigateAudienceToSession = async (
     presentationId: string | number,
-    sessionStarted = false
+    options: { isGuest: boolean; joinCode?: string | null },
   ) => {
     const normalizedPresentationId = String(presentationId)
-    const nextPage: Page = sessionStarted ? 'live' : 'lobby'
-    saveSessionState(nextPage, normalizedPresentationId, null, true, false)
+    const nextPage: Page = await api.resolveAudienceEntryPage(normalizedPresentationId)
+    saveSessionState(
+      nextPage,
+      normalizedPresentationId,
+      options.joinCode ?? null,
+      options.isGuest,
+      false,
+    )
     setLivePresentationId(normalizedPresentationId)
-    setLiveJoinCode(null)
+    setLiveJoinCode(options.joinCode ?? null)
     setLiveIsPresenter(false)
-    setGuestMode(true)
+    if (options.isGuest) setGuestMode(true)
     setCurrentPage(nextPage)
+  }
+
+  const handleGuestJoin = async (presentationId: string | number) => {
+    await navigateAudienceToSession(presentationId, { isGuest: true })
   }
 
   // Håndterer utlogging ved å rydde all relevant state, både lokalt og i sessionStorage, og navigere til login-siden.
@@ -952,7 +1018,7 @@ function App() {
       setLivePresentationId(null)
       setLiveIsPresenter(false)
       setCurrentPage('login')
-      api.logout()
+      void api.logout().catch(() => {})
     }
 
     // Gjestemodus: låst viewport-høyde (som innlogget live) slik at flex-1 og canvas får reell høyde å skalere i.
@@ -1378,14 +1444,8 @@ function App() {
         {currentPage === 'phoneinteraction' && (
           <div className='mx-auto w-full max-w-4xl'>
             <PhoneInteraction
-              onJoined={(joined: { presentationId: string; sessionStarted: boolean }) => {
-                const { presentationId, sessionStarted } = joined
-                setLivePresentationId(presentationId)
-                setLiveJoinCode(null)
-                setLiveIsPresenter(false)
-                const nextPage: Page = sessionStarted ? 'live' : 'lobby'
-                saveSessionState(nextPage, presentationId, null, false, false)
-                setCurrentPage(nextPage)
+              onJoined={(joined: { presentationId: string }) => {
+                void navigateAudienceToSession(joined.presentationId, { isGuest: false })
               }}
             />
           </div>

@@ -134,8 +134,13 @@ const api = {
 
   // Logout - fjerner token fra localStorage og informerer backend om utlogging.
   logout: async (): Promise<void> => {
+    if (!localStorage.getItem(TOKEN_KEY)) return
+
     try {
       await axiosRetry(() => apiClient.post('/auth/logout'), 1)
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status !== 401) throw error
     } finally {
       setToken(null)
     }
@@ -273,6 +278,19 @@ const api = {
       1
     )
     return response.data
+  },
+
+  /** Publikum: live hvis økten er startet på server, ellers lobby. */
+  resolveAudienceEntryPage: async (
+    presentationId: string | number,
+  ): Promise<'live' | 'lobby'> => {
+    try {
+      const state = await api.getSessionState(presentationId)
+      if (state?.session_started) return 'live'
+      return 'lobby'
+    } catch {
+      return 'lobby'
+    }
   },
 
   // Polls

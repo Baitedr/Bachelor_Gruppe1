@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -177,6 +177,27 @@ const colorFromWord = (word: string): string => {
 }
 
 const ResultsBarChart = ({ rows, valueLabel }: { rows: ResultsBarChartRow[]; valueLabel: string }) => {
+  const chartWrapRef = useRef<HTMLDivElement | null>(null)
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const el = chartWrapRef.current
+    if (!el) return
+
+    const updateSize = () => {
+      const width = el.clientWidth
+      const height = el.clientHeight
+      setChartSize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height },
+      )
+    }
+
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   if (rows.length === 0) return null
 
   const data = rows
@@ -189,9 +210,12 @@ const ResultsBarChart = ({ rows, valueLabel }: { rows: ResultsBarChartRow[]; val
       rowId: row.id,
     }))
 
+  const chartReady = chartSize.width > 0 && chartSize.height > 0
+
   return (
     // Gjenbrukbar stolpegraf for både poll og flervalg-spørsmål.
-    <div className={styles.chartWrap}>
+    <div ref={chartWrapRef} className={styles.chartWrap}>
+      {chartReady ? (
       <ResponsiveContainer width='100%' height='100%'>
         <BarChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 36 }}>
           <CartesianGrid strokeDasharray='3 3' vertical={false} />
@@ -218,6 +242,7 @@ const ResultsBarChart = ({ rows, valueLabel }: { rows: ResultsBarChartRow[]; val
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      ) : null}
     </div>
   )
 }
